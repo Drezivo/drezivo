@@ -450,7 +450,11 @@ export function ReservationMutationActions({
 
       if (!result) return;
 
-      const notice = mutationSuccessNotice(selectedAction, result.data);
+      const notice = mutationSuccessNotice(
+        selectedAction,
+        result.data,
+        detail.status === "completed"
+      );
       setSelectedAction(null);
       submitGuard.resetIntent();
       onNotice(notice);
@@ -549,10 +553,10 @@ export function ReservationMutationActions({
           <CardContent className="space-y-3 p-3">
             <div>
               <p className="text-sm font-semibold text-dashboard-navy">
-                {actionTitle(selectedAction)}
+                {actionTitle(selectedAction, detail.status === "completed")}
               </p>
               <p className="mt-1 text-xs text-dashboard-muted">
-                {actionDescription(selectedAction)}
+                {actionDescription(selectedAction, detail.status === "completed")}
               </p>
             </div>
 
@@ -1227,7 +1231,9 @@ export function ReservationMutationActions({
                 ) : (
                   <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
                 )}
-                {submitGuard.isSubmitting ? "Saving…" : confirmLabel(selectedAction)}
+                {submitGuard.isSubmitting
+                  ? "Saving…"
+                  : confirmLabel(selectedAction, detail.status === "completed")}
               </Button>
             </div>
           </CardContent>
@@ -1241,6 +1247,7 @@ export function ReservationMutationActions({
           amount={formatMinorMoney(detail.payment.amount_minor, detail.payment.currency)}
           methodName={detail.payment.method_name}
           customerName={detail.customer.snapshot?.full_name ?? null}
+          reservationCompleted={detail.status === "completed"}
           onViewProof={() => {
             setConfirmVerifyOpen(false);
             const receipts = proof.kind === "ready" ? proof.receipts : [];
@@ -1271,6 +1278,7 @@ function VerifyPaymentDialog({
   amount,
   methodName,
   customerName,
+  reservationCompleted,
   onViewProof,
   onConfirm,
 }: {
@@ -1279,6 +1287,7 @@ function VerifyPaymentDialog({
   amount: string;
   methodName: string;
   customerName: string | null;
+  reservationCompleted: boolean;
   onViewProof: () => void;
   onConfirm: () => void;
 }) {
@@ -1298,7 +1307,9 @@ function VerifyPaymentDialog({
               <Dialog.Description className="mt-1 text-sm leading-6 text-dashboard-muted">
                 Confirm only after you have seen {amount}
                 {customerName ? ` from ${customerName}` : ""} in your own {methodName} transaction
-                history. The reservation is confirmed right after.
+                history. {reservationCompleted
+                  ? "Recording payment will not change the Completed reservation."
+                  : "The reservation is confirmed right after."}
               </Dialog.Description>
             </div>
           </div>
@@ -1318,7 +1329,7 @@ function VerifyPaymentDialog({
             </Button>
             <Button type="button" onClick={onConfirm}>
               <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
-              Yes, it&apos;s verified
+              {reservationCompleted ? "Record as paid" : "Yes, it's verified"}
             </Button>
           </div>
         </Dialog.Content>
@@ -1387,12 +1398,15 @@ function getVisibleMutationActions(
 
   switch (detail.status) {
     case "held":
-      return canManage
-        ? [
+      if (!canManage) return [];
+      // An online hold waits for the renter's own payment and receipt, so staff can only cancel it.
+      // A walk-in hold is finished at the counter.
+      return detail.booking_channel === "online"
+        ? [{ action: "cancel", label: "Cancel", tone: "danger" }]
+        : [
             { action: "complete_reservation", label: "Complete Reservation" },
             { action: "cancel", label: "Cancel", tone: "danger" },
-          ]
-        : [];
+          ];
     case "pending_confirmation": {
       if (!canManage) return [];
       const paymentAction: ActionOption[] = [];
@@ -1462,17 +1476,36 @@ function getVisibleMutationActions(
           : []),
       ];
     }
+    case "completed": {
+      if (
+        !canManage ||
+        !detail.payment ||
+        detail.payment.status !== "pending" ||
+        BigInt(detail.price_snapshot.due_now_minor) <= 0n
+      ) {
+        return [];
+      }
+      if (detail.payment.rail === "cash") {
+        return canManagePayments ? [{ action: "record_cash", label: "Record Cash" }] : [];
+      }
+      if (!canVerifyEvidence) return [];
+      return [
+        detail.booking_channel === "walk_in"
+          ? { action: "log_payment", label: "Log Payment" }
+          : { action: "verify_payment", label: "Verify Payment" },
+      ];
+    }
     default:
       return [];
   }
 }
 
-function actionTitle(action: ReservationAction): string {
+function actionTitle(action: ReservationAction, reservationCompleted = false): string {
   switch (action) {
     case "complete_reservation":
       return "Complete Reservation";
     case "record_cash":
-      return "Record Cash & Confirm";
+      return reservationCompleted ? "Record Cash" : "Record Cash & Confirm";
     case "verify_payment":
       return "Verify Payment";
     case "log_payment":
@@ -1494,16 +1527,16 @@ function actionTitle(action: ReservationAction): string {
   }
 }
 
-function confirmLabel(action: ReservationAction): string {
+function confirmLabel(action: ReservationAction, reservationCompleted = false): string {
   switch (action) {
     case "complete_reservation":
       return "Complete Reservation";
     case "record_cash":
-      return "Record Cash & Confirm";
+      return reservationCompleted ? "Record Cash" : "Record Cash & Confirm";
     case "verify_payment":
-      return "Verify & Confirm";
+      return reservationCompleted ? "Verify Payment" : "Verify & Confirm";
     case "log_payment":
-      return "Log Payment & Confirm";
+      return reservationCompleted ? "Log Payment" : "Log Payment & Confirm";
     case "confirm_reservation":
       return "Confirm Reservation";
     case "cancel":
@@ -1521,16 +1554,22 @@ function confirmLabel(action: ReservationAction): string {
   }
 }
 
-function actionDescription(action: ReservationAction): string {
+function actionDescription(action: ReservationAction, reservationCompleted = false): string {
   switch (action) {
     case "complete_reservation":
       return "Submit the booking and continue only when the required customer, terms, and payment prerequisites are satisfied.";
     case "record_cash":
-      return "Record the cash physically received from the customer, verify that collection, and confirm the reservation in one staff action.";
+      return reservationCompleted
+        ? "Record the cash received against this outstanding balance. The reservation will remain Completed."
+        : "Record the cash physically received from the customer, verify that collection, and confirm the reservation in one staff action.";
     case "verify_payment":
-      return "Online booking. Compare the renter's proof of payment with your own wallet or bank history, then verify to confirm the reservation.";
+      return reservationCompleted
+        ? "Compare the payment with your own wallet or bank history, then record it as paid. The reservation will remain Completed."
+        : "Online booking. Compare the renter's proof of payment with your own wallet or bank history, then verify to confirm the reservation.";
     case "log_payment":
-      return "Walk-in booking. Record the payment received at the counter; the reservation is confirmed right after.";
+      return reservationCompleted
+        ? "Record the payment received at the counter. This updates payment only; the reservation will remain Completed."
+        : "Walk-in booking. Record the payment received at the counter; the reservation is confirmed right after.";
     case "confirm_reservation":
       return "Payment is already verified. Confirm the reservation and keep its garment allocation.";
     case "cancel":
@@ -1550,8 +1589,22 @@ function actionDescription(action: ReservationAction): string {
 
 function mutationSuccessNotice(
   action: ReservationAction,
-  data: unknown
+  data: unknown,
+  reservationWasCompleted = false
 ): ReservationMutationNotice {
+  if (
+    reservationWasCompleted &&
+    (action === "record_cash" || action === "verify_payment" || action === "log_payment") &&
+    isStaffCompletionResult(data)
+  ) {
+    return {
+      tone: "success",
+      message:
+        action === "record_cash"
+          ? "Cash payment recorded. Reservation remains Completed."
+          : "Payment recorded as paid. Reservation remains Completed.",
+    };
+  }
   if (
     (action === "complete_reservation" ||
       action === "record_cash" ||
@@ -1581,6 +1634,15 @@ function mutationSuccessNotice(
       action === "confirm_reservation") &&
     isStaffCompletionResult(data)
   ) {
+    if (data.completion_state === "completed") {
+      return {
+        tone: "success",
+        message:
+          data.next_action === "payment_verification"
+            ? "Reservation recorded as completed. Payment remains to be verified."
+            : "Reservation recorded as completed.",
+      };
+    }
     if (data.completion_state === "confirmed") {
       return { tone: "success", message: "Reservation confirmed." };
     }
@@ -1634,14 +1696,15 @@ function isConfirmedReservationResult(value: unknown): value is {
 }
 
 function isStaffCompletionResult(value: unknown): value is {
-  completion_state: "pending_confirmation" | "confirmed";
+  completion_state: "pending_confirmation" | "confirmed" | "completed";
   next_action: "none" | "merchant_review" | "payment_verification";
 } {
   if (!value || typeof value !== "object") return false;
   const record = value as Record<string, unknown>;
   return (
     (record["completion_state"] === "pending_confirmation" ||
-      record["completion_state"] === "confirmed") &&
+      record["completion_state"] === "confirmed" ||
+      record["completion_state"] === "completed") &&
     (record["next_action"] === "none" ||
       record["next_action"] === "merchant_review" ||
       record["next_action"] === "payment_verification")

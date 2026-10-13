@@ -71,19 +71,20 @@ const invitation = {
 };
 
 describe('Clerk server adapter', () => {
-  it('returns only primary email verification state', async () => {
+  it('returns the primary email verification state and only the verified primary address', async () => {
     const { provider, users } = createProvider();
     users.getUser.mockResolvedValue({
       primaryEmailAddressId: 'email_primary',
       emailAddresses: [
-        { id: 'email_primary', verification: { status: 'verified' } },
-        { id: 'email_other', verification: { status: 'unverified' } },
+        { id: 'email_primary', emailAddress: 'owner@example.test', verification: { status: 'verified' } },
+        { id: 'email_other', emailAddress: 'other@example.test', verification: { status: 'unverified' } },
       ],
     });
     const adapter = createClerkServerAdapter(provider);
 
     await expect(adapter.getUserVerificationState('user_123')).resolves.toEqual({
       primaryEmailVerified: true,
+      verifiedPrimaryEmail: 'owner@example.test',
     });
     expect(users.getUser).toHaveBeenCalledWith('user_123');
   });
@@ -95,6 +96,21 @@ describe('Clerk server adapter', () => {
 
     await expect(adapter.getUserVerificationState('user_123')).resolves.toEqual({
       primaryEmailVerified: false,
+      verifiedPrimaryEmail: null,
+    });
+  });
+
+  it('never returns an unverified primary address', async () => {
+    const { provider, users } = createProvider();
+    users.getUser.mockResolvedValue({
+      primaryEmailAddressId: 'email_primary',
+      emailAddresses: [{ id: 'email_primary', emailAddress: 'owner@example.test', verification: { status: 'unverified' } }],
+    });
+    const adapter = createClerkServerAdapter(provider);
+
+    await expect(adapter.getUserVerificationState('user_123')).resolves.toEqual({
+      primaryEmailVerified: false,
+      verifiedPrimaryEmail: null,
     });
   });
 

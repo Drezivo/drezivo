@@ -45,7 +45,7 @@ describe('storefront guest booking', async () => {
   const { addDays, localDate } = await import('../../src/modules/storefront/storefront.service.js');
   const { weekdayOf } = await import('../../src/modules/storefront/shop-closures.js');
   const { createStorefrontWorkspace } = await import('./helpers/storefront-fixture.js');
-  const { getReservationDetail, getReservationPaymentReceipts } = await import('../../src/modules/reservations/reservations.service.js');
+  const { completeStaffReservation, getReservationDetail, getReservationPaymentReceipts } = await import('../../src/modules/reservations/reservations.service.js');
   const { defaultStorefrontDocument, guestFittingRequest, guestReservationRequest } = await import('@drezivo/contracts');
   const admin = new pg.Pool({ connectionString: adminUrl, max: 3 });
 
@@ -206,6 +206,24 @@ describe('storefront guest booking', async () => {
     expect(counts.rows[0]).toEqual({ customers: 0, holds: 0 });
   });
 
+  it('does not let staff complete an online booking that is still waiting for the renter to pay', async () => {
+    const ws = await liveStore('gv-held-online');
+    const created = await booking.createReservation(ws.slug, { requestId: 'held-online', idempotencyKey: 'held-online-1' }, holdRequest(ws, 'ana@example.test'));
+    if (!created.body.success) throw new Error('hold failed');
+    const { reservation } = created.body.data;
+    const detail = await getReservationDetail(ws.owner, reservation.id);
+    expect(detail.booking_channel).toBe('online');
+
+    await expect(
+      completeStaffReservation(
+        { ...ws.owner, idempotencyKey: 'held-online-complete' },
+        reservation.id,
+        { version: detail.version, terms_accepted: true },
+      ),
+    ).rejects.toMatchObject({ status: 409, code: 'INVALID_RESERVATION_TRANSITION' });
+    expect((await getReservationDetail(ws.owner, reservation.id)).status).toBe('held');
+  });
+
   it('lets only one of two guests win the last garment for overlapping dates', async () => {
     const ws = await liveStore('gv-race');
     const results = await Promise.all([
@@ -314,6 +332,16 @@ describe('storefront guest booking', async () => {
       const { result } = await attempt('bh-none', []);
       expect(result.status).toBe(201);
     });
+  });
+
+  it('never lets a storefront renter book a pickup in the past', async () => {
+    const ws = await liveStore('gv-past', (doc) => {
+      doc.checkout.min_notice_days = 0;
+    });
+    const result = await booking.createReservation(ws.slug, { requestId: 'past', idempotencyKey: 'guest-past-1' }, holdRequest(ws, 'ana@example.test', { requested_interval: interval(2, -3) }));
+    expect(result.status).toBe(422);
+    const holds = await admin.query<{ n: number }>('SELECT count(*)::int AS n FROM reservation WHERE tenant_id = $1', [ws.tenantId]);
+    expect(holds.rows[0]?.n).toBe(0);
   });
 
   it('lets a renter ask for delivery when the shop has not set it up, charges no fee, and tells the owner to arrange it', async () => {

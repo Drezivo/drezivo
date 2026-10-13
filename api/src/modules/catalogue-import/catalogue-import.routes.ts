@@ -9,10 +9,12 @@ import {
 import { Router, type Request, type RequestHandler, type Response } from 'express';
 import type { z } from 'zod';
 
+import { config } from '../../config/index.js';
+import { createClerkServerAdapter } from '../../integrations/clerk/clerk.adapter.js';
 import { requireStaffAuth } from '../../middleware/auth.js';
 import { rateLimit } from '../../middleware/rate-limit.js';
 import { requireTenantContext } from '../../middleware/tenant-context.js';
-import { ValidationError } from '../../shared/errors.js';
+import { ForbiddenError, ValidationError } from '../../shared/errors.js';
 import { sendSuccess } from '../../shared/response.js';
 import { requireAssetManagePermission } from '../catalogue/catalogue.middleware.js';
 import { requireTenantAction } from '../tenancy/tenancy.service.js';
@@ -40,6 +42,25 @@ const extractRateLimit = rateLimit({ windowMs: 60_000, max: 40, keyOf: tenantKey
 const readRateLimit = rateLimit({ windowMs: 60_000, max: 60, keyOf: tenantKey });
 
 const writePolicy = requireTenantAction('asset_write');
+
+/**
+ * Batch Add is limited to allowlisted accounts for now (CATALOGUE_IMPORT_ALLOWED_EMAILS). The
+ * check uses the signed-in user's verified primary email from Clerk; an unverified or unreadable
+ * email is not allowed. Provider failures surface as a 503 from the adapter, never as access.
+ */
+async function hasBatchAddAccess(req: Request): Promise<boolean> {
+  const userId = req.clerkPrincipal?.clerkUserId;
+  if (!userId || config.CATALOGUE_IMPORT_ALLOWED_EMAILS.length === 0) return false;
+  const state = await createClerkServerAdapter().getUserVerificationState(userId);
+  const email = state.verifiedPrimaryEmail?.trim().toLowerCase();
+  return Boolean(email && config.CATALOGUE_IMPORT_ALLOWED_EMAILS.includes(email));
+}
+
+const requireBatchAddAccess: RequestHandler = (req, _res, next): void => {
+  hasBatchAddAccess(req)
+    .then((allowed) => next(allowed ? undefined : new ForbiddenError('Batch Add is not available for this account.')))
+    .catch(next);
+};
 const readPolicy = requireTenantAction('context_read');
 
 function parseBody<S extends z.ZodTypeAny>(schema: S, body: unknown, message: string): z.infer<S> {
@@ -71,10 +92,11 @@ catalogueImportRouter.get(
   readRateLimit,
   readPolicy,
   requireAssetManagePermission,
-  (req: Request, res: Response): void => {
+  async (req: Request, res: Response): Promise<void> => {
     const body: CatalogueImportCapabilities = {
       photo_extraction: visionSettings() !== null,
       max_batch_items: MAX_IMPORT_BATCH_ITEMS,
+      batch_add: await hasBatchAddAccess(req),
     };
     sendSuccess(req, res, body);
   },
@@ -86,6 +108,7 @@ catalogueImportRouter.post(
   authorizeRateLimit,
   writePolicy,
   requireAssetManagePermission,
+  requireBatchAddAccess,
   async (req: Request, res: Response): Promise<void> => {
     const request = parseBody(batchUploadAuthorizationRequest, req.body, 'Photo upload batch is invalid.');
     sendSuccess(req, res, { results: await authorizeImportUploads(importContext(req), request) });
@@ -98,6 +121,7 @@ catalogueImportRouter.post(
   finalizeRateLimit,
   writePolicy,
   requireAssetManagePermission,
+  requireBatchAddAccess,
   async (req: Request, res: Response): Promise<void> => {
     const request = parseBody(batchUploadFinalizeRequest, req.body, 'Photo finalize batch is invalid.');
     sendSuccess(req, res, { results: await finalizeImportUploads(importContext(req), request) });
@@ -110,6 +134,7 @@ catalogueImportRouter.post(
   createRateLimit,
   writePolicy,
   requireAssetManagePermission,
+  requireBatchAddAccess,
   async (req: Request, res: Response): Promise<void> => {
     const request = parseBody(batchCreateClothingRequest, req.body, 'Clothing batch is invalid.');
     sendSuccess(req, res, { results: await createImportClothing(importContext(req), request) });
@@ -122,6 +147,7 @@ catalogueImportRouter.post(
   extractRateLimit,
   writePolicy,
   requireAssetManagePermission,
+  requireBatchAddAccess,
   async (req: Request, res: Response): Promise<void> => {
     const request = parseBody(clothingPhotoExtractRequest, req.body, 'Photo extraction request is invalid.');
     const context = importContext(req);

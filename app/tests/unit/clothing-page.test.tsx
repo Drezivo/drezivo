@@ -12,6 +12,7 @@ const api = vi.hoisted(() => ({
   archiveClothing: vi.fn(),
   getCatalogueCategories: vi.fn(),
   getCatalogueClothing: vi.fn(),
+  getCatalogueImportCapabilities: vi.fn(),
   restoreClothing: vi.fn(),
 }));
 
@@ -129,6 +130,9 @@ describe("ClothingPage", () => {
     vi.clearAllMocks();
     navigation.search = "";
     sessionStorage.clear();
+    api.getCatalogueImportCapabilities.mockResolvedValue({
+      data: { photo_extraction: false, max_batch_items: 25, batch_add: false },
+    });
     clerk.getToken.mockResolvedValue("clerk-token");
     clerk.useAuth.mockReturnValue({
       getToken: clerk.getToken,
@@ -219,6 +223,20 @@ describe("ClothingPage", () => {
     act(() => vi.advanceTimersByTime(3000));
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
     vi.useRealTimers();
+  });
+
+  it("shows Batch Add only when the API allows it for this account", async () => {
+    const { unmount } = render(<ClothingPage />);
+    await screen.findByText("Real Black Satin Gown");
+    await waitFor(() => expect(api.getCatalogueImportCapabilities).toHaveBeenCalled());
+    expect(screen.queryByRole("link", { name: "Batch Add" })).not.toBeInTheDocument();
+    unmount();
+
+    api.getCatalogueImportCapabilities.mockResolvedValue({
+      data: { photo_extraction: false, max_batch_items: 25, batch_add: true },
+    });
+    render(<ClothingPage />);
+    expect(await screen.findByRole("link", { name: "Batch Add" })).toHaveAttribute("href", "/inventory/import");
   });
 
   it("renders clothing returned by GET catalogue/clothing instead of mock inventory data", async () => {

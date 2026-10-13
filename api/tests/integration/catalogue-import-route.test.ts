@@ -12,11 +12,20 @@ import {
 
 const clerk = vi.hoisted(() => ({
   getAuth: vi.fn(),
+  // Verified primary email per Clerk user; anyone not listed has none.
+  emails: new Map<string, string>(),
 }));
 
 vi.mock('@clerk/express', () => ({
   clerkMiddleware: () => (_req: unknown, _res: unknown, next: (error?: unknown) => void) => next(),
   getAuth: clerk.getAuth,
+}));
+
+vi.mock('../../src/integrations/clerk/clerk.adapter.js', () => ({
+  createClerkServerAdapter: () => ({
+    getUserVerificationState: (userId: string) =>
+      Promise.resolve({ primaryEmailVerified: clerk.emails.has(userId), verifiedPrimaryEmail: clerk.emails.get(userId) ?? null }),
+  }),
 }));
 
 const adminUrl = requireTestDatabaseUrl();
@@ -35,6 +44,7 @@ process.env.S3_BUCKET_PRIVATE ??= 'private';
 process.env.S3_BUCKET_PUBLIC ??= 'public';
 process.env.S3_ACCESS_KEY_ID ??= 'test';
 process.env.S3_SECRET_ACCESS_KEY ??= 'test';
+process.env.CATALOGUE_IMPORT_ALLOWED_EMAILS = 'Importer@Example.test';
 
 describe('Catalogue batch import routes', async () => {
   const { createApp } = await import('../../src/app.js');
@@ -152,6 +162,26 @@ describe('Catalogue batch import routes', async () => {
     expect(await countProductCode(seed.tenantId, seed.principalId, 'MANY-0')).toBe(0);
   });
 
+  it('keeps Batch Add to allowlisted accounts and refuses every import route for others', async () => {
+    const seed = await seedRouteTenant('org_import_gate', 'user_import_gate', ['assets.manage']);
+    for (const email of ['someone@example.test', null]) {
+      useClerk(seed, email);
+      const caps = await request(createApp()).get('/api/v1/catalogue/import/capabilities');
+      expect(caps.status).toBe(200);
+      expect(readSuccessData<{ batch_add: boolean }>(caps.body).batch_add).toBe(false);
+
+      const create = await request(createApp())
+        .post('/api/v1/catalogue/import/clothing')
+        .send({ items: [{ idempotency_key: 'import-gate-0001', request: validRequest(seed.categoryId, 'GATE-1') }] });
+      expect(create.status).toBe(403);
+      expectSafeError(create.body, 'FORBIDDEN');
+      for (const path of ['/api/v1/catalogue/import/uploads', '/api/v1/catalogue/import/uploads/finalize', '/api/v1/catalogue/import/extract']) {
+        expect((await request(createApp()).post(path).send({})).status).toBe(403);
+      }
+    }
+    expect(await countProductCode(seed.tenantId, seed.principalId, 'GATE-1')).toBe(0);
+  });
+
   it('reports whether photo reading is configured', async () => {
     const seed = await seedRouteTenant('org_import_caps', 'user_import_caps', ['assets.manage']);
     useClerk(seed);
@@ -160,6 +190,7 @@ describe('Catalogue batch import routes', async () => {
     expect(readSuccessData<{ photo_extraction: boolean; max_batch_items: number }>(response.body)).toEqual({
       photo_extraction: false,
       max_batch_items: 25,
+      batch_add: true,
     });
     const extract = await request(createApp())
       .post('/api/v1/catalogue/import/extract')
@@ -168,8 +199,10 @@ describe('Catalogue batch import routes', async () => {
     expectSafeError(extract.body, 'PHOTO_READER_CONFIGURATION');
   });
 
-  function useClerk(seed: { principalId: string; clerkOrgId: string }) {
+  function useClerk(seed: { principalId: string; clerkOrgId: string }, email: string | null = 'importer@example.test') {
     clerk.getAuth.mockReturnValue({ userId: seed.principalId, orgId: seed.clerkOrgId });
+    clerk.emails.clear();
+    if (email) clerk.emails.set(seed.principalId, email);
   }
 
   async function seedRouteTenant(

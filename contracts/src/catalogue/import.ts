@@ -105,6 +105,11 @@ export const catalogueImportCapabilities = z.object({
   /** Whether a vision model is configured to read garment details printed on photos. */
   photo_extraction: z.boolean(),
   max_batch_items: z.number().int().positive(),
+  /**
+   * Whether this account may use Batch Add. Off for ordinary accounts for now; the API refuses
+   * every import route when false, so this only decides whether the app shows the entry point.
+   */
+  batch_add: z.boolean(),
 });
 export type CatalogueImportCapabilities = z.infer<typeof catalogueImportCapabilities>;
 

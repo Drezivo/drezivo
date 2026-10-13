@@ -440,6 +440,20 @@ describe('reservation contracts', () => {
         next_action: 'merchant_review',
       }).success,
     ).toBe(false);
+    expect(
+      staffReservationCompleteResponse.safeParse({
+        reservation: { ...baseSummary, status: 'completed', version: 3 },
+        completion_state: 'completed',
+        next_action: 'payment_verification',
+      }).success,
+    ).toBe(true);
+    expect(
+      staffReservationCompleteResponse.safeParse({
+        reservation: { ...baseSummary, status: 'completed', version: 3 },
+        completion_state: 'completed',
+        next_action: 'merchant_review',
+      }).success,
+    ).toBe(false);
   });
 
   it('bounds reservation list queries and rejects tenant or branch selectors', () => {

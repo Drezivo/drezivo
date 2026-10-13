@@ -232,6 +232,8 @@ Use `/api/v1` for the first API major version. Product V2 branches do not requir
 
 Every implemented route needs a permission policy even when public access is the intended policy. Preserve exact webhook bytes before JSON parsing. Use provider-supported signature algorithms, replay windows and constant-time secret comparison where applicable.
 
+`GET /api/v1/dashboard/overview` returns Business Performance values scoped to the authorized tenant and active branch. `completed_rental_value.current_minor` remains the current branch-local calendar month's completed rental fees. `projected_rental_value.current_minor` is all completed rental fees to date plus rental fees for confirmed reservations with `pickup_at >= as_of`, where `as_of` is the database timestamp captured for the overview query. Its `reservations` count covers only those upcoming confirmed reservations. Both values use `rental_total_minor`, excluding security deposits; cancelled, pending, picked-up, returned, and other statuses do not contribute to the projection. The projection uses the existing completed-reservation and pickup indexes and does not maintain a second financial ledger.
+
 ### Staff clothing availability timeline
 
 The staff Calendar's Clothing Availability tab reads `GET /api/v1/calendar/availability`. This is a
@@ -298,6 +300,12 @@ For ordinary staff bookings (`variant_id` with optional `additional_variant_ids`
 
 The scheduled expiry worker is cleanup; correctness must not depend on it running on time. An availability response can lag; a hold cannot bypass the database constraint. Exclusion predicates use stored deterministic values such as `is_blocking`, not `now()`.
 
+### Historical staff completion
+
+At final staff submission, compare the reservation's `due_at` with database time. If it has passed, complete the reservation with an idempotent, version-checked transition and set `completed_at` to the submission time. A past pickup with a future return remains on the normal path. Show the Step 3 informational notice and use “Record as Completed”; rental-terms acceptance remains required. For a positive outstanding cash balance, also require an explicit Cash received confirmation and tendered amount covering the amount due before this transition; enforce the requirement against database time and payment state in the API. Only staff with payment-management permission can record the collection as paid; without it, payment remains outstanding for authorized follow-up. For a positive outstanding online balance, final submission records payment as Paid only when the staff actor has both payment-management and evidence-verification permissions. Receipt upload is optional; a present eligible receipt is marked verified with the payment. If the actor lacks either permission, the reservation can still complete while payment remains pending, and an authorized staff member can record payment later with an idempotent payment-only verification action. That follow-up does not change the Completed lifecycle state. Failed or voided payments are never converted to Paid. Historical completion does not synthesize pickup, return, or inspection/custody events and does not release or shorten any garment allocations. Incomplete holds continue to expire under the normal hold-expiry worker.
+
+Completed reservation details may show uploaded private payment receipts through the existing permission-gated receipt endpoint and short-lived signed links. This read requires both payment-management and evidence-verification permissions and remains separate from the general reservation-detail response; customers never receive these links.
+
 PostgreSQL supports range overlap exclusion, and Supabase provides `btree_gist`, which allows scalar IDs to participate in the same GiST constraint. These are capabilities to use, not evidence that the model has been tested on a deployed Supabase project. [PostgreSQL ranges](https://www.postgresql.org/docs/current/rangetypes.html), [Supabase extensions](https://supabase.com/docs/guides/database/extensions).
 
 ### Receipt and confirmation
@@ -337,6 +345,8 @@ The first successful tenant bootstrap starts the selected plan's fourteen-day tr
 Authorize upload purpose, expected size, content types and owner before signing. Use unpredictable immutable keys; accept catalogue images and evidence through separate policies. Limit image dimensions/decompression, strip unnecessary metadata, validate actual file signatures, and scan quarantined objects. Never execute uploaded content.
 
 R2 presigned URLs can be reused until expiry, so Drezivo signs every new upload as a create-only PUT with `If-None-Match: *` against an unpredictable unique key. Reusing the authorization therefore cannot replace an existing object. Finalization streams the stored bytes through the API, enforces the upload-size bound, computes SHA-256 itself, and verifies MIME type and magic bytes before marking the file accepted. New R2 files do not rely on provider version IDs; legacy non-null version IDs fail closed until migrated and reconciled. [Cloudflare R2 presigned URLs](https://developers.cloudflare.com/r2/api/s3/presigned-urls/), [R2 S3 compatibility](https://developers.cloudflare.com/r2/api/s3/api/).
+
+For staff catalogue photos, the browser reads each selected file and computes its SHA-256 when it is chosen, then keeps a stable Blob for the later authorized PUT. It does not reread the original mobile file-picker reference during form submission. If the browser cannot read a selected photo immediately, the form identifies that photo and asks staff to reselect a local copy before saving.
 
 Catalogue products allow at most five ordered photos per style, with display order zero as the cover. Each source image remains limited to 10 MB and each proof image to 5 MB. Serve optimized public derivatives only. Keep private evidence access short-lived (proposed five-minute downloads), no public ACLs, no indexing, no shared CDN cache. Use least-privilege bucket-scoped credentials, encryption at rest and TLS. Keep accepted SHA-256 values and any legacy provider-version metadata in the retention/deletion inventory.
 

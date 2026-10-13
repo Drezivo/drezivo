@@ -87,6 +87,17 @@ export const envSchema = z
     CATALOGUE_VISION_MODEL: z.string().trim().min(1).max(200).optional(),
     CATALOGUE_VISION_API_KEY: z.string().min(10).max(500).optional(),
     CATALOGUE_VISION_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(120_000).default(45_000),
+    // Batch Add is limited to Drezivo's own account for now. Comma-separated verified primary
+    // emails; matching is case-insensitive. Set it to an empty string to turn Batch Add off for all.
+    CATALOGUE_IMPORT_ALLOWED_EMAILS: z
+      .string()
+      .default('drezivoshop@gmail.com')
+      .transform((value) =>
+        value
+          .split(',')
+          .map((email) => email.trim().toLowerCase())
+          .filter((email) => email.length > 0),
+      ),
     // Cloudflare Turnstile secret for storefront guest submissions. Unset (local development)
     // skips the check with one startup warning; when set, missing or rejected tokens are refused.
     TURNSTILE_SECRET_KEY: z.string().min(1).max(200).optional(),

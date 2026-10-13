@@ -18,7 +18,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DrezivoApiError, createDrezivoApiClient } from "@/lib/drezivo-api";
 import { inferMeasurementKind } from "@/lib/measurement-input";
@@ -103,7 +103,7 @@ export function BatchImportPage() {
     );
     void api.getCatalogueImportCapabilities().then(
       (result) => setCapabilities(result.data),
-      () => setCapabilities({ photo_extraction: false, max_batch_items: 25 })
+      () => setCapabilities({ photo_extraction: false, max_batch_items: 25, batch_add: false })
     );
     void api.getDefaultMeasurementGuide().then(
       (result) => setDefaultGuide(result.data.guide),
@@ -416,6 +416,20 @@ export function BatchImportPage() {
 
   const working = phase !== "idle";
   const categoryNames = categories.map((category) => category.name);
+
+  if (capabilities && !capabilities.batch_add) {
+    return (
+      <div className="min-h-full bg-dashboard-canvas px-ws-gutter pt-6">
+        <section role="alert" className="mx-auto max-w-xl rounded-xl border border-dashboard-border bg-dashboard-surface p-5">
+          <h1 className="text-base font-semibold text-dashboard-navy">Batch Add is not available yet</h1>
+          <p className="mt-1 text-sm text-dashboard-muted">Add clothing one item at a time from the Clothing page.</p>
+          <Link href="/inventory/new" className={buttonVariants({ className: "mt-4" })}>
+            Add Clothing
+          </Link>
+        </section>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-full bg-dashboard-canvas px-ws-gutter pt-6">

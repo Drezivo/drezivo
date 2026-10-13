@@ -320,6 +320,16 @@ const confirmedResponse = staffReservationCompleteResponse.parse({
   next_action: "none",
 });
 
+const completedResponse = staffReservationCompleteResponse.parse({
+  reservation: {
+    ...heldResponse.reservation,
+    status: "completed",
+    version: 3,
+  },
+  completion_state: "completed",
+  next_action: "payment_verification",
+});
+
 const gcashHeldResponse = staffReservationCreateResponse.parse({
   reservation: {
     ...heldResponse.reservation,
@@ -1090,7 +1100,9 @@ describe("NewReservationSheet", () => {
     );
     expect(screen.getAllByText(/Rental ₱1,500/)).toHaveLength(2);
     expect(screen.getByText("One flexible-fit garment")).toBeVisible();
-    expect(screen.queryByRole("button", { name: /Add another size of Rosalie/i })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /Add another size of Rosalie/i })
+    ).not.toBeInTheDocument();
 
     fireEvent.click(rosRemove);
     expect(screen.queryByRole("button", { name: /Remove Rosalie/i })).not.toBeInTheDocument();
@@ -1107,13 +1119,7 @@ describe("NewReservationSheet", () => {
     const calendarWithRecoveryConflict = staffReservationAvailabilityCalendarResponse.parse({
       ...calendarResponse,
       window: { start_date: "2026-10-01", end_date: "2026-10-31" },
-      days: [
-        "2026-10-10",
-        "2026-10-11",
-        "2026-10-12",
-        "2026-10-13",
-        "2026-10-14",
-      ].map((date) => ({
+      days: ["2026-10-10", "2026-10-11", "2026-10-12", "2026-10-13", "2026-10-14"].map((date) => ({
         ...calendarResponse.days[0]!,
         date,
         state: date === "2026-10-14" ? "unavailable" : "available",
@@ -1283,6 +1289,67 @@ describe("NewReservationSheet", () => {
     ).toBeVisible();
     expect(screen.queryByRole("checkbox", { name: "Cash received" })).not.toBeInTheDocument();
     expect(props.onReservationChanged).toHaveBeenCalledWith(ids.reservation);
+  });
+
+  it("requires cash confirmation before recording an unpaid past cash booking as Completed", async () => {
+    api.createStaffReservation.mockResolvedValueOnce({
+      data: staffReservationCreateResponse.parse({
+        ...heldResponse,
+        reservation: {
+          ...heldResponse.reservation,
+          due_at: new Date(Date.now() - 60_000).toISOString(),
+        },
+      }),
+      requestId: "req-past-due-hold",
+    });
+    api.completeStaffReservation.mockResolvedValueOnce({
+      data: completedResponse,
+      requestId: "req-past-due-complete",
+    });
+    renderSheet();
+    await fillDatesAndSelectProduct();
+    fireEvent.click(screen.getByRole("button", { name: "Reserve" }));
+
+    expect(
+      await screen.findByText(
+        "This reservation is in the past. Submitting will record it as a Completed reservation."
+      )
+    ).toBeVisible();
+    expect(screen.getByRole("button", { name: "Record as Completed" })).toBeDisabled();
+    expect(
+      screen.queryByRole("checkbox", {
+        name: /past|completed/i,
+      })
+    ).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Full name"), { target: { value: "Past Customer" } });
+    fireEvent.change(screen.getByLabelText("Phone"), { target: { value: "09171234567" } });
+    fireEvent.change(screen.getByLabelText("Email"), { target: { value: "past@example.test" } });
+    fireEvent.change(screen.getByLabelText("Address"), { target: { value: "123 Past Street" } });
+    fireEvent.click(screen.getByRole("checkbox", { name: /Customer has reviewed and accepted/i }));
+    expect(screen.getByRole("button", { name: "Record as Completed" })).toBeDisabled();
+    expect(
+      screen.getByText(/Confirm that the cash was received and enter the amount tendered/i)
+    ).toBeVisible();
+    fireEvent.click(screen.getAllByRole("checkbox", { name: "Cash received" })[0]!);
+    fireEvent.change(screen.getByLabelText("Cash tendered"), { target: { value: "1000" } });
+    expect(screen.getByRole("button", { name: "Record as Completed" })).toBeDisabled();
+    fireEvent.change(screen.getByLabelText("Cash tendered"), { target: { value: "2000" } });
+    expect(screen.getByRole("button", { name: "Record as Completed" })).toBeEnabled();
+    fireEvent.click(screen.getByRole("button", { name: "Record as Completed" }));
+
+    expect(
+      await screen.findByText("Reservation recorded as completed. Payment remains to be verified.")
+    ).toBeVisible();
+    expect(api.completeStaffReservation).toHaveBeenCalledWith(
+      ids.reservation,
+      expect.objectContaining({
+        version: 1,
+        terms_accepted: true,
+        cash_collection: { amount_tendered_minor: "200000" },
+      }),
+      expect.any(String)
+    );
   });
 
   it("keeps new-customer phone input numeric and capped at exactly 11 digits", async () => {
