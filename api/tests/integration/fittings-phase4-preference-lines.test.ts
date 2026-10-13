@@ -190,6 +190,48 @@ describe('FIT-BE-042 preference-only fitting garments', async () => {
     }
   });
 
+  it('books a fitting with no garments yet, holding only the capacity slot, and replays the same intent', async () => {
+    const seed = await seedPreferenceTenant('no-garments');
+    const membershipId = randomUUID();
+    const context = {
+      tenantId: seed.tenantId,
+      branchId: seed.branchId,
+      membershipId,
+      principalId: `user_${membershipId}`,
+      requestId: randomUUID(),
+      idempotencyKey: randomUUID(),
+    };
+    const request = {
+      customer: { source: 'existing' as const, customer_id: seed.customerId as never },
+      starts_at: '2099-01-09T04:00:00.000Z',
+      garments: [],
+    };
+
+    const response = await createStaffFittingCommand(context, request);
+    expect(response.status).toBe(201);
+    if (!response.body.success) throw new Error('Expected fitting creation to succeed.');
+    expect(response.body.data.fitting.garments).toEqual([]);
+    expect(response.body.data.fitting.status).toBe('pending');
+
+    const replay = await createStaffFittingCommand(context, request);
+    expect(replay.status).toBe(201);
+    expect(replay.body).toEqual(response.body);
+
+    const admin = new Client({ connectionString: adminUrl });
+    await admin.connect();
+    try {
+      const counts = await admin.query<{ fittings: number; lines: number; slots: number }>(
+        `SELECT (SELECT count(*)::int FROM fitting_appointment WHERE tenant_id = $1) AS fittings,
+                (SELECT count(*)::int FROM fitting_line WHERE tenant_id = $1) AS lines,
+                (SELECT count(*)::int FROM fitting_slot_allocation WHERE tenant_id = $1 AND is_blocking) AS slots`,
+        [seed.tenantId],
+      );
+      expect(counts.rows[0]).toEqual({ fittings: 1, lines: 0, slots: 1 });
+    } finally {
+      await admin.end();
+    }
+  });
+
   it('persists optional address and social media for a new fitting walk-in and returns them only in detail', async () => {
     const seed = await seedPreferenceTenant('walk-in-profile');
     const membershipId = randomUUID();

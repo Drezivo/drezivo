@@ -633,7 +633,9 @@ function AppointmentList({
                         </span>
                       </span>
                     </div>
-                  ) : null}
+                  ) : (
+                    <p className="text-xs text-dashboard-muted">No garments selected yet</p>
+                  )}
                 </AppointmentCell>
 
                 <AppointmentCell label="Fee / payment" className="col-span-1">

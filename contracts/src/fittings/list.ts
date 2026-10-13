@@ -70,7 +70,7 @@ export const fittingListItem = z
     status: fittingState,
     period: instantInterval,
     customer: fittingCustomerSummary,
-    garments: z.array(fittingGarmentLineSummary).min(1).max(FITTING_MAX_GARMENT_LINES),
+    garments: z.array(fittingGarmentLineSummary).max(FITTING_MAX_GARMENT_LINES),
     fee: fittingFeePaymentSummary,
     attention: fittingAttention,
     version: z.number().int().positive(),

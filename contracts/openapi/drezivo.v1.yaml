@@ -249,7 +249,6 @@ components:
               - garment_mode
               - assigned_asset
             additionalProperties: false
-          minItems: 1
           maxItems: 20
         fee:
           type: object
@@ -457,7 +456,6 @@ components:
                     - variant
                     - garment_mode
                   additionalProperties: false
-                minItems: 1
                 maxItems: 20
               fee:
                 type: object
@@ -16983,7 +16981,6 @@ paths:
                                   - variant
                                   - garment_mode
                                 additionalProperties: false
-                              minItems: 1
                               maxItems: 20
                             fee:
                               type: object
@@ -17250,7 +17247,6 @@ paths:
                       - variant_id
                       - garment_mode
                     additionalProperties: false
-                  minItems: 1
                   maxItems: 20
                 internal_note:
                   type: string
@@ -17418,7 +17414,6 @@ paths:
                                 - garment_mode
                                 - assigned_asset
                               additionalProperties: false
-                            minItems: 1
                             maxItems: 20
                           fee:
                             type: object
@@ -17821,7 +17816,6 @@ paths:
                             - garment_mode
                             - assigned_asset
                           additionalProperties: false
-                        minItems: 1
                         maxItems: 20
                       fee:
                         type: object
@@ -18362,7 +18356,6 @@ paths:
                                 - garment_mode
                                 - assigned_asset
                               additionalProperties: false
-                            minItems: 1
                             maxItems: 20
                           fee:
                             type: object
@@ -18804,7 +18797,6 @@ paths:
                                 - garment_mode
                                 - assigned_asset
                               additionalProperties: false
-                            minItems: 1
                             maxItems: 20
                           fee:
                             type: object
@@ -19277,7 +19269,6 @@ paths:
                                 - garment_mode
                                 - assigned_asset
                               additionalProperties: false
-                            minItems: 1
                             maxItems: 20
                           fee:
                             type: object
@@ -19745,7 +19736,6 @@ paths:
                                 - garment_mode
                                 - assigned_asset
                               additionalProperties: false
-                            minItems: 1
                             maxItems: 20
                           fee:
                             type: object
@@ -20217,7 +20207,6 @@ paths:
                                 - garment_mode
                                 - assigned_asset
                               additionalProperties: false
-                            minItems: 1
                             maxItems: 20
                           fee:
                             type: object
@@ -20689,7 +20678,6 @@ paths:
                                 - garment_mode
                                 - assigned_asset
                               additionalProperties: false
-                            minItems: 1
                             maxItems: 20
                           fee:
                             type: object
@@ -21156,7 +21144,6 @@ paths:
                                 - garment_mode
                                 - assigned_asset
                               additionalProperties: false
-                            minItems: 1
                             maxItems: 20
                           fee:
                             type: object
@@ -21623,7 +21610,6 @@ paths:
                                 - garment_mode
                                 - assigned_asset
                               additionalProperties: false
-                            minItems: 1
                             maxItems: 20
                           fee:
                             type: object
@@ -22093,7 +22079,6 @@ paths:
                                 - garment_mode
                                 - assigned_asset
                               additionalProperties: false
-                            minItems: 1
                             maxItems: 20
                           fee:
                             type: object
@@ -22563,7 +22548,6 @@ paths:
                                 - garment_mode
                                 - assigned_asset
                               additionalProperties: false
-                            minItems: 1
                             maxItems: 20
                           fee:
                             type: object
@@ -23053,7 +23037,6 @@ paths:
                                 - garment_mode
                                 - assigned_asset
                               additionalProperties: false
-                            minItems: 1
                             maxItems: 20
                           fee:
                             type: object
