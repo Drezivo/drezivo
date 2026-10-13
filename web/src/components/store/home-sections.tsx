@@ -64,7 +64,7 @@ export function Hero({ store }: { store: PublicStorefront }) {
   return (
     <section data-hero className="relative isolate flex min-h-[86svh] items-end overflow-hidden bg-sf-line">
       <div data-hero-media className="absolute inset-0 -z-10">
-        {/* eslint-disable-next-line @next/next/no-img-element -- short-lived signed URL */}
+        {/* eslint-disable-next-line @next/next/no-img-element -- app-owned public media route */}
         <img src={image} alt="" className="h-full w-full object-cover object-[50%_30%]" fetchPriority="high" />
       </div>
       {/* Phones put the text over the busiest part of the photo, so the scrim is deeper there. */}
@@ -172,7 +172,7 @@ export function About({ store }: { store: PublicStorefront }) {
       <div className={`grid items-center gap-10 ${about.image_url ? 'md:grid-cols-2 md:gap-16' : ''}`}>
         {about.image_url ? (
           <div data-reveal="image" className="aspect-[4/5] overflow-hidden bg-sf-line">
-            {/* eslint-disable-next-line @next/next/no-img-element -- short-lived signed URL */}
+            {/* eslint-disable-next-line @next/next/no-img-element -- app-owned public media route */}
             <img src={about.image_url} alt="" loading="lazy" className="h-full w-full object-cover" />
           </div>
         ) : null}

@@ -26,6 +26,104 @@ export interface PublishedStore {
   bookingOpen: boolean;
 }
 
+export interface PublicMediaFileRow {
+  id: string;
+  storage_key: string;
+  version_id: string | null;
+  mime_type: 'image/jpeg' | 'image/png' | 'image/webp' | 'application/pdf';
+  byte_size: number;
+}
+
+/**
+ * Returns media only while the exact accepted file is referenced by content visible for this
+ * published store (or by the store named by a verified owner preview grant).
+ */
+export async function readPublicStoreMedia(
+  client: PoolClient,
+  input: { tenantId: string; storefrontId: string; fileId: string; preview: boolean },
+): Promise<PublicMediaFileRow | null> {
+  const result = await client.query<PublicMediaFileRow>(
+    `SELECT f.id, f.storage_key, f.version_id, f.mime_type, f.byte_size
+       FROM file_object f
+      WHERE f.tenant_id = $1
+        AND f.id = $3::uuid
+        AND f.lifecycle_status = 'accepted'
+        AND f.frozen_at IS NOT NULL
+        AND f.mime_type IN ('image/jpeg', 'image/png', 'image/webp', 'application/pdf')
+        AND (
+          EXISTS (
+            SELECT 1 FROM storefront s
+             WHERE s.tenant_id = $1 AND s.id = $2
+               AND ($4::boolean OR s.status = 'published')
+               AND f.purpose = 'storefront_asset'
+               AND (
+                 s.branding ->> 'logo_file_id' = f.id::text
+                 OR s.branding ->> 'cover_file_id' = f.id::text
+                 OR s.content #>> '{hero,image_file_id}' = f.id::text
+                 OR s.content #>> '{about,image_file_id}' = f.id::text
+               )
+          )
+          OR EXISTS (
+            SELECT 1 FROM storefront s
+              JOIN policy_snapshot ps ON ps.tenant_id = s.tenant_id AND ps.storefront_id = s.id
+             WHERE s.tenant_id = $1 AND s.id = $2
+               AND ($4::boolean OR s.status = 'published')
+               AND f.purpose = 'storefront_asset'
+               AND ps.effective_at <= statement_timestamp()
+               AND ps.version = (
+                 SELECT max(current_ps.version) FROM policy_snapshot current_ps
+                  WHERE current_ps.tenant_id = s.tenant_id AND current_ps.storefront_id = s.id
+                    AND current_ps.effective_at <= statement_timestamp()
+               )
+               AND ps.rental_rules ->> 'format' = 'images'
+               AND coalesce(ps.rental_rules -> 'image_file_ids', '[]'::jsonb) ? f.id::text
+          )
+          OR EXISTS (
+            SELECT 1 FROM storefront s
+              JOIN product p ON p.tenant_id = s.tenant_id
+              LEFT JOIN category c ON c.tenant_id = p.tenant_id AND c.id = p.category_id
+              JOIN product_image pi ON pi.tenant_id = p.tenant_id AND pi.product_id = p.id
+             WHERE s.tenant_id = $1 AND s.id = $2
+               AND ($4::boolean OR s.status = 'published')
+               AND f.purpose = 'catalogue_image'
+               AND pi.file_id = f.id
+               AND p.status = 'active'
+               AND (p.category_id IS NULL OR c.status = 'active')
+               AND EXISTS (
+                 SELECT 1 FROM product_variant pv
+                  WHERE pv.tenant_id = p.tenant_id AND pv.product_id = p.id AND pv.status = 'active'
+               )
+          )
+          OR EXISTS (
+            SELECT 1 FROM storefront s
+              JOIN measurement_guide mg ON mg.tenant_id = s.tenant_id AND mg.file_id = f.id
+              JOIN product_variant pv ON pv.tenant_id = mg.tenant_id AND pv.measurement_guide_id = mg.id
+              JOIN product p ON p.tenant_id = pv.tenant_id AND p.id = pv.product_id
+              LEFT JOIN category c ON c.tenant_id = p.tenant_id AND c.id = p.category_id
+             WHERE s.tenant_id = $1 AND s.id = $2
+               AND ($4::boolean OR s.status = 'published')
+               AND f.purpose = 'measurement_guide'
+               AND mg.status = 'active'
+               AND pv.status = 'active'
+               AND p.status = 'active'
+               AND (p.category_id IS NULL OR c.status = 'active')
+          )
+          OR EXISTS (
+            SELECT 1 FROM storefront s
+              JOIN payment_method pm ON pm.tenant_id = s.tenant_id
+              ${paymentMethodFileJoinsSql()}
+             WHERE s.tenant_id = $1 AND s.id = $2
+               AND ($4::boolean OR s.status = 'published')
+               AND (qr.id = f.id OR mat.id = f.id)
+               AND ${onlinePaymentMethodReadySql()}
+          )
+        )
+      LIMIT 1`,
+    [input.tenantId, input.storefrontId, input.fileId, input.preview],
+  );
+  return result.rows[0] ?? null;
+}
+
 /**
  * The published storefront for a slug. With a verified owner preview grant, the storefront the
  * grant names is returned even while it is a draft, and only if the slug still matches it.

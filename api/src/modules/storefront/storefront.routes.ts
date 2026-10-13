@@ -4,6 +4,7 @@ import { z } from 'zod';
 import {
   catalogueQuery,
   fittingSlotsQuery,
+  fileObjectId,
   productId,
   publicAvailabilityQuery,
 } from '@drezivo/contracts';
@@ -11,6 +12,8 @@ import {
 import { rateLimit } from '../../middleware/rate-limit.js';
 import { validate } from '../../middleware/validate.js';
 import { sendSuccess } from '../../shared/response.js';
+import { streamFileResponse } from '../files/file-stream.js';
+import { NotFoundError } from '../../shared/errors.js';
 import { verifyPreviewToken, type PreviewGrant } from './storefront-preview.js';
 import { publicStorefrontService as service } from './storefront.service.js';
 
@@ -18,6 +21,7 @@ export const storefrontRouter = Router();
 
 const slugParams = z.object({ slug: z.string().min(1).max(80).regex(/^[a-z0-9-]+$/) }).strict();
 const itemParams = slugParams.extend({ productId }).strict();
+const mediaParams = slugParams.extend({ fileId: fileObjectId }).strict();
 
 /** Anonymous reads are limited per client address; guests browsing normally stay far below this. */
 const publicReadLimit = rateLimit({ windowMs: 60_000, max: 240, keyOf: (req) => `public-read:${req.ip ?? 'unknown'}` });
@@ -26,12 +30,12 @@ const publicReadLimit = rateLimit({ windowMs: 60_000, max: 240, keyOf: (req) => 
  * Express 5 recomputes `req.query` on each access, so handlers re-parse it with the same contract
  * `validate()` already enforced; the parse is cheap and yields typed values with defaults.
  *
- * Catalogue data is cached briefly by browsers and longer by the CDN. Signed image URLs live for an
- * hour, which comfortably outlasts `s-maxage` plus `stale-while-revalidate`.
+ * Catalogue data and referenced public media are cached briefly by browsers and longer by the CDN.
  */
 const CATALOGUE_CACHE = 'public, max-age=60, s-maxage=300, stale-while-revalidate=600';
 const LIVE_CACHE = 'public, max-age=15, s-maxage=30';
 const PREVIEW_HEADER = 'X-Storefront-Preview';
+const PUBLIC_MEDIA_CACHE = 'public, max-age=60, s-maxage=300, stale-while-revalidate=600';
 
 /**
  * An owner preview (see storefront-preview.ts) is read through the same handlers. A missing or
@@ -69,6 +73,27 @@ storefrontRouter.get(
   publicReadLimit,
   validate({ params: itemParams }),
   publicRead(CATALOGUE_CACHE, (req, preview) => service.getItem(slugOf(req), (req.params as { productId: string }).productId, preview)),
+);
+
+storefrontRouter.get(
+  '/public/stores/:slug/media/:fileId',
+  publicReadLimit,
+  validate({ params: mediaParams }),
+  async (req, res, next) => {
+    try {
+      const preview = verifyPreviewToken(req.get(PREVIEW_HEADER));
+      const result = await service.readMedia(
+        slugOf(req),
+        (req.params as { fileId: string }).fileId,
+        preview,
+      );
+      if (!result) throw new NotFoundError('This store image is not available.');
+      res.setHeader('Vary', PREVIEW_HEADER);
+      streamFileResponse(req, res, next, result, preview ? 'private, no-store' : PUBLIC_MEDIA_CACHE);
+    } catch (error) {
+      next(error);
+    }
+  },
 );
 
 storefrontRouter.get(

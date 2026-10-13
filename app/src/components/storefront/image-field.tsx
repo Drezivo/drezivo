@@ -82,7 +82,7 @@ export function ImageField({
       <p className="text-sm font-medium text-dashboard-navy">{label}</p>
       <div className={cn("relative mt-1.5 overflow-hidden rounded-lg border border-dashed border-dashboard-border bg-dashboard-canvas", aspect)}>
         {preview ? (
-          // eslint-disable-next-line @next/next/no-img-element -- local object URL or short-lived signed URL
+          // eslint-disable-next-line @next/next/no-img-element -- local upload preview or app-owned media route
           <img src={preview} alt="" className={cn("absolute inset-0 h-full w-full", fit === "contain" ? "object-contain" : "object-cover")} />
         ) : (
           <label htmlFor={inputId} className="absolute inset-0 flex cursor-pointer flex-col items-center justify-center gap-2 text-sm text-dashboard-muted hover:bg-dashboard-active/50">

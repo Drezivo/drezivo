@@ -378,7 +378,7 @@ Tasks are ordered by dependency. A task is complete only when its acceptance cri
   - **Depends on:** STO-001
   - **Outcome:** Public business/clothing assets and private receipts/documents use separate access rules.
   - **Acceptance criteria:**
-    - [ ] Private files require current organization authorization and short-lived signed reads.
+    - [ ] Private files require current tenant, branch, purpose, permission, and record authorization on every API-streamed read.
     - [ ] Public URLs are issued only for explicitly public assets.
     - [ ] Replacement and archival record the old object's cleanup state.
     - [ ] Cross-tenant file reads are rejected.

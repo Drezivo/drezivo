@@ -172,7 +172,7 @@ function FeaturedPicker({ selected, onChange, error }: { selected: ProductId[]; 
               >
                 <span className="block aspect-[3/4] bg-dashboard-neutral-soft">
                   {item.primary_image_url ? (
-                    // eslint-disable-next-line @next/next/no-img-element -- short-lived signed URL
+                    // eslint-disable-next-line @next/next/no-img-element -- app-owned storefront media route
                     <img src={item.primary_image_url} alt="" className="h-full w-full object-cover" loading="lazy" />
                   ) : null}
                 </span>

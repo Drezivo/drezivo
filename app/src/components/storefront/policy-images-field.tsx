@@ -90,7 +90,7 @@ export function PolicyImagesField({
               <li key={id} className="overflow-hidden rounded-lg border border-dashboard-border bg-dashboard-canvas">
                 <div className="relative aspect-[3/4] bg-white">
                   {url ? (
-                    // eslint-disable-next-line @next/next/no-img-element -- local object URL or short-lived signed URL
+                    // eslint-disable-next-line @next/next/no-img-element -- local upload preview or app-owned media route
                     <img src={url} alt={`Policy page ${index + 1}`} className="absolute inset-0 h-full w-full object-contain" />
                   ) : (
                     <p className="absolute inset-0 flex items-center justify-center text-xs text-dashboard-muted">Preview unavailable</p>

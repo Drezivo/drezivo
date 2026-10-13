@@ -1,4 +1,4 @@
-import { Router, type Request, type Response } from 'express';
+import { Router, type NextFunction, type Request, type Response } from 'express';
 import { z } from 'zod';
 
 import { submitSubscriptionPaymentRequest, type SubmitSubscriptionPaymentRequest } from '@drezivo/contracts';
@@ -17,8 +17,9 @@ import { commandHandler, readHandler, workspaceRateLimit } from '../../middlewar
 import { validate } from '../../middleware/validate.js';
 import { ForbiddenError } from '../../shared/errors.js';
 import { requireTenantAction } from '../tenancy/tenancy.service.js';
-import { getBillingOverview, readPlatformQr, signPaymentProofUrl, submitSubscriptionPayment, type BillingActor } from './billing-payments.service.js';
+import { getBillingOverview, readPlatformQr, readPaymentProof, submitSubscriptionPayment, type BillingActor } from './billing-payments.service.js';
 import { verifyProofLink } from './operator-proof-link.js';
+import { streamFileResponse } from '../files/file-stream.js';
 
 const methodParams = z.object({ methodId: z.string().uuid() }).strict();
 
@@ -77,20 +78,24 @@ billingRouter.post(
 );
 
 // Operator proof link: signed by the operator API after it authorized its operator; this only
-// verifies the signature and redirects to a short-lived signed storage URL (see operator-proof-link.ts).
+// verifies the signature and streams the accepted object through the API.
 billingRouter.get(
   '/operator/payment-proofs/:token',
   rateLimit({ windowMs: 60_000, max: 60, keyOf: (req) => `proof-link:${req.ip ?? 'unknown'}` }),
-  async (req: Request, res: Response) => {
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
     const token = (req.params as { token?: unknown }).token;
     const grant = typeof token === 'string' ? verifyProofLink(token) : null;
-    const signed = grant ? await signPaymentProofUrl(grant.tenantId, grant.paymentId, 'proof-link') : null;
+    const file = grant ? await readPaymentProof(grant.tenantId, grant.paymentId, 'proof-link') : null;
     res.setHeader('Cache-Control', 'no-store');
     res.setHeader('Referrer-Policy', 'no-referrer');
-    if (!signed) {
+    if (!file) {
       res.status(404).type('text/plain').send('This proof link is not valid or has expired. Open it again from the operator console.');
       return;
     }
-    res.redirect(302, signed.url);
+    streamFileResponse(req, res, next, file, 'private, no-store');
+    } catch (error) {
+      next(error);
+    }
   },
 );

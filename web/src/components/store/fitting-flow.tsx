@@ -223,7 +223,7 @@ export function FittingFlow({ store, items }: { store: PublicStorefront; items: 
                   <button type="button" onClick={() => void openItem(item.product_id)} className="group block w-full text-left">
                     <span className="block aspect-[3/4] overflow-hidden bg-sf-line">
                       {item.image_url ? (
-                        // eslint-disable-next-line @next/next/no-img-element -- short-lived signed URL
+                        // eslint-disable-next-line @next/next/no-img-element -- app-owned public media route
                         <img src={item.image_url} alt="" loading="lazy" className="h-full w-full object-cover transition-transform group-hover:scale-[1.03] motion-reduce:transition-none" />
                       ) : null}
                     </span>

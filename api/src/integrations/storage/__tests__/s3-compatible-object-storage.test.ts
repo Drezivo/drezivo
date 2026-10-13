@@ -10,6 +10,7 @@ import {
 import { describe, expect, it, vi } from 'vitest';
 
 import type { Config } from '../../../config/index.js';
+import { boundStoredObjectBody } from '../object-storage.js';
 import { DependencyUnavailableError } from '../../../shared/errors.js';
 import { logger } from '../../../shared/logger.js';
 import { S3CompatibleObjectStorage } from '../s3-compatible-object-storage.js';
@@ -32,6 +33,35 @@ const r2Config: Pick<
 };
 
 describe('S3-compatible object storage', () => {
+  it('bounds streamed object bytes to the accepted file size', async () => {
+    const result: number[] = [];
+    for await (const chunk of boundStoredObjectBody(
+      Readable.from([Uint8Array.from([1, 2]), Uint8Array.from([3])]),
+      3,
+    )) {
+      result.push(...chunk);
+    }
+    expect(result).toEqual([1, 2, 3]);
+  });
+
+  it('fails a stored object stream that exceeds or truncates its accepted size', async () => {
+    const consume = async (body: AsyncIterable<Uint8Array>) => {
+      for await (const chunk of body) {
+        // Consume the full stream so its size assertion runs.
+        void chunk;
+      }
+    };
+
+    await expect(
+      consume(
+        boundStoredObjectBody(Readable.from([Uint8Array.from([1, 2]), Uint8Array.from([3])]), 2),
+      ),
+    ).rejects.toThrow('Stored file exceeded its verified byte size.');
+    await expect(
+      consume(boundStoredObjectBody(Readable.from([Uint8Array.from([1])]), 2)),
+    ).rejects.toThrow('Stored file did not match its verified byte size.');
+  });
+
   it('signs a create-only R2 upload with the headers the browser must send', async () => {
     const storage = new S3CompatibleObjectStorage(r2Config);
 
@@ -50,7 +80,9 @@ describe('S3-compatible object storage', () => {
       'If-None-Match': '*',
     });
     expect(
-      [...url.searchParams.keys()].some((parameter) => parameter.toLowerCase().includes('checksum')),
+      [...url.searchParams.keys()].some((parameter) =>
+        parameter.toLowerCase().includes('checksum'),
+      ),
     ).toBe(false);
     expect(url.searchParams.has('x-amz-checksum-sha256')).toBe(false);
     expect(authorization.uploadUrl).not.toContain(r2Config.OBJECT_STORAGE_SECRET_ACCESS_KEY);
@@ -96,6 +128,49 @@ describe('S3-compatible object storage', () => {
     });
 
     expect(new URL(authorization.readUrl).searchParams.get('versionId')).toBe('minio-version');
+  });
+
+  it('streams object bytes through the API and preserves the stored object version', async () => {
+    const bytes = Buffer.from('private object bytes');
+    const storage = createStorageWithResponse({
+      Body: Readable.from([bytes.subarray(0, 7), bytes.subarray(7)]) as unknown as NonNullable<
+        GetObjectCommandOutput['Body']
+      >,
+      ContentLength: bytes.byteLength,
+    });
+
+    const result = await storage.adapter.readObject({
+      storageKey: 'tenant-files/tenant-id/file-id/source',
+    });
+    if (!result) throw new Error('Expected the stored object.');
+    const chunks: Uint8Array[] = [];
+    for await (const chunk of result.body) chunks.push(chunk);
+
+    expect(Buffer.concat(chunks)).toEqual(bytes);
+    expect(result.contentLength).toBe(bytes.byteLength);
+    expect(storage.command).toBeInstanceOf(GetObjectCommand);
+    expect(storage.command?.input).toMatchObject({
+      Bucket: 'private-files',
+      Key: 'tenant-files/tenant-id/file-id/source',
+    });
+  });
+
+  it('fails closed on legacy R2 versions before attempting a read', async () => {
+    const client = new S3Client({
+      endpoint: r2Config.OBJECT_STORAGE_ENDPOINT,
+      region: r2Config.OBJECT_STORAGE_REGION,
+      credentials: {
+        accessKeyId: r2Config.OBJECT_STORAGE_ACCESS_KEY_ID,
+        secretAccessKey: r2Config.OBJECT_STORAGE_SECRET_ACCESS_KEY,
+      },
+    });
+    const send = vi.spyOn(client, 'send');
+    const storage = new S3CompatibleObjectStorage(r2Config, client);
+
+    await expect(
+      storage.readObject({ storageKey: 'tenant/file', versionId: 'legacy-version' }),
+    ).rejects.toBeInstanceOf(DependencyUnavailableError);
+    expect(send).not.toHaveBeenCalled();
   });
 
   it('streams stored bytes to derive size, MIME, SHA-256, and a signature prefix', async () => {
@@ -193,7 +268,9 @@ describe('S3-compatible object storage', () => {
       throw new Error('private stream failure');
     }
     const storage = createStorageWithResponse({
-      Body: Readable.from(failingObjectBody()) as unknown as NonNullable<GetObjectCommandOutput['Body']>,
+      Body: Readable.from(failingObjectBody()) as unknown as NonNullable<
+        GetObjectCommandOutput['Body']
+      >,
       ContentLength: 128,
       ContentType: 'application/pdf',
     });
@@ -215,9 +292,24 @@ describe('S3-compatible object storage', () => {
   });
 
   it.each([
-    { label: 'authorization failures', failureClass: 'authorization', statusCode: 403, errorName: 'AccessDenied' },
-    { label: 'configuration failures', failureClass: 'configuration', statusCode: 400, errorName: 'InvalidRequest' },
-    { label: 'temporary provider failures', failureClass: 'dependency', statusCode: 503, errorName: 'ServiceUnavailable' },
+    {
+      label: 'authorization failures',
+      failureClass: 'authorization',
+      statusCode: 403,
+      errorName: 'AccessDenied',
+    },
+    {
+      label: 'configuration failures',
+      failureClass: 'configuration',
+      statusCode: 400,
+      errorName: 'InvalidRequest',
+    },
+    {
+      label: 'temporary provider failures',
+      failureClass: 'dependency',
+      statusCode: 503,
+      errorName: 'ServiceUnavailable',
+    },
   ])('logs safe context for $label', async ({ failureClass, statusCode, errorName }) => {
     const warning = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
     const error = Object.assign(new Error('private key and object path'), {
@@ -231,7 +323,12 @@ describe('S3-compatible object storage', () => {
     ).rejects.toBeInstanceOf(DependencyUnavailableError);
 
     expect(warning).toHaveBeenCalledWith(
-      { operation: 'inspect_uploaded_object', failureClass, statusCode, requestId: 'safe-request-id' },
+      {
+        operation: 'inspect_uploaded_object',
+        failureClass,
+        statusCode,
+        requestId: 'safe-request-id',
+      },
       'object storage operation failed',
     );
     expect(JSON.stringify(warning.mock.calls)).not.toContain('private key and object path');
@@ -269,9 +366,9 @@ function createStorageWithResponse(response: Partial<GetObjectCommandOutput>): {
       secretAccessKey: r2Config.OBJECT_STORAGE_SECRET_ACCESS_KEY,
     },
   });
-  const send = vi.spyOn(client, 'send').mockReturnValue(
-    Promise.resolve(response as GetObjectCommandOutput) as never,
-  );
+  const send = vi
+    .spyOn(client, 'send')
+    .mockReturnValue(Promise.resolve(response as GetObjectCommandOutput) as never);
   return {
     adapter: new S3CompatibleObjectStorage(r2Config, client),
     get command() {

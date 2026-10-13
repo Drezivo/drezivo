@@ -33,6 +33,7 @@ export interface ReservationListReadRow {
   line_deposit_minor: string | number | null;
   line_currency: string | null;
   line_count: string | number | null;
+  line_cover_file_id: string | null;
   line_cover_storage_key: string | null;
   line_cover_version_id: string | null;
   fulfillment_method: 'pickup' | 'delivery' | null;
@@ -124,6 +125,7 @@ export interface ReservationDetailLineRow {
   variant_sku: string;
   variant_size_label: string | null;
   variant_color_label: string | null;
+  variant_cover_file_id: string | null;
   variant_cover_storage_key: string | null;
   variant_cover_version_id: string | null;
   current_asset_readiness: 'ready' | 'needs_cleaning' | 'needs_repair' | 'unready' | null;
@@ -283,6 +285,7 @@ export async function listReservationsReadModel(
        line.deposit_minor AS line_deposit_minor,
        line.currency AS line_currency,
        line.line_count,
+       cover_image.file_id AS line_cover_file_id,
        cover_image.storage_key AS line_cover_storage_key,
        cover_image.version_id AS line_cover_version_id,
        r.delivery_snapshot ->> 'fulfillment_method' AS fulfillment_method,
@@ -329,7 +332,7 @@ export async function listReservationsReadModel(
         LIMIT 1
      ) line ON true
      LEFT JOIN LATERAL (
-       SELECT f.storage_key, f.version_id
+       SELECT f.id AS file_id, f.storage_key, f.version_id
          FROM product_variant pv
          JOIN product_image pi
            ON pi.tenant_id = pv.tenant_id
@@ -517,6 +520,7 @@ export async function readReservationDetailModel(
        pv.sku AS variant_sku,
        pv.size_label AS variant_size_label,
        pv.color_label AS variant_color_label,
+       cover_image.file_id AS variant_cover_file_id,
        cover_image.storage_key AS variant_cover_storage_key,
        cover_image.version_id AS variant_cover_version_id,
        asset_state.readiness AS current_asset_readiness,
@@ -533,7 +537,7 @@ export async function readReservationDetailModel(
        ON pv.tenant_id = rl.tenant_id
       AND pv.id = rl.variant_id
      LEFT JOIN LATERAL (
-       SELECT f.storage_key, f.version_id
+       SELECT f.id AS file_id, f.storage_key, f.version_id
          FROM product_image pi
          JOIN file_object f
            ON f.tenant_id = pi.tenant_id
@@ -820,7 +824,7 @@ export interface ReservationPaymentReceiptRow {
 
 /**
  * The renter's uploaded receipts for a reservation's payment, newest first. Only accepted,
- * finalized receipt files are returned; the caller signs short-lived read links for them.
+ * finalized receipt files are returned; the caller emits a private application media route.
  */
 export async function readReservationPaymentReceipts(
   client: PoolClient,

@@ -96,7 +96,7 @@ export function PaymentStep({ reservation, onSubmitted }: { reservation: GuestRe
             Pay with {instructions.method_name}
           </h3>
           {instructions.qr_image_url ? (
-            // eslint-disable-next-line @next/next/no-img-element -- short-lived signed URL
+            // eslint-disable-next-line @next/next/no-img-element -- app-owned public media route
             <img src={instructions.qr_image_url} alt={`${instructions.method_name} QR code`} className="mx-auto w-56 border border-sf-line bg-white p-2" />
           ) : null}
           {instructions.destination_note ? <p className="whitespace-pre-line border border-sf-line bg-sf-surface px-4 py-3 text-sm leading-7">{instructions.destination_note}</p> : null}
@@ -109,7 +109,7 @@ export function PaymentStep({ reservation, onSubmitted }: { reservation: GuestRe
                 </a>
               </div>
             ) : (
-              // eslint-disable-next-line @next/next/no-img-element -- short-lived signed URL
+              // eslint-disable-next-line @next/next/no-img-element -- app-owned public media route
               <img src={instructions.material_url} alt={`${instructions.method_name} payment instructions`} className="mx-auto w-full max-w-sm border border-sf-line bg-white" />
             )
           ) : null}

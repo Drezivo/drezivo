@@ -9,6 +9,7 @@
 import { z } from 'zod';
 
 import { fileObjectId, productId } from '../common/ids';
+import { mediaUrl } from '../common/media';
 import { nonNegativeMoneyString } from '../common/money';
 import { isoInstant } from '../common/time';
 
@@ -366,13 +367,13 @@ export const storefrontReadiness = z
   .strict();
 export type StorefrontReadiness = z.infer<typeof storefrontReadiness>;
 
-/** Short-lived signed previews of the images referenced by the document. */
+/** App-owned media paths for images referenced by the storefront document. */
 export const storefrontMedia = z
   .object({
-    logo_url: z.string().url().nullable(),
-    cover_url: z.string().url().nullable(),
-    hero_image_url: z.string().url().nullable(),
-    about_image_url: z.string().url().nullable(),
+    logo_url: mediaUrl.nullable(),
+    cover_url: mediaUrl.nullable(),
+    hero_image_url: mediaUrl.nullable(),
+    about_image_url: mediaUrl.nullable(),
   })
   .strict();
 
@@ -392,8 +393,8 @@ export const storefrontSettings = z
         version: z.number().int().positive(),
         effective_at: isoInstant,
         rules: storefrontPolicyRules.nullable(),
-        /** Signed, short-lived URLs of the policy images, keyed by file id, for the editor preview. */
-        image_urls: z.record(z.string(), z.string().url()).default({}),
+        /** App-owned media paths for the policy images, keyed by file id, for the editor preview. */
+        image_urls: z.record(z.string(), mediaUrl).default({}),
       })
       .strict(),
     readiness: storefrontReadiness,

@@ -1,5 +1,6 @@
-import type { Request, Response } from 'express';
+import type { NextFunction, Request, Response } from 'express';
 
+import { fileObjectId } from '@drezivo/contracts';
 import type {
   PermissionCode,
   TenantStatus,
@@ -7,7 +8,8 @@ import type {
 } from '@drezivo/contracts';
 
 import { ValidationError } from '../../shared/errors.js';
-import { authorizeUpload, finalizeUpload } from './files.service.js';
+import { streamFileResponse } from './file-stream.js';
+import { authorizeUpload, finalizeUpload, readStaffFile } from './files.service.js';
 
 export async function authorizeUploadController(req: Request, res: Response): Promise<void> {
   const result = await authorizeUpload({
@@ -29,6 +31,32 @@ export async function finalizeUploadController(req: Request, res: Response): Pro
     fileId,
   });
   res.status(result.status).json(result.body);
+}
+
+export async function readStaffFileController(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const fileId = fileObjectId.parse((req.params as { fileId: unknown }).fileId);
+    const context = req.tenantContext;
+    const principalId = req.clerkPrincipal?.clerkUserId;
+    if (!context || !principalId) throw new ValidationError('Workspace context is required.');
+    const file = await readStaffFile({
+      tenantId: context.tenantId,
+      membershipId: context.membershipId,
+      principalId,
+      permissionCodes: context.permissionCodes,
+      effectiveTenantStatus: context.effectiveTenantStatus,
+      branchId: context.activeBranchId,
+      requestId: req.requestId,
+      fileId,
+    });
+    streamFileResponse(req, res, next, file, 'private, no-store');
+  } catch (error) {
+    next(error);
+  }
 }
 
 function requireContext(req: Request): {

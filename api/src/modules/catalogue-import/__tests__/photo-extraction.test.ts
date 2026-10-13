@@ -30,6 +30,7 @@ const storage = {
   authorizeUpload: vi.fn(),
   inspectUploadedObject: vi.fn(),
   authorizeRead: vi.fn(() => Promise.resolve({ readUrl: 'https://storage.test/photo.jpg', expiresAt: new Date() })),
+  readObject: vi.fn(),
 };
 const input = { tenantId: 'tenant', principalId: 'user', fileId: 'file' };
 

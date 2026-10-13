@@ -8,7 +8,7 @@ import { config } from '../../config/index.js';
  *   p1.<tenantId>.<paymentId>.<expiresAtSeconds>.<signature>
  * with HMAC-SHA256 over everything before the signature, using OPERATOR_PROOF_LINK_SECRET (the
  * same value on both services). Links live at most PROOF_LINK_MAX_TTL_SECONDS. This API verifies
- * the link and redirects to a short-lived signed storage URL. Without the secret, proof links are
+ * the link and streams the accepted proof from private object storage. Without the secret, proof links are
  * off. The secret, links, and URLs are never logged.
  */
 export const PROOF_LINK_MAX_TTL_SECONDS = 5 * 60;

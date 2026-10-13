@@ -60,6 +60,7 @@ describe('storefront guest booking', async () => {
       });
     },
     authorizeRead: (input: { storageKey: string }) => Promise.resolve({ readUrl: `https://files.test/${input.storageKey}`, expiresAt: new Date(Date.now() + 3_600_000) }),
+    readObject: () => Promise.resolve(null),
     inspectUploadedObject: (key: string) => {
       const found = uploads.get(key);
       return Promise.resolve(found ? { ...found, versionId: null, prefix: PNG } : null);
@@ -431,7 +432,7 @@ describe('storefront guest booking', async () => {
     expect((await getReservationDetail(verifier, reservation.id)).booking_channel).toBe('online');
     const proof = await getReservationPaymentReceipts(verifier, reservation.id, storage);
     expect(proof.receipts).toEqual([
-      expect.objectContaining({ file_id: upload.file_id, content_type: 'image/png', url: `https://files.test/${newReceiptKey}`, evidence_status: 'under_review' }),
+      expect.objectContaining({ file_id: upload.file_id, content_type: 'image/png', url: `/api/media/staff/${upload.file_id}?branch_id=${ws.branchId}`, evidence_status: 'under_review' }),
     ]);
     // Receipts are private evidence: staff without verification permission cannot read them.
     await expect(getReservationPaymentReceipts(ws.owner, reservation.id, storage)).rejects.toMatchObject({ code: 'FORBIDDEN' });

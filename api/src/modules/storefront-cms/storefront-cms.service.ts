@@ -32,7 +32,7 @@ import {
   readTenantSettings,
   syncBusinessContactFromStorefront,
 } from '../settings/settings.repository.js';
-import { storefrontMediaSigner, type StorefrontMediaSigner } from '../storefront/storefront-media.js';
+import { storefrontMediaUrlMapper, type StorefrontMediaUrlMapper } from '../storefront/storefront-media.js';
 import { fromPolicyColumns, toPolicyColumns } from '../storefront/storefront-policy.js';
 import { issuePreviewToken } from '../storefront/storefront-preview.js';
 import {
@@ -59,12 +59,12 @@ const UNIQUE_VIOLATION = '23505';
  * current version.
  */
 export class StorefrontCmsService {
-  constructor(private readonly media: StorefrontMediaSigner = storefrontMediaSigner) {}
+  constructor(private readonly media: StorefrontMediaUrlMapper = storefrontMediaUrlMapper) {}
 
   get(context: StaffContext): Promise<StorefrontSettings> {
     return withTenantTransaction(context.tenantId, context.principalId, async (client) => {
       const row = await this.requireStorefront(client, context.tenantId, false);
-      return this.view(client, context.tenantId, row);
+      return this.view(client, context.tenantId, row, context.branchId);
     });
   }
 
@@ -230,7 +230,7 @@ export class StorefrontCmsService {
             });
           }
           const fresh = await this.requireStorefront(client, context.tenantId, false);
-          return this.view(client, context.tenantId, fresh);
+          return this.view(client, context.tenantId, fresh, context.branchId);
         },
       ),
     );
@@ -279,19 +279,19 @@ export class StorefrontCmsService {
     };
   }
 
-  private async view(client: PoolClient, tenantId: string, row: StorefrontRow): Promise<StorefrontSettings> {
+  private async view(client: PoolClient, tenantId: string, row: StorefrontRow, branchId: string): Promise<StorefrontSettings> {
     const document = toDocument(row);
     const policy = await readCurrentPolicy(client, tenantId, row.id);
     const readiness = await this.readiness(client, tenantId, row, policy);
     const rules = policy ? fromPolicyColumns(policy) : null;
     const policyImageIds = rules?.image_file_ids ?? [];
-    const urls = await this.media.sign(client, tenantId, [
+    const urls = await this.media.map(client, tenantId, [
       document.branding.logo_file_id,
       document.branding.cover_file_id,
       document.content.hero.image_file_id,
       document.content.about.image_file_id,
       ...policyImageIds,
-    ]);
+    ], { kind: 'staff', branchId });
     const urlOf = (id: string | null): string | null => (id ? (urls.get(id) ?? null) : null);
     const policyImageUrls = Object.fromEntries(
       policyImageIds.flatMap((id) => {

@@ -14,6 +14,7 @@ import {
   storefrontId,
 } from '../common/ids';
 import { currencyCode, moneyString } from '../common/money';
+import { mediaUrl } from '../common/media';
 import { paymentEvidenceStatus } from '../finance/payment-status';
 import { ianaTimezone, isoDate, isoInstant } from '../common/time';
 import { reservationPaymentProjection } from './list';
@@ -46,7 +47,7 @@ export const reservationLineDetail = z
         sku: z.string().trim().min(1).max(120),
         size_label: z.string().trim().min(1).max(40).nullable(),
         color_label: z.string().trim().min(1).max(80).nullable(),
-        image_url: z.string().url().nullable(),
+        image_url: mediaUrl.nullable(),
       })
       .strict(),
     /** Live operational readiness of the physical garment allocated to this line, when one exists. */
@@ -128,14 +129,14 @@ export const reservationDetail = z
 export type ReservationDetail = z.infer<typeof reservationDetail>;
 
 /**
- * A renter's uploaded payment receipt, readable only by staff who may verify payments. `url` is a
- * short-lived signed link; receipts are private evidence and never part of the reservation detail.
+ * A renter's uploaded payment receipt, readable only by staff who may verify payments. `url` is an
+ * app-owned route whose API rechecks authorization; receipts never appear in general reservation detail.
  */
 export const reservationPaymentReceipt = z
   .object({
     file_id: fileObjectId,
     content_type: z.enum(['image/jpeg', 'image/png', 'image/webp', 'application/pdf']),
-    url: z.string().url(),
+    url: mediaUrl,
     submitted_at: isoInstant,
     evidence_status: paymentEvidenceStatus,
   })

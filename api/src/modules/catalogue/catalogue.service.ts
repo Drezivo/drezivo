@@ -89,6 +89,7 @@ import {
 } from '../files/file-object-cleanup.repository.js';
 import type { ObjectStorage } from '../../integrations/storage/object-storage.js';
 import { objectStorage } from '../../integrations/storage/s3-compatible-object-storage.js';
+import { staffFileMediaUrl } from '../files/file-media-url.js';
 import {
   assertPhysicalAssetCapacity,
   lockTenantQuotaScope,
@@ -188,8 +189,6 @@ const CREATE_PHYSICAL_ASSET_OPERATION = 'catalogue.asset.create';
 const UPDATE_PHYSICAL_ASSET_STATE_OPERATION = 'catalogue.asset.state.update';
 const CREATE_ASSET_MAINTENANCE_BLOCK_OPERATION = 'catalogue.asset.maintenance_block.create';
 const ARCHIVE_CLOTHING_OPERATION = 'catalogue.clothing.archive';
-const MEASUREMENT_GUIDE_VIEW_EXPIRY_SECONDS = 5 * 60;
-const CATALOGUE_IMAGE_VIEW_EXPIRY_SECONDS = 5 * 60;
 const POSTGRES_INT_MAX = 2_147_483_647;
 
 interface CatalogueContext {
@@ -241,8 +240,9 @@ export async function getCatalogueCategories(
 export async function getCatalogueClothingList(
   input: CatalogueContext,
   query: ClothingListQuery,
-  storage: ObjectStorage = objectStorage,
+  _storage: ObjectStorage = objectStorage,
 ): Promise<ClothingListResponse> {
+  void _storage;
   assertCatalogueReadContext(input);
   return withTenantTransaction(input.tenantId, input.principalId, async (client) => {
     const page = await listClothingReadModel(client, {
@@ -255,18 +255,8 @@ export async function getCatalogueClothingList(
       branchId: input.branchId,
       query,
     });
-    const items = await Promise.all(
-      page.rows.map(async (row) => {
-        const primaryImageUrl = row.primary_image_storage_key
-          ? (
-              await storage.authorizeRead({
-                storageKey: row.primary_image_storage_key,
-                versionId: row.primary_image_version_id,
-                expiresInSeconds: CATALOGUE_IMAGE_VIEW_EXPIRY_SECONDS,
-              })
-            ).readUrl
-          : null;
-
+    const items = page.rows.map((row) => {
+        const primaryImageUrl = row.primary_image_file_id ? staffFileMediaUrl(row.primary_image_file_id, input.branchId) : null;
         return {
           product_id: row.product_id,
           code: row.code,
@@ -307,8 +297,7 @@ export async function getCatalogueClothingList(
           created_at: row.created_at.toISOString(),
           updated_at: row.updated_at.toISOString(),
         };
-      }),
-    );
+      });
 
     return clothingListResponse.parse({
       items,
@@ -324,8 +313,9 @@ export async function getCatalogueClothingList(
 export async function getCatalogueClothingDetail(
   input: CatalogueContext,
   productId: string,
-  storage: ObjectStorage = objectStorage,
+  _storage: ObjectStorage = objectStorage,
 ): Promise<ClothingDetail> {
+  void _storage;
   assertCatalogueReadContext(input);
   return withTenantTransaction(input.tenantId, input.principalId, async (client) => {
     const model = await readClothingDetailModel(client, {
@@ -344,28 +334,11 @@ export async function getCatalogueClothingDetail(
       assetsByVariant.set(asset.variant_id, assets);
     }
 
-    const images = await Promise.all(
-      model.images.map(async (image) => {
-        try {
-          const authorization = await storage.authorizeRead({
-            storageKey: image.storage_key,
-            versionId: image.version_id,
-            expiresInSeconds: CATALOGUE_IMAGE_VIEW_EXPIRY_SECONDS,
-          });
-          return {
-            file_id: image.file_id,
-            display_order: image.display_order,
-            image_url: authorization.readUrl,
-          };
-        } catch {
-          return {
-            file_id: image.file_id,
-            display_order: image.display_order,
-            image_url: null,
-          };
-        }
-      }),
-    );
+    const images = model.images.map((image) => ({
+      file_id: image.file_id,
+      display_order: image.display_order,
+      image_url: staffFileMediaUrl(image.file_id, input.branchId),
+    }));
 
     return clothingDetail.parse({
       product_id: model.product.product_id,
@@ -662,13 +635,14 @@ export async function updateCatalogueCategoryStatus(
 
 export async function getDefaultMeasurementGuide(
   input: CatalogueContext,
-  storage: ObjectStorage = objectStorage,
+  _storage: ObjectStorage = objectStorage,
 ): Promise<MeasurementGuideDefaultResponse> {
+  void _storage;
   assertCatalogueReadContext(input);
   return withTenantTransaction(input.tenantId, input.principalId, async (client) => {
     const row = await readDefaultMeasurementGuide(client, input.tenantId);
     if (!row) return measurementGuideDefaultResponse.parse({ guide: null });
-    const imageUrl = await measurementGuideImageUrl(client, input.tenantId, row.file_id, storage);
+    const imageUrl = await measurementGuideImageUrl(client, input.tenantId, row.file_id, input.branchId);
     return measurementGuideDefaultResponse.parse({ guide: toMeasurementGuide(row, imageUrl) });
   });
 }
@@ -2099,7 +2073,7 @@ async function measurementGuideImageUrl(
   client: Parameters<typeof readMeasurementGuideFileForView>[0],
   tenantId: string,
   fileId: string,
-  storage: ObjectStorage,
+  branchId: string,
 ): Promise<string | null> {
   const file = await readMeasurementGuideFileForView(client, tenantId, fileId);
   if (
@@ -2110,12 +2084,7 @@ async function measurementGuideImageUrl(
   ) {
     return null;
   }
-  const authorization = await storage.authorizeRead({
-    storageKey: file.storage_key,
-    versionId: file.version_id,
-    expiresInSeconds: MEASUREMENT_GUIDE_VIEW_EXPIRY_SECONDS,
-  });
-  return authorization.readUrl;
+  return staffFileMediaUrl(fileId, branchId);
 }
 
 function toMeasurementGuide(row: MeasurementGuideRow, imageUrl: string | null = null): MeasurementGuide {

@@ -60,7 +60,7 @@ import {
   submitReservationForReview,
 } from '../reservations/reservations.review.repository.js';
 import { toDocument } from '../storefront-cms/storefront-cms.service.js';
-import { storefrontMediaSigner } from '../storefront/storefront-media.js';
+import { storefrontMediaUrlMapper } from '../storefront/storefront-media.js';
 import {
   isVisibleVariant,
   readVisibleVariantIds,
@@ -424,7 +424,14 @@ export class GuestBookingService {
     if (!row) throw new NotFoundError(GUEST_NOT_FOUND);
     const payable = row.status === 'held' || row.status === 'pending_confirmation';
     const showMaterial = payable && row.presentation === 'material' && row.material_file_id !== null && isPaymentMaterialContentType(row.material_mime ?? '');
-    const signed = payable ? await storefrontMediaSigner.sign(client, tenantId, [row.rail === 'manual_qr' ? row.qr_file_id : null, showMaterial ? row.material_file_id : null]) : new Map<string, string>();
+    const signed = payable
+      ? await storefrontMediaUrlMapper.map(
+          client,
+          tenantId,
+          [row.rail === 'manual_qr' ? row.qr_file_id : null, showMaterial ? row.material_file_id : null],
+          { kind: 'public', slug: row.storefront_slug },
+        )
+      : new Map<string, string>();
     const qrUrl = row.qr_file_id ? (signed.get(row.qr_file_id) ?? null) : null;
     const materialUrl = showMaterial && row.material_file_id ? (signed.get(row.material_file_id) ?? null) : null;
     const money = (key: string): string => {

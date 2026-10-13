@@ -110,7 +110,7 @@ function OverviewCard({ settings }: { settings: StorefrontSettings }) {
     <Card className="gap-0 overflow-hidden py-0">
       <div className="relative h-40 bg-dashboard-neutral-soft sm:h-48">
         {settings.media.cover_url ? (
-          // eslint-disable-next-line @next/next/no-img-element -- short-lived signed URL
+          // eslint-disable-next-line @next/next/no-img-element -- app-owned storefront media route
           <img src={settings.media.cover_url} alt="" className="h-full w-full object-cover" />
         ) : (
           <div className="flex h-full items-center justify-center text-sm text-dashboard-muted">
@@ -119,7 +119,7 @@ function OverviewCard({ settings }: { settings: StorefrontSettings }) {
         )}
         <div className="absolute -bottom-9 left-5 flex h-20 w-20 items-center justify-center overflow-hidden rounded-full border-4 border-dashboard-surface bg-dashboard-surface shadow-sm">
           {settings.media.logo_url ? (
-            // eslint-disable-next-line @next/next/no-img-element -- short-lived signed URL
+            // eslint-disable-next-line @next/next/no-img-element -- app-owned storefront media route
             <img src={settings.media.logo_url} alt={`${branding.display_name} logo`} className="h-full w-full object-cover" />
           ) : (
             <span className="font-display text-2xl text-dashboard-navy">{branding.display_name.slice(0, 1)}</span>

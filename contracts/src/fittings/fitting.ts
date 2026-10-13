@@ -12,6 +12,7 @@ import {
   productVariantId,
 } from '../common/ids';
 import { currencyCode, nonNegativeMoneyString } from '../common/money';
+import { mediaUrl } from '../common/media';
 import { ianaTimezone, instantInterval, isoInstant } from '../common/time';
 import { paymentEvidenceStatus, paymentStatus } from '../finance/payment-status';
 import {
@@ -105,7 +106,7 @@ export const fittingVariantSummary = z
     // Null is the canonical wire representation for a product's single Free size variant.
     size_label: z.string().trim().min(1).max(40).nullable(),
     color_label: z.string().trim().min(1).max(80).nullable(),
-    primary_image_url: z.string().url().nullable().optional(),
+    primary_image_url: mediaUrl.nullable().optional(),
   })
   .strict();
 export type FittingVariantSummary = z.infer<typeof fittingVariantSummary>;

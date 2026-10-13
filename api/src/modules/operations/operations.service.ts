@@ -17,6 +17,7 @@ import {
 import { withTenantTransaction } from '../../db/client.js';
 import type { ObjectStorage } from '../../integrations/storage/object-storage.js';
 import { objectStorage } from '../../integrations/storage/s3-compatible-object-storage.js';
+import { staffFileMediaUrl } from '../files/file-media-url.js';
 import { ForbiddenError, NotFoundError, ValidationError } from '../../shared/errors.js';
 import {
   listClothingAvailabilityTimelineAssets,
@@ -28,7 +29,6 @@ import {
   readOperationalCalendarEvents,
 } from './operations.repository.js';
 
-const CATALOGUE_IMAGE_VIEW_EXPIRY_SECONDS = 10 * 60;
 
 export interface OperationsReadContext {
   tenantId: string;
@@ -77,8 +77,9 @@ export async function getOperationalCalendar(
 export async function getClothingAvailabilityTimeline(
   context: OperationsReadContext,
   queryInput: ClothingAvailabilityTimelineQuery,
-  storage: ObjectStorage = objectStorage,
+  _storage: ObjectStorage = objectStorage,
 ): Promise<ClothingAvailabilityTimelineResponse> {
+  void _storage;
   const parsed = clothingAvailabilityTimelineQuery.safeParse(queryInput);
   if (!parsed.success) throw new ValidationError('Clothing availability query is invalid.');
   assertOperationsReadPermission(context);
@@ -113,11 +114,8 @@ export async function getClothingAvailabilityTimeline(
       branchId: context.branchId,
     });
     const agendasByAssetId = groupAgendasByAsset(agendaRows, window.timezone);
-    const primaryImageUrls = new Map<string, Promise<string>>();
-
-    const rows = await Promise.all(
-      page.rows.map(async (row) => {
-        const primaryImageUrl = await authorizePrimaryImage(row, storage, primaryImageUrls);
+    const rows = page.rows.map((row) => {
+        const primaryImageUrl = row.primary_image_file_id ? staffFileMediaUrl(row.primary_image_file_id, context.branchId) : null;
         return {
           product: {
             id: row.product_id,
@@ -134,8 +132,7 @@ export async function getClothingAvailabilityTimeline(
           asset: { id: row.asset_id, readiness: row.readiness },
           agendas: agendasByAssetId.get(row.asset_id) ?? [],
         };
-      }),
-    );
+      });
 
     return clothingAvailabilityTimelineResponse.parse({
       timezone: window.timezone,
@@ -180,30 +177,6 @@ function assertOperationsReadPermission(context: OperationsReadContext): void {
   if (!context.permissionCodes.includes('reservations.manage')) {
     throw new ForbiddenError('This branch does not grant operational schedule access.');
   }
-}
-
-async function authorizePrimaryImage(
-  row: {
-    primary_image_storage_key: string | null;
-    primary_image_version_id: string | null;
-  },
-  storage: ObjectStorage,
-  authorizations: Map<string, Promise<string>>,
-): Promise<string | null> {
-  if (!row.primary_image_storage_key) return null;
-  const authorizationKey = `${row.primary_image_storage_key}\u0000${row.primary_image_version_id ?? ''}`;
-  let authorization = authorizations.get(authorizationKey);
-  if (!authorization) {
-    authorization = storage
-      .authorizeRead({
-        storageKey: row.primary_image_storage_key,
-        versionId: row.primary_image_version_id,
-        expiresInSeconds: CATALOGUE_IMAGE_VIEW_EXPIRY_SECONDS,
-      })
-      .then((result) => result.readUrl);
-    authorizations.set(authorizationKey, authorization);
-  }
-  return authorization;
 }
 
 function groupAgendasByAsset(

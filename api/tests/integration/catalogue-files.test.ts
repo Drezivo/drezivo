@@ -1,4 +1,5 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { Readable } from 'node:stream';
 
 import {
   fileObjectId,
@@ -52,6 +53,7 @@ class FakeStorage {
     versionId?: string | null;
     expiresInSeconds: number;
   }> = [];
+  readonly streamedReads: string[] = [];
   readonly objects = new Map<
     string,
     {
@@ -95,6 +97,12 @@ class FakeStorage {
     }
     return Promise.resolve(this.objects.get(storageKey) ?? null);
   }
+
+  readObject(input: { storageKey: string }) {
+    this.streamedReads.push(input.storageKey);
+    const body = Buffer.alloc(512, 1);
+    return Promise.resolve({ body: Readable.from([body]), contentLength: body.byteLength });
+  }
 }
 
 describe('CLT-022 clothing file attachment flow', async () => {
@@ -102,6 +110,7 @@ describe('CLT-022 clothing file attachment flow', async () => {
   const { config } = await import('../../src/config/index.js');
   const { authorizeUpload, finalizeUpload } =
     await import('../../src/modules/files/files.service.js');
+  const { readStaffFile } = await import('../../src/modules/files/files.service.js');
   const { getDefaultMeasurementGuide, replaceClothingImages } =
     await import('../../src/modules/catalogue/catalogue.service.js');
   const { createTestMembership, createTestTenant } = await import('./helpers/factories.js');
@@ -119,7 +128,7 @@ describe('CLT-022 clothing file attachment flow', async () => {
     await closePool();
   });
 
-  it('returns a short-lived signed image URL for the accepted default measurement guide', async () => {
+  it('returns an application-owned staff route for an accepted default measurement guide', async () => {
     const seed = await seedTenant('org_clt022_guide_view', 'user_clt022_guide_view');
     const storage = new FakeStorage();
     const seeded = await withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
@@ -151,14 +160,52 @@ describe('CLT-022 clothing file attachment flow', async () => {
     expect(result.guide?.id).toBe(seeded.guideId);
     expect(result.guide?.file_id).toBe(seeded.fileId);
     expect(result.guide?.name).toBe('Standard Size Guide');
-    expect(result.guide?.image_url).toContain('https://reads.example.test/');
-    expect(storage.authorizedReads).toEqual([
-      {
-        storageKey: seeded.storageKey,
-        versionId: 'guide-version-1',
-        expiresInSeconds: 300,
-      },
-    ]);
+    expect(result.guide?.image_url).toBe(`/api/media/staff/${seeded.fileId}?branch_id=${seed.branchId}`);
+    expect(storage.authorizedReads).toEqual([]);
+    expect(JSON.stringify(result)).not.toContain('reads.example.test');
+  });
+
+  it('streams only linked accepted files for the authorized tenant and branch', async () => {
+    const seed = await seedTenant('org_clt022_staff_media', 'user_clt022_staff_media');
+    const foreign = await seedTenant('org_clt022_foreign_media', 'user_clt022_foreign_media');
+    const productId = await seedProduct(seed, 'MEDIA-001');
+    const fileId = await seedAcceptedImage(seed, 'staff-media', SHA_A);
+    const detachedFileId = await seedAcceptedImage(seed, 'staff-media-detached', SHA_B);
+    await withTenantTransaction(seed.tenantId, seed.principalId, (client) =>
+      client.query(
+        `INSERT INTO product_image (tenant_id, product_id, file_id, display_order)
+         VALUES ($1, $2, $3, 0)`,
+        [seed.tenantId, productId, fileId],
+      ),
+    );
+
+    const storage = new FakeStorage();
+    const result = await readStaffFile({
+      ...seed.catalogueContext,
+      requestId: 'req-clt022-staff-media',
+      fileId,
+    }, storage);
+    const received = Buffer.concat(await collectBytes(result.body));
+    expect(received).toHaveLength(512);
+    expect(storage.streamedReads).toEqual([`tenant-files/${seed.tenantId}/staff-media`]);
+
+    await expect(readStaffFile({
+      ...seed.catalogueContext,
+      permissionCodes: [],
+      requestId: 'req-clt022-staff-media-denied',
+      fileId,
+    }, storage)).rejects.toMatchObject({ name: 'NotFoundError' });
+    await expect(readStaffFile({
+      ...seed.catalogueContext,
+      requestId: 'req-clt022-staff-media-detached',
+      fileId: detachedFileId,
+    }, storage)).rejects.toMatchObject({ name: 'NotFoundError' });
+    await expect(readStaffFile({
+      ...seed.catalogueContext,
+      requestId: 'req-clt022-staff-media-foreign',
+      fileId: (await seedAcceptedImage(foreign, 'foreign-media', SHA_A)),
+    }, storage)).rejects.toMatchObject({ name: 'NotFoundError' });
+    expect(storage.streamedReads).toHaveLength(1);
   });
 
   it('authorizes a bounded private catalogue upload and accepts only the verified frozen object', async () => {
@@ -1002,4 +1049,11 @@ describe('CLT-022 clothing file attachment flow', async () => {
     if (!row) throw new Error(`Missing ${label}.`);
     return row;
   }
+
+async function collectBytes(body: AsyncIterable<Uint8Array>): Promise<Uint8Array[]> {
+  const chunks: Uint8Array[] = [];
+  for await (const chunk of body) chunks.push(chunk);
+  return chunks;
+}
+
 });

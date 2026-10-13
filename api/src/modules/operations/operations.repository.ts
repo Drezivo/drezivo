@@ -301,6 +301,7 @@ export interface ClothingAvailabilityTimelineAssetRow {
   asset_id: string;
   product_id: string;
   product_name: string;
+  primary_image_file_id: string | null;
   primary_image_storage_key: string | null;
   primary_image_version_id: string | null;
   variant_id: string;
@@ -551,6 +552,7 @@ export async function listClothingAvailabilityTimelineAssets(
        candidate.asset_id,
        candidate.product_id,
        candidate.product_name,
+       cover_image.file_id AS primary_image_file_id,
        cover_image.storage_key AS primary_image_storage_key,
        cover_image.version_id AS primary_image_version_id,
        candidate.variant_id,
@@ -565,7 +567,7 @@ export async function listClothingAvailabilityTimelineAssets(
        candidate.sort_color_label
      FROM candidate_assets candidate
      LEFT JOIN LATERAL (
-       SELECT f.storage_key, f.version_id
+       SELECT f.id AS file_id, f.storage_key, f.version_id
        FROM product_image pi
        JOIN file_object f
          ON f.tenant_id = pi.tenant_id

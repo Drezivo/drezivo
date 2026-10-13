@@ -65,6 +65,7 @@ function requireContext(req: Request): PaymentMethodContext {
 
   return {
     tenantId: context.tenantId,
+    branchId: context.activeBranchId,
     membershipId: context.membershipId,
     principalId,
     permissionCodes: context.permissionCodes,

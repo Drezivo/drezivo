@@ -227,7 +227,7 @@ end-to-end: catalogue → booking → payment verification → pickup → return
 - **Acceptance criteria:**
   - [ ] `POST /uploads` authorizes purpose, content type, and byte size per the contract; keys use generated tenant-aware prefixes and never trust client filenames.
   - [ ] Finalization freezes the exact accepted bytes (object version or immutable final-key copy plus `sha256` and `frozen_at`); a later reuse of the same upload URL cannot change what was accepted (TRD §7 adversarial test 8).
-  - [ ] Private files are readable only through short-lived signed URLs after authorization; public derivative URLs are issued only for explicitly public assets — replacing the storage-key-as-URL placeholder in `storefront.repository.ts`.
+  - [ ] Private files are streamed only through API routes after current tenant, branch, purpose, relationship, and permission checks; public storefront media is streamed only while referenced by published content. Keep R2 private and do not return presigned GET URLs to browsers.
   - [ ] Cross-tenant file references are rejected at attach and read time.
   - [ ] Upload-purpose policy (10 MB bound; tighter per-purpose limits) is enforced server-side before signing.
 
