@@ -235,6 +235,8 @@ Every implemented route needs a permission policy even when public access is the
 
 `GET /api/v1/dashboard/overview` returns Business Performance values scoped to the authorized tenant and active branch. `completed_rental_value.current_minor` remains the current branch-local calendar month's completed rental fees. `projected_rental_value.current_minor` is all completed rental fees to date plus rental fees for confirmed reservations with `pickup_at >= as_of`, where `as_of` is the database timestamp captured for the overview query. Its `reservations` count covers only those upcoming confirmed reservations. Both values use `rental_total_minor`, excluding security deposits; cancelled, pending, picked-up, returned, and other statuses do not contribute to the projection. The projection uses the existing completed-reservation and pickup indexes and does not maintain a second financial ledger.
 
+The `confirmed_rental_items_current_month` metric counts reservation lines (one serialized garment per line) whose reservation pickup falls in the active branch's current calendar month. It includes confirmed, picked-up, returned, and completed reservations, so past and upcoming bookings remain represented; held, pending-confirmation, cancelled, expired, and rejected reservations are excluded. The count is scoped to the authorized tenant and active branch and uses the same branch-local month window as the overview response.
+
 ### Staff clothing availability timeline
 
 The staff Calendar's Clothing Availability tab reads `GET /api/v1/calendar/availability`. This is a

@@ -42,6 +42,7 @@ const overview: DashboardOverviewResponse = {
   },
   metrics: {
     active_rentals: 2,
+    confirmed_rental_items_current_month: 7,
     pickups_today: 1,
     returns_today: 1,
     fittings_today: 1,
@@ -135,9 +136,10 @@ describe("DashboardOverview", () => {
     ).toBeVisible();
     expect(dashboardApi.getDashboardOverview).toHaveBeenCalledTimes(1);
     expect(screen.getByText("Wed, Sep 30, 2026")).toBeVisible();
-    const metrics = screen.getByRole("region", { name: "Today's overview" });
+    const metrics = screen.getByRole("region", { name: "Dashboard metrics" });
     for (const [label, value] of [
       ["Active Rentals", "2"],
+      ["Items Booked This Month", "7"],
       ["Pickups Today", "1"],
       ["Returns Today", "1"],
       ["Fittings Today", "1"],
@@ -148,6 +150,7 @@ describe("DashboardOverview", () => {
     }
     const metricLinks: ReadonlyArray<readonly [string, string]> = [
       ["View Active Rentals", "/reservations?status=picked_up"],
+      ["View Items Booked This Month", "/reservations?from=2026-09-01&to=2026-09-30"],
       ["View Pickups Today", "/calendar?date=2026-09-30&activity=pickup"],
       ["View Returns Today", "/calendar?date=2026-09-30&activity=return"],
       ["View Fittings Today", "/fittings?date=today"],
@@ -156,6 +159,8 @@ describe("DashboardOverview", () => {
     for (const [name, href] of metricLinks) {
       expect(within(metrics).getByRole("link", { name })).toHaveAttribute("href", href);
     }
+    expect(metrics).toHaveClass("grid-cols-2", "md:grid-cols-3", "min-[1440px]:grid-cols-6");
+    expect(metrics).not.toHaveClass("[&>*:last-child]:col-span-2");
 
     expect(screen.getByText("₱48,500.00")).toBeVisible();
     expect(
@@ -195,9 +200,7 @@ describe("DashboardOverview", () => {
     render(<DashboardOverview />);
 
     expect(
-      await screen.findByText(
-        "Completed rental fees to date, with no upcoming confirmed bookings"
-      )
+      await screen.findByText("Completed rental fees to date, with no upcoming confirmed bookings")
     ).toBeVisible();
   });
 
@@ -264,6 +267,7 @@ describe("DashboardOverview", () => {
       ...overview,
       metrics: {
         active_rentals: 0,
+        confirmed_rental_items_current_month: 0,
         pickups_today: 0,
         returns_today: 0,
         fittings_today: 0,

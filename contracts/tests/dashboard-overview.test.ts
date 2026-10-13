@@ -18,6 +18,7 @@ function validOverview() {
     },
     metrics: {
       active_rentals: 2,
+      confirmed_rental_items_current_month: 4,
       pickups_today: 1,
       returns_today: 1,
       fittings_today: 1,
@@ -124,6 +125,16 @@ describe('dashboardOverviewResponse', () => {
       },
     };
     expect(() => dashboardOverviewResponse.parse(contactProjection)).toThrow();
+  });
+
+  it('requires the monthly confirmed rental item count to be a non-negative integer', () => {
+    const missingMetric = validOverview();
+    Reflect.deleteProperty(missingMetric.metrics, 'confirmed_rental_items_current_month');
+    expect(() => dashboardOverviewResponse.parse(missingMetric)).toThrow();
+
+    const invalidMetric = validOverview();
+    invalidMetric.metrics.confirmed_rental_items_current_month = -1;
+    expect(() => dashboardOverviewResponse.parse(invalidMetric)).toThrow();
   });
 
   it('requires phone and rental details only for their matching event source', () => {

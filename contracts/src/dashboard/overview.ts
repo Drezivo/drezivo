@@ -93,6 +93,7 @@ export const dashboardOverviewResponse = z
     metrics: z
       .object({
         active_rentals: dashboardCount,
+        confirmed_rental_items_current_month: dashboardCount,
         pickups_today: dashboardCount,
         returns_today: dashboardCount,
         fittings_today: dashboardCount,
@@ -174,7 +175,7 @@ export const dashboardOverviewResponse = z
           .object({ current_minor: nonNegativeMoneyString, reservations: dashboardCount })
           .strict()
           .describe(
-            'Lifetime completed rental fees plus fees from confirmed reservations with pickup_at at or after the query database as_of timestamp. Excludes deposits; reservations counts upcoming confirmed bookings.'
+            'Lifetime completed rental fees plus fees from confirmed reservations with pickup_at at or after the query database as_of timestamp. Excludes deposits; reservations counts upcoming confirmed bookings.',
           )
           .optional(),
       })

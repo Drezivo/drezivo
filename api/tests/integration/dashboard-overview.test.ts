@@ -49,6 +49,63 @@ interface DashboardSeed {
   slotIds: [string, string];
 }
 
+const DASHBOARD_MONTHLY_METRIC_FIXTURE_SQL = `WITH branch_window AS (
+       SELECT
+         b.timezone,
+         (date_trunc('month', statement_timestamp() AT TIME ZONE b.timezone)::date::timestamp
+           AT TIME ZONE b.timezone) AS month_start,
+         ((date_trunc('month', statement_timestamp() AT TIME ZONE b.timezone)::date
+           + interval '1 month')::timestamp AT TIME ZONE b.timezone) AS month_end
+       FROM branch b
+       WHERE b.tenant_id = $1::uuid AND b.id = $2::uuid
+     ),
+     monthly_facts(reference_code, status, pickup_at, line_count) AS (
+       SELECT 'monthly-start-confirmed', 'confirmed', w.month_start, 2 FROM branch_window w
+       UNION ALL
+       SELECT 'monthly-picked-up', 'picked_up', w.month_start + interval '2 days', 1 FROM branch_window w
+       UNION ALL
+       SELECT 'monthly-returned', 'returned', w.month_start + interval '3 days', 1 FROM branch_window w
+       UNION ALL
+       SELECT 'monthly-completed', 'completed', w.month_end - interval '2 seconds', 1 FROM branch_window w
+       UNION ALL
+       SELECT 'before-month', 'confirmed', w.month_start - interval '1 second', 1 FROM branch_window w
+       UNION ALL
+       SELECT 'after-month', 'confirmed', w.month_end, 1 FROM branch_window w
+       UNION ALL
+       SELECT 'monthly-held', 'held', w.month_start + interval '4 days', 1 FROM branch_window w
+       UNION ALL
+       SELECT 'monthly-pending', 'pending_confirmation', w.month_start + interval '5 days', 1 FROM branch_window w
+       UNION ALL
+       SELECT 'monthly-cancelled', 'cancelled', w.month_start + interval '6 days', 1 FROM branch_window w
+       UNION ALL
+       SELECT 'monthly-expired', 'expired', w.month_start + interval '7 days', 1 FROM branch_window w
+       UNION ALL
+       SELECT 'monthly-rejected', 'rejected', w.month_start + interval '8 days', 1 FROM branch_window w
+     ),
+     inserted_reservations AS (
+       INSERT INTO reservation
+         (tenant_id, branch_id, customer_id, storefront_id, policy_snapshot_id, payment_method_id,
+          reference_code, status, pickup_at, due_at, timezone_snapshot, customer_snapshot,
+          price_snapshot, currency, rental_total_minor, security_required_minor, due_now_minor,
+          completed_at)
+       SELECT $1, $2, $3, $4, $5, $6, facts.reference_code, facts.status,
+              facts.pickup_at, facts.pickup_at + interval '1 day', w.timezone,
+              '{}'::jsonb, '{}'::jsonb, 'PHP', 1000, 0, 1000,
+              CASE WHEN facts.status = 'completed' THEN statement_timestamp() END
+       FROM monthly_facts facts
+       CROSS JOIN branch_window w
+       RETURNING id, reference_code
+     )
+     INSERT INTO reservation_line
+       (tenant_id, reservation_id, variant_id, line_number, name_snapshot,
+        measurements_snapshot, pricing_snapshot, rental_minor, deposit_minor, currency)
+     SELECT $1, reservation.id, $7, line.line_number,
+            reservation.reference_code || ' item ' || line.line_number,
+            '{}'::jsonb, '{}'::jsonb, 1000, 0, 'PHP'
+     FROM inserted_reservations reservation
+     JOIN monthly_facts facts USING (reference_code)
+     CROSS JOIN LATERAL generate_series(1, facts.line_count) AS line(line_number)`;
+
 describe('Dashboard overview API', async () => {
   const { createApp } = await import('../../src/app.js');
   const { closePool, withTenantTransaction } = await import('../../src/db/client.js');
@@ -79,6 +136,75 @@ describe('Dashboard overview API', async () => {
     expect(forbidden.status).toBe(403);
   });
 
+  it('counts monthly rental pieces across confirmed booking stages and isolates branch and tenant data', async () => {
+    const seed = await seedDashboardWorkspace(
+      'dashboard_monthly_items',
+      'user_dashboard_monthly_items',
+      ['reservations.manage'],
+    );
+    useClerk(seed);
+    await withTenantTransaction(seed.tenantId, seed.principalId, (client) =>
+      client.query(DASHBOARD_MONTHLY_METRIC_FIXTURE_SQL, [
+        seed.tenantId,
+        seed.branchId,
+        seed.customerId,
+        seed.storefrontId,
+        seed.policyId,
+        seed.paymentMethodId,
+        seed.variantId,
+      ]),
+    );
+
+    const otherBranchStorefront = await withTenantTransaction(
+      seed.tenantId,
+      seed.principalId,
+      async (client) => {
+        const storefront = await client.query<{ id: string }>(
+          `INSERT INTO storefront (tenant_id, branch_id, slug, status, branding, contact)
+           VALUES ($1, $2, $3, 'draft', '{}'::jsonb, '{}'::jsonb) RETURNING id`,
+          [seed.tenantId, seed.otherBranchId, `monthly-${seed.tenantId.slice(0, 8)}`],
+        );
+        const storefrontId = requireId(storefront.rows[0]?.id, 'monthly metric storefront');
+        const policy = await client.query<{ id: string }>(
+          `INSERT INTO policy_snapshot
+             (tenant_id, storefront_id, version, rental_rules, deposit_rules, cancellation_rules,
+              delivery_rules, privacy_notice, effective_at)
+           VALUES ($1, $2, 1, '{}'::jsonb, '{}'::jsonb, '{}'::jsonb, '{}'::jsonb,
+                   'dashboard fixture', statement_timestamp()) RETURNING id`,
+          [seed.tenantId, storefrontId],
+        );
+        return {
+          storefrontId,
+          policyId: requireId(policy.rows[0]?.id, 'monthly metric policy'),
+        };
+      },
+    );
+    await insertCurrentMonthConfirmedItem(seed, {
+      branchId: seed.otherBranchId,
+      storefrontId: otherBranchStorefront.storefrontId,
+      policyId: otherBranchStorefront.policyId,
+      referenceCode: 'monthly-other-branch',
+    });
+
+    const foreignSeed = await seedDashboardWorkspace(
+      'dashboard_foreign_monthly_items',
+      'user_dashboard_foreign_monthly_items',
+      ['reservations.manage'],
+    );
+    await insertCurrentMonthConfirmedItem(foreignSeed, {
+      branchId: foreignSeed.branchId,
+      storefrontId: foreignSeed.storefrontId,
+      policyId: foreignSeed.policyId,
+      referenceCode: 'monthly-foreign-tenant',
+    });
+
+    const response = await request(createApp()).get('/api/v1/dashboard/overview');
+    expect(response.status).toBe(200);
+    const { data } = successEnvelope(dashboardOverviewResponse).parse(response.body);
+
+    expect(data.metrics.confirmed_rental_items_current_month).toBe(5);
+  });
+
   it('returns empty operational values and isolates new-customer counts by tenant', async () => {
     const seed = await seedDashboardWorkspace('dashboard_empty', 'user_dashboard_empty', [
       'reservations.manage',
@@ -101,7 +227,7 @@ describe('Dashboard overview API', async () => {
     expect(response.status).toBe(200);
     const { data } = successEnvelope(dashboardOverviewResponse).parse(response.body);
 
-    expect(data.metrics).toEqual({
+    expect(data.metrics).toMatchObject({
       active_rentals: 0,
       pickups_today: 0,
       returns_today: 0,
@@ -195,12 +321,9 @@ describe('Dashboard overview API', async () => {
       'user_dashboard_foreign_projection',
       ['reservations.manage'],
     );
-    await withTenantTransaction(
-      foreignSeed.tenantId,
-      foreignSeed.principalId,
-      async (client) => {
-        await client.query(
-          `INSERT INTO reservation
+    await withTenantTransaction(foreignSeed.tenantId, foreignSeed.principalId, async (client) => {
+      await client.query(
+        `INSERT INTO reservation
              (tenant_id, branch_id, customer_id, storefront_id, policy_snapshot_id, payment_method_id,
               reference_code, status, pickup_at, due_at, timezone_snapshot, customer_snapshot,
               price_snapshot, currency, rental_total_minor, security_required_minor, due_now_minor)
@@ -209,17 +332,16 @@ describe('Dashboard overview API', async () => {
                    statement_timestamp() + interval '42 days', 'America/Los_Angeles',
                    '{"full_name":"Foreign Tenant Customer"}'::jsonb,
                    '{}'::jsonb, 'PHP', 1000000, 0, 1000000)`,
-          [
-            foreignSeed.tenantId,
-            foreignSeed.branchId,
-            foreignSeed.customerId,
-            foreignSeed.storefrontId,
-            foreignSeed.policyId,
-            foreignSeed.paymentMethodId,
-          ],
-        );
-      },
-    );
+        [
+          foreignSeed.tenantId,
+          foreignSeed.branchId,
+          foreignSeed.customerId,
+          foreignSeed.storefrontId,
+          foreignSeed.policyId,
+          foreignSeed.paymentMethodId,
+        ],
+      );
+    });
 
     const response = await request(createApp()).get(
       `/api/v1/dashboard/overview?branch_id=${seed.otherBranchId}`,
@@ -237,6 +359,7 @@ describe('Dashboard overview API', async () => {
       fittings_today: 1,
       payments_to_review: 2,
     });
+    expect(data.metrics.confirmed_rental_items_current_month).toBeGreaterThanOrEqual(0);
     expect(data.today_schedule.items.map((item) => item.event_type)).toContain('pickup');
     expect(data.today_schedule.items.map((item) => item.event_type)).toContain('return');
     expect(data.today_schedule.items.map((item) => item.event_type)).toContain('fitting');
@@ -728,6 +851,51 @@ describe('Dashboard overview API', async () => {
       );
       expect(completeRow.rows[0]?.completed_at).toBeTruthy();
       expect(returnId).toBeTruthy();
+    });
+  }
+
+  async function insertCurrentMonthConfirmedItem(
+    seed: DashboardSeed,
+    input: { branchId: string; storefrontId: string; policyId: string; referenceCode: string },
+  ): Promise<void> {
+    await withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
+      const reservation = await client.query<{ id: string }>(
+        `WITH branch_window AS (
+           SELECT b.timezone,
+                  (date_trunc('month', statement_timestamp() AT TIME ZONE b.timezone)::date::timestamp
+                    AT TIME ZONE b.timezone) AS month_start
+             FROM branch b
+            WHERE b.tenant_id = $1::uuid AND b.id = $2::uuid
+         )
+         INSERT INTO reservation
+           (tenant_id, branch_id, customer_id, storefront_id, policy_snapshot_id, payment_method_id,
+            reference_code, status, pickup_at, due_at, timezone_snapshot, customer_snapshot,
+            price_snapshot, currency, rental_total_minor, security_required_minor, due_now_minor)
+         SELECT $1, $2, $3, $4, $5, $6, $7, 'confirmed',
+                branch_window.month_start + interval '2 days',
+                branch_window.month_start + interval '3 days', branch_window.timezone,
+                '{}'::jsonb, '{}'::jsonb, 'PHP', 1000, 0, 1000
+           FROM branch_window
+         RETURNING id`,
+        [
+          seed.tenantId,
+          input.branchId,
+          seed.customerId,
+          input.storefrontId,
+          input.policyId,
+          seed.paymentMethodId,
+          input.referenceCode,
+        ],
+      );
+      const reservationId = requireId(reservation.rows[0]?.id, 'monthly metric reservation');
+      await client.query(
+        `INSERT INTO reservation_line
+           (tenant_id, reservation_id, variant_id, line_number, name_snapshot,
+            measurements_snapshot, pricing_snapshot, rental_minor, deposit_minor, currency)
+         VALUES ($1, $2, $3, 1, 'Monthly isolation fixture', '{}'::jsonb,
+                 '{}'::jsonb, 1000, 0, 'PHP')`,
+        [seed.tenantId, reservationId, seed.variantId],
+      );
     });
   }
 

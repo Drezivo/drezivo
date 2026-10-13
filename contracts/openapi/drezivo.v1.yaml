@@ -16453,6 +16453,10 @@ paths:
                             type: integer
                             minimum: -9007199254740991
                             maximum: 9007199254740991
+                          confirmed_rental_items_current_month:
+                            type: integer
+                            minimum: -9007199254740991
+                            maximum: 9007199254740991
                           pickups_today:
                             type: integer
                             minimum: -9007199254740991
@@ -16471,6 +16475,7 @@ paths:
                             maximum: 9007199254740991
                         required:
                           - active_rentals
+                          - confirmed_rental_items_current_month
                           - pickups_today
                           - returns_today
                           - fittings_today

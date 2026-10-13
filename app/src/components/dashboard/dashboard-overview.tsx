@@ -50,10 +50,16 @@ type DashboardMetricEntry = {
   value: number;
 };
 
-function metricHref(key: DashboardMetricKey, today: string): string {
+function metricHref(
+  key: DashboardMetricKey,
+  today: string,
+  currentMonth: { start: string; end: string }
+): string {
   switch (key) {
     case "active_rentals":
       return "/reservations?status=picked_up";
+    case "confirmed_rental_items_current_month":
+      return `/reservations?from=${currentMonth.start}&to=${currentMonth.end}`;
     case "pickups_today":
       return `/calendar?date=${today}&activity=pickup`;
     case "returns_today":
@@ -174,12 +180,26 @@ export function DashboardOverview() {
 
   const metricEntries: DashboardMetricEntry[] = [
     { key: "active_rentals", value: overview.metrics.active_rentals },
+    {
+      key: "confirmed_rental_items_current_month",
+      value: overview.metrics.confirmed_rental_items_current_month,
+    },
     { key: "pickups_today", value: overview.metrics.pickups_today },
     { key: "returns_today", value: overview.metrics.returns_today },
     { key: "fittings_today", value: overview.metrics.fittings_today },
     { key: "payments_to_review", value: overview.metrics.payments_to_review },
   ];
   const today = calendarDateKeyAt(new Date(overview.window.as_of), overview.window.timezone);
+  const currentMonth = {
+    start: calendarDateKeyAt(
+      new Date(overview.window.current_month.start),
+      overview.window.timezone
+    ),
+    end: calendarDateKeyAt(
+      new Date(Date.parse(overview.window.current_month.end) - 1),
+      overview.window.timezone
+    ),
+  };
 
   return (
     <div className="min-h-full px-ws-gutter py-5 sm:py-6">
@@ -195,15 +215,17 @@ export function DashboardOverview() {
           description="Live activity for this branch, plus performance for the current calendar month."
         />
 
-        {/* Bento: two across on phones (the fifth card spans both), five across on wide screens. */}
-        <section aria-label="Today's overview" className="grid grid-cols-2 gap-ws-gap xl:grid-cols-5 [&>*:last-child]:col-span-2 xl:[&>*:last-child]:col-span-1">
+        <section
+          aria-label="Dashboard metrics"
+          className="grid grid-cols-2 gap-ws-gap md:grid-cols-3 min-[1440px]:grid-cols-6"
+        >
           {metricEntries.map(({ key, value }) => {
             const metric = DASHBOARD_METRIC_PRESENTATION[key];
             const Icon = metric.icon;
             return (
               <Link
                 key={key}
-                href={metricHref(key, today)}
+                href={metricHref(key, today, currentMonth)}
                 aria-label={`View ${metric.label}`}
                 className="group block h-full rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dashboard-accent focus-visible:ring-offset-2 focus-visible:ring-offset-dashboard-canvas"
               >
@@ -606,7 +628,8 @@ function ScheduleRow({
 
 /** Says what the projection is made of, since it is not yet earned money. */
 function projectionNote(reservations: number): string {
-  if (reservations === 0) return "Completed rental fees to date, with no upcoming confirmed bookings";
+  if (reservations === 0)
+    return "Completed rental fees to date, with no upcoming confirmed bookings";
   return `Completed rental fees to date + ${reservations.toLocaleString("en-PH")} upcoming confirmed ${reservations === 1 ? "reservation" : "reservations"}`;
 }
 
