@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { fittingDetail, fittingSettings } from "@drezivo/contracts";
@@ -173,6 +173,39 @@ describe("NewFittingSheet production cutover", () => {
     expect(screen.queryByText("Guaranteed intent")).not.toBeInTheDocument();
   });
 
+  it("puts Walk-in first and resets each reopened draft to Walk-in", () => {
+    const props = { settings, onOpenChange: vi.fn(), onCreated: vi.fn() };
+    const { rerender } = render(<NewFittingSheet open {...props} />);
+    const customerType = screen.getByRole("group", { name: "Customer type" });
+    const customerButtons = within(customerType).getAllByRole("button");
+
+    expect(customerButtons.map((button) => button.textContent?.trim())).toEqual([
+      "Walk-in customer",
+      "Existing customer",
+    ]);
+    expect(screen.getByRole("button", { name: "Walk-in customer" })).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Existing customer" }));
+    expect(screen.getByRole("button", { name: "Existing customer" })).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    );
+
+    rerender(<NewFittingSheet open={false} {...props} />);
+    rerender(<NewFittingSheet open {...props} />);
+
+    expect(screen.getByRole("button", { name: "Walk-in customer" })).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    );
+    expect(screen.getByRole("button", { name: "Existing customer" })).toHaveAttribute(
+      "aria-pressed",
+      "false"
+    );
+  });
+
   it("uses segmented start-time input and branch Business Hours quick choices", async () => {
     render(<NewFittingSheet open settings={settings} onOpenChange={vi.fn()} onCreated={vi.fn()} />);
 
@@ -186,6 +219,7 @@ describe("NewFittingSheet production cutover", () => {
   it("searches existing customers through the fitting intake API", async () => {
     render(<NewFittingSheet open settings={settings} onOpenChange={vi.fn()} onCreated={vi.fn()} />);
 
+    fireEvent.click(screen.getByRole("button", { name: "Existing customer" }));
     fireEvent.change(screen.getByPlaceholderText("Name, email, or phone..."), {
       target: { value: "Ex" },
     });
@@ -211,7 +245,9 @@ describe("NewFittingSheet production cutover", () => {
       target: { value: "A" },
     });
     expect(screen.queryByRole("radio", { name: /Existing Customer/ })).not.toBeInTheDocument();
-    expect(screen.getByText("Type at least 2 characters to search existing customers.")).toBeVisible();
+    expect(
+      screen.getByText("Type at least 2 characters to search existing customers.")
+    ).toBeVisible();
     expect(screen.queryByText("Searching customers…")).not.toBeInTheDocument();
     expect(api.getFittingIntakeOptions).toHaveBeenCalledTimes(requestCountBeforeShortQuery);
   });
@@ -264,9 +300,8 @@ describe("NewFittingSheet production cutover", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     expect(screen.getByText("₱500")).toBeVisible();
-    expect(
-      screen.getByText(/server selects and claims an eligible physical asset atomically/i)
-    ).toBeVisible();
+    expect(screen.queryByText(/hidden fitting-capacity slots/i)).not.toBeInTheDocument();
+    expect(screen.getByText("Guaranteed garment")).toBeVisible();
     expect(screen.queryByText(/capacity slot #/i)).not.toBeInTheDocument();
 
     const createButton = screen.getByRole("button", { name: "Create fitting" });
@@ -299,11 +334,19 @@ describe("NewFittingSheet production cutover", () => {
     render(<NewFittingSheet open settings={settings} onOpenChange={vi.fn()} onCreated={vi.fn()} />);
 
     fireEvent.click(screen.getByRole("button", { name: "Walk-in customer" }));
-    fireEvent.change(screen.getByPlaceholderText("Full name"), { target: { value: "Messenger Customer" } });
-    fireEvent.change(screen.getByPlaceholderText("09XXXXXXXXX"), { target: { value: "09171234567" } });
+    fireEvent.change(screen.getByPlaceholderText("Full name"), {
+      target: { value: "Messenger Customer" },
+    });
+    fireEvent.change(screen.getByPlaceholderText("09XXXXXXXXX"), {
+      target: { value: "09171234567" },
+    });
     fireEvent.change(screen.getByLabelText("Fitting start time hour"), { target: { value: "7" } });
-    fireEvent.change(screen.getByLabelText("Fitting start time minute"), { target: { value: "30" } });
-    fireEvent.change(screen.getByLabelText("Fitting start time period"), { target: { value: "PM" } });
+    fireEvent.change(screen.getByLabelText("Fitting start time minute"), {
+      target: { value: "30" },
+    });
+    fireEvent.change(screen.getByLabelText("Fitting start time period"), {
+      target: { value: "PM" },
+    });
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
 
     // Garments step: continue without adding any.
@@ -311,6 +354,7 @@ describe("NewFittingSheet production cutover", () => {
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     expect(screen.queryByText("Add at least one garment to the fitting.")).not.toBeInTheDocument();
     expect(screen.getByText(/No garments selected yet/)).toBeVisible();
+    expect(screen.queryByText(/hidden fitting-capacity slots/i)).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Create fitting" }));
     await waitFor(() => expect(api.createFitting).toHaveBeenCalledTimes(1));
@@ -324,36 +368,114 @@ describe("NewFittingSheet production cutover", () => {
       vi.setSystemTime(new Date("2026-10-01T08:13:00.000Z"));
     });
     afterEach(() => {
+      vi.clearAllTimers();
       vi.useRealTimers();
     });
 
-    it("opens on the slot already running so a walk-in can start now, and shows the shop time", () => {
-      render(<NewFittingSheet open settings={settings} onOpenChange={vi.fn()} onCreated={vi.fn()} />);
-
-      expect(screen.getByRole("textbox", { name: "Fitting start time hour" })).toHaveValue("04");
-      expect(screen.getByRole("textbox", { name: "Fitting start time minute" })).toHaveValue("00");
-      expect(screen.getByRole("combobox", { name: "Fitting start time period" })).toHaveValue("PM");
-      expect(screen.getByText(/It is now 4:13 PM/)).toBeVisible();
-    });
-
-    it("moves a start the clock has passed to the slot now running", () => {
-      render(<NewFittingSheet open settings={settings} onOpenChange={vi.fn()} onCreated={vi.fn()} />);
-
-      act(() => {
-        vi.setSystemTime(new Date("2026-10-01T08:30:30.000Z"));
-        vi.advanceTimersByTime(30_000);
-      });
+    it("opens at the next future half-hour boundary and shows the shop time", () => {
+      render(
+        <NewFittingSheet open settings={settings} onOpenChange={vi.fn()} onCreated={vi.fn()} />
+      );
 
       expect(screen.getByRole("textbox", { name: "Fitting start time hour" })).toHaveValue("04");
       expect(screen.getByRole("textbox", { name: "Fitting start time minute" })).toHaveValue("30");
       expect(screen.getByRole("combobox", { name: "Fitting start time period" })).toHaveValue("PM");
+      expect(screen.getByText(/It is now 4:13 PM/)).toBeVisible();
+      expect(screen.getByText(/The earliest start is 4:30 PM/)).toBeVisible();
+    });
+
+    it("moves a start forward when its boundary has passed while the sheet is open", () => {
+      render(
+        <NewFittingSheet open settings={settings} onOpenChange={vi.fn()} onCreated={vi.fn()} />
+      );
+
+      act(() => {
+        vi.setSystemTime(new Date("2026-10-01T08:30:30.000Z"));
+        vi.advanceTimersByTime(1_000);
+      });
+
+      expect(screen.getByRole("textbox", { name: "Fitting start time hour" })).toHaveValue("05");
+      expect(screen.getByRole("textbox", { name: "Fitting start time minute" })).toHaveValue("00");
+      expect(screen.getByRole("combobox", { name: "Fitting start time period" })).toHaveValue("PM");
       expect(
-        screen.getByText("The start time moved to 4:30 PM because the time you chose has passed.")
+        screen.getByText("The start time moved to 5:00 PM because the time you chose has passed.")
       ).toBeVisible();
     });
 
+    it("skips the current boundary when the clock is exactly on it", () => {
+      vi.setSystemTime(new Date("2026-10-01T08:30:00.000Z"));
+      render(
+        <NewFittingSheet open settings={settings} onOpenChange={vi.fn()} onCreated={vi.fn()} />
+      );
+
+      expect(screen.getByRole("textbox", { name: "Fitting start time hour" })).toHaveValue("05");
+      expect(screen.getByRole("textbox", { name: "Fitting start time minute" })).toHaveValue("00");
+    });
+
+    it("disables the in-progress quick time at 12:43 and allows 1:00 PM", () => {
+      vi.setSystemTime(new Date("2026-10-01T04:43:00.000Z"));
+      render(
+        <NewFittingSheet open settings={settings} onOpenChange={vi.fn()} onCreated={vi.fn()} />
+      );
+
+      expect(screen.getByRole("textbox", { name: "Fitting start time hour" })).toHaveValue("01");
+      expect(screen.getByRole("textbox", { name: "Fitting start time minute" })).toHaveValue("00");
+      fireEvent.click(screen.getByRole("button", { name: "Choose fitting start time" }));
+      expect(screen.getByRole("button", { name: "12:30 PM" })).toBeDisabled();
+      expect(screen.getByRole("button", { name: "01:00 PM" })).toBeEnabled();
+    });
+
+    it("keeps typed times before the next boundary from being committed", () => {
+      render(
+        <NewFittingSheet open settings={settings} onOpenChange={vi.fn()} onCreated={vi.fn()} />
+      );
+
+      const hourInput = screen.getByRole("textbox", { name: "Fitting start time hour" });
+      const minuteInput = screen.getByRole("textbox", { name: "Fitting start time minute" });
+      fireEvent.change(hourInput, { target: { value: "04" } });
+      fireEvent.change(minuteInput, { target: { value: "00" } });
+      fireEvent.blur(minuteInput);
+
+      expect(screen.getByText("Earliest valid time is 04:30 PM.")).toBeVisible();
+    });
+
+    it("does not apply today's minimum to a later date", () => {
+      render(
+        <NewFittingSheet open settings={settings} onOpenChange={vi.fn()} onCreated={vi.fn()} />
+      );
+
+      fireEvent.click(screen.getByRole("button", { name: "Fitting date" }));
+      fireEvent.click(
+        within(screen.getByRole("grid", { name: "October 2026" })).getByRole("button", {
+          name: "Friday, October 2nd, 2026",
+        })
+      );
+      fireEvent.click(screen.getByRole("button", { name: "Choose fitting start time" }));
+
+      expect(screen.getByRole("button", { name: "12:00 PM" })).toBeEnabled();
+    });
+
+    it("uses the branch timezone rather than the browser timezone", () => {
+      vi.setSystemTime(new Date("2026-10-01T19:13:00.000Z"));
+      const branchSettings = { ...settings, timezone: "America/Los_Angeles" };
+      render(
+        <NewFittingSheet
+          open
+          settings={branchSettings}
+          onOpenChange={vi.fn()}
+          onCreated={vi.fn()}
+        />
+      );
+
+      expect(screen.getByText(/It is now 12:13 PM/)).toBeVisible();
+      expect(screen.getByRole("textbox", { name: "Fitting start time hour" })).toHaveValue("12");
+      expect(screen.getByRole("textbox", { name: "Fitting start time minute" })).toHaveValue("30");
+    });
+
     it("rejects minutes outside the 30-minute fitting grid", () => {
-      render(<NewFittingSheet open settings={settings} onOpenChange={vi.fn()} onCreated={vi.fn()} />);
+      render(
+        <NewFittingSheet open settings={settings} onOpenChange={vi.fn()} onCreated={vi.fn()} />
+      );
 
       const minuteInput = screen.getByRole("textbox", { name: "Fitting start time minute" });
       fireEvent.change(minuteInput, { target: { value: "15" } });

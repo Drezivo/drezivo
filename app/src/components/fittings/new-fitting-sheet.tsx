@@ -51,7 +51,7 @@ type WalkInMatchKind = "contact" | "name";
 const PRODUCT_LIMIT = 20;
 /** The server accepts fitting starts only on the branch-local 30-minute grid. */
 const SLOT_MINUTES = 30;
-const CLOCK_TICK_MS = 30_000;
+const CLOCK_TICK_MS = 1_000;
 const WALK_IN_NAME_LOOKUP_MIN = 3;
 const WALK_IN_MATCH_LIMIT = 3;
 const PHONE_PATTERN = /^\d{11}$/;
@@ -60,7 +60,7 @@ const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 export function NewFittingSheet({ open, settings, onCreated, onOpenChange }: NewFittingSheetProps) {
   const { getToken } = useAuth();
   const [step, setStep] = useState<Step>(1);
-  const [customerMode, setCustomerMode] = useState<CustomerMode>("existing");
+  const [customerMode, setCustomerMode] = useState<CustomerMode>("walk-in");
   const [customerQuery, setCustomerQuery] = useState("");
   const debouncedCustomerQuery = useDebouncedValue(customerQuery.trim());
   const isCustomerSearchTooShort = customerQuery.trim().length < 2;
@@ -105,7 +105,7 @@ export function NewFittingSheet({ open, settings, onCreated, onOpenChange }: New
   const resetDraft = useCallback(() => {
     resetCreateIntent();
     setStep(1);
-    setCustomerMode("existing");
+    setCustomerMode("walk-in");
     setCustomerQuery("");
     setCustomerOptions([]);
     setExistingCustomerId("");
@@ -155,17 +155,16 @@ export function NewFittingSheet({ open, settings, onCreated, onOpenChange }: New
     return () => window.clearInterval(timer);
   }, [open]);
 
-  // A blank draft starts in the slot in progress, so a walk-in can be fitted right away. A start the
-  // clock has passed moves forward instead of failing later on the server.
+  // A blank draft starts at the next future half-hour boundary in the branch's time zone.
   useEffect(() => {
     if (!open) return;
     if (!date || !startTime) {
-      setDate(clock.date);
+      setDate(clock.earliestDate);
       setStartTime(clock.slotTime);
       return;
     }
-    if (date < clock.date || (date === clock.date && startTime < clock.slotTime)) {
-      setDate(clock.date);
+    if (date < clock.earliestDate || (date === clock.earliestDate && startTime < clock.slotTime)) {
+      setDate(clock.earliestDate);
       setStartTime(clock.slotTime);
       setScheduleNotice(
         `The start time moved to ${formatSlotTime(clock.slotTime)} because the time you chose has passed.`
@@ -196,10 +195,11 @@ export function NewFittingSheet({ open, settings, onCreated, onOpenChange }: New
 
   // An exact email or phone match is the same person; a name match is only a suggestion.
   const shownWalkInMatches = walkInMatches
-    .filter((customer) =>
-      walkInMatchKind === "name" ||
-      customer.email === walkInLookup ||
-      customer.phone === walkInLookup
+    .filter(
+      (customer) =>
+        walkInMatchKind === "name" ||
+        customer.email === walkInLookup ||
+        customer.phone === walkInLookup
     )
     .slice(0, WALK_IN_MATCH_LIMIT);
 
@@ -263,7 +263,14 @@ export function NewFittingSheet({ open, settings, onCreated, onOpenChange }: New
     return () => {
       cancelled = true;
     };
-  }, [customerMode, debouncedCustomerQuery, getToken, isCustomerSearchPending, isCustomerSearchTooShort, open]);
+  }, [
+    customerMode,
+    debouncedCustomerQuery,
+    getToken,
+    isCustomerSearchPending,
+    isCustomerSearchTooShort,
+    open,
+  ]);
 
   useEffect(() => {
     if (!open || step !== 2) return;
@@ -326,6 +333,7 @@ export function NewFittingSheet({ open, settings, onCreated, onOpenChange }: New
   };
 
   const validateStep = (currentStep: Step): string | null => {
+    const currentClock = shopClock(new Date(), timeZone);
     if (!settings) return "Fitting settings are still loading. Try again in a moment.";
     if (!settings.enabled) return "Fittings are disabled for this branch.";
     if (currentStep === 1) {
@@ -342,14 +350,17 @@ export function NewFittingSheet({ open, settings, onCreated, onOpenChange }: New
           return "Enter a valid email address.";
         }
       }
-      if (!date || date < today) return "Choose today or a future date.";
+      if (!date || date < currentClock.date) return "Choose today or a future date.";
       if (!startTime) return "Choose a fitting start time.";
       const startMinute = Number(startTime.split(":")[1] ?? Number.NaN);
       if (!Number.isInteger(startMinute) || startMinute % SLOT_MINUTES !== 0) {
         return "Fitting start time must be on a 30-minute boundary.";
       }
-      if (date === clock.date && startTime < clock.slotTime) {
-        return `That time has passed. Choose ${formatSlotTime(clock.slotTime)} or later.`;
+      if (
+        date < currentClock.earliestDate ||
+        (date === currentClock.earliestDate && startTime < currentClock.slotTime)
+      ) {
+        return `That time has passed. Choose ${formatSlotTime(currentClock.slotTime)} on ${formatSlotDate(currentClock.earliestDate)} or later.`;
       }
     }
     return null;
@@ -531,6 +542,7 @@ export function NewFittingSheet({ open, settings, onCreated, onOpenChange }: New
               onDateChange={changeDate}
               onStartTimeChange={changeStartTime}
               today={today}
+              earliestDate={clock.earliestDate}
               earliestTime={clock.slotTime}
               nowLabel={clock.nowLabel}
               scheduleNotice={scheduleNotice}
@@ -652,6 +664,7 @@ function StepAppointment({
   onDateChange,
   onStartTimeChange,
   today,
+  earliestDate,
   earliestTime,
   nowLabel,
   scheduleNotice,
@@ -682,7 +695,9 @@ function StepAppointment({
   onDateChange: (value: string) => void;
   onStartTimeChange: (value: string) => void;
   today: string;
-  /** Start of the 30-minute slot in progress (HH:MM, shop time); nothing earlier is offered today. */
+  /** First future 30-minute boundary's date in the branch's local calendar. */
+  earliestDate: string;
+  /** First future 30-minute boundary (HH:MM in the branch's time zone). */
   earliestTime: string;
   nowLabel: string;
   scheduleNotice: string | null;
@@ -706,7 +721,7 @@ function StepAppointment({
         role="group"
         aria-label="Customer type"
       >
-        {(["existing", "walk-in"] as const).map((mode) => (
+        {(["walk-in", "existing"] as const).map((mode) => (
           <button
             key={mode}
             type="button"
@@ -886,7 +901,7 @@ function StepAppointment({
             value={startTime}
             onChange={onStartTimeChange}
             mode="input"
-            {...(date === today ? { min: earliestTime } : {})}
+            {...(date === earliestDate ? { min: earliestTime } : {})}
             minuteStep={SLOT_MINUTES}
             quickStart={businessHours?.opens_local ?? "08:00"}
             quickEnd={businessHours?.closes_local ?? "20:00"}
@@ -902,10 +917,10 @@ function StepAppointment({
       </div>
       <p className="mt-3 text-xs text-dashboard-muted">
         <span className="font-medium text-dashboard-navy">It is now {nowLabel}</span> shop time.
-        Fittings start on the hour or half hour; a walk-in can take the{" "}
-        {formatSlotTime(earliestTime)} slot that is already running. Duration is fixed by fitting
-        settings. The server checks Business Hours, closed dates, and simultaneous fitting capacity
-        when you create the appointment.
+        Fittings start every 30 minutes. The earliest start is {formatSlotTime(earliestTime)}
+        {earliestDate !== today ? ` on ${formatSlotDate(earliestDate)}` : ""}. Duration is fixed by
+        fitting settings. The server checks Business Hours, closed dates, and simultaneous fitting
+        capacity when you create the appointment.
       </p>
       {scheduleNotice ? (
         <p role="status" className="mt-2 text-xs font-medium text-dashboard-attention">
@@ -954,7 +969,8 @@ function StepGarments({
           Garments
         </h3>
         <p className="mt-1 text-xs text-dashboard-muted">
-          Choose the variants the customer wants to try, or skip this if they will choose at the shop.
+          Choose the variants the customer wants to try, or skip this if they will choose at the
+          shop.
         </p>
 
         <label className="relative mt-4 block">
@@ -1012,7 +1028,9 @@ function StepGarments({
                     )}
                   </span>
                   <span className="min-w-0">
-                    <span className="block truncate font-medium text-dashboard-navy">{product.name}</span>
+                    <span className="block truncate font-medium text-dashboard-navy">
+                      {product.name}
+                    </span>
                     <span className="mt-1 block text-xs text-dashboard-muted">
                       {product.size_labels.join(", ") || "Variants available"}
                     </span>
@@ -1054,7 +1072,13 @@ function StepGarments({
                             <Button
                               type="button"
                               size="sm"
-                              onClick={() => onToggleVariant(variant.id, productDetail.name, label || "Flexible fit")}
+                              onClick={() =>
+                                onToggleVariant(
+                                  variant.id,
+                                  productDetail.name,
+                                  label || "Flexible fit"
+                                )
+                              }
                             >
                               Add
                             </Button>
@@ -1086,7 +1110,13 @@ function StepGarments({
                               type="button"
                               variant="secondary"
                               size="sm"
-                              onClick={() => onToggleVariant(variant.id, productDetail.name, label || "Flexible fit")}
+                              onClick={() =>
+                                onToggleVariant(
+                                  variant.id,
+                                  productDetail.name,
+                                  label || "Flexible fit"
+                                )
+                              }
                             >
                               Remove
                             </Button>
@@ -1213,10 +1243,6 @@ function StepReview({
           </div>
         ))}
       </div>
-      <p className="mt-4 rounded-lg bg-dashboard-active px-3 py-2 text-xs text-dashboard-muted">
-        Guaranteed garments are requested by variant only. The server selects and claims an eligible
-        physical asset atomically; hidden fitting-capacity slots are never exposed to the browser.
-      </p>
     </section>
   );
 }
@@ -1260,10 +1286,12 @@ function ReviewItem({ label, value }: { label: string; value: string }) {
 }
 
 /**
- * The shop's wall clock: local date, the start of the 30-minute slot in progress, and the current
- * time for display. Rounded in wall-clock minutes, so zones with a :45 offset still land on the grid.
+ * The shop's wall clock and the next strictly future half-hour boundary in its local time zone.
  */
-function shopClock(now: Date, timeZone: string): { date: string; slotTime: string; nowLabel: string } {
+function shopClock(
+  now: Date,
+  timeZone: string
+): { date: string; earliestDate: string; slotTime: string; nowLabel: string } {
   const parts = Object.fromEntries(
     new Intl.DateTimeFormat("en-CA", {
       year: "numeric",
@@ -1277,12 +1305,36 @@ function shopClock(now: Date, timeZone: string): { date: string; slotTime: strin
       .formatToParts(now)
       .map((part) => [part.type, part.value])
   );
-  const slotMinute = Math.floor(Number(parts["minute"]) / SLOT_MINUTES) * SLOT_MINUTES;
+  const minuteOfDay = Number(parts["hour"]) * 60 + Number(parts["minute"]);
+  const nextSlot = new Date(
+    Date.UTC(
+      Number(parts["year"]),
+      Number(parts["month"]) - 1,
+      Number(parts["day"]),
+      0,
+      (Math.floor(minuteOfDay / SLOT_MINUTES) + 1) * SLOT_MINUTES
+    )
+  );
   return {
     date: `${parts["year"]}-${parts["month"]}-${parts["day"]}`,
-    slotTime: `${parts["hour"]}:${String(slotMinute).padStart(2, "0")}`,
-    nowLabel: new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit", timeZone }).format(now),
+    earliestDate: `${nextSlot.getUTCFullYear()}-${String(nextSlot.getUTCMonth() + 1).padStart(2, "0")}-${String(nextSlot.getUTCDate()).padStart(2, "0")}`,
+    slotTime: `${String(nextSlot.getUTCHours()).padStart(2, "0")}:${String(nextSlot.getUTCMinutes()).padStart(2, "0")}`,
+    nowLabel: new Intl.DateTimeFormat("en-US", {
+      hour: "numeric",
+      minute: "2-digit",
+      timeZone,
+    }).format(now),
   };
+}
+
+function formatSlotDate(value: string): string {
+  const [year = 0, month = 1, day = 1] = value.split("-").map(Number);
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(new Date(Date.UTC(year, month - 1, day)));
 }
 
 function formatSlotTime(value: string): string {

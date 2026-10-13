@@ -1703,16 +1703,6 @@ components:
             - file_id
             - content_type
           additionalProperties: false
-        qr_image_url:
-          type:
-            - string
-            - "null"
-          format: uri
-        material_url:
-          type:
-            - string
-            - "null"
-          format: uri
       required:
         - id
         - name
@@ -1799,16 +1789,6 @@ components:
                   - file_id
                   - content_type
                 additionalProperties: false
-              qr_image_url:
-                type:
-                  - string
-                  - "null"
-                format: uri
-              material_url:
-                type:
-                  - string
-                  - "null"
-                format: uri
             required:
               - id
               - name
@@ -7021,16 +7001,6 @@ paths:
                                 - file_id
                                 - content_type
                               additionalProperties: false
-                            qr_image_url:
-                              type:
-                                - string
-                                - "null"
-                              format: uri
-                            material_url:
-                              type:
-                                - string
-                                - "null"
-                              format: uri
                           required:
                             - id
                             - name
@@ -7253,16 +7223,6 @@ paths:
                           - file_id
                           - content_type
                         additionalProperties: false
-                      qr_image_url:
-                        type:
-                          - string
-                          - "null"
-                        format: uri
-                      material_url:
-                        type:
-                          - string
-                          - "null"
-                        format: uri
                     required:
                       - id
                       - name
@@ -7570,16 +7530,6 @@ paths:
                           - file_id
                           - content_type
                         additionalProperties: false
-                      qr_image_url:
-                        type:
-                          - string
-                          - "null"
-                        format: uri
-                      material_url:
-                        type:
-                          - string
-                          - "null"
-                        format: uri
                     required:
                       - id
                       - name
@@ -12691,12 +12641,9 @@ paths:
                       max_batch_items:
                         type: integer
                         exclusiveMinimum: 0
-                      batch_add:
-                        type: boolean
                     required:
                       - photo_extraction
                       - max_batch_items
-                      - batch_add
                   request_id:
                     type: string
                     minLength: 1
@@ -31850,16 +31797,6 @@ paths:
                           - file_id
                           - content_type
                         additionalProperties: false
-                      qr_image_url:
-                        type:
-                          - string
-                          - "null"
-                        format: uri
-                      material_url:
-                        type:
-                          - string
-                          - "null"
-                        format: uri
                     required:
                       - id
                       - name
