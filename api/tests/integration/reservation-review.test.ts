@@ -2517,11 +2517,13 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
   it('records a late return and links the return custody fact to an already-threatened future reservation', async () => {
     const seed = await seedWorkspace('org_rsv051_late', 'user_rsv051_late', 'cash');
     const pickedUp = await createPickedUpReservation(seed, 'return-late-current');
+    const futureStart = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000);
+    const futureEnd = new Date(futureStart.getTime() + 3 * 24 * 60 * 60 * 1000);
     const future = await createHoldForInterval(
       seed,
       'return-late-future',
-      '2026-10-20T02:00:00.000Z',
-      '2026-10-23T02:00:00.000Z',
+      futureStart.toISOString(),
+      futureEnd.toISOString(),
     );
 
     await withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
