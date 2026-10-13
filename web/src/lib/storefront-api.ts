@@ -8,7 +8,6 @@ import {
   guestReservationView,
   itemDetail,
   publicAvailabilityResponse,
-  publicPlanCatalogResponse,
   publicStorefront,
   type CatalogueResponse,
   type FittingSlotsResponse,
@@ -21,7 +20,6 @@ import {
   type GuestReservationView,
   type ItemDetail,
   type PublicAvailabilityResponse,
-  type PublicPlanCatalogResponse,
   type PublicStorefront,
 } from '@drezivo/contracts';
 import type { z } from 'zod';
@@ -107,11 +105,6 @@ async function call<S extends z.ZodTypeAny>(
 }
 
 const store = (slug: string) => `/public/stores/${encodeURIComponent(slug)}`;
-
-/** Public, server-authoritative monthly plans and included limits. */
-export function getPublicPlanCatalog(): Promise<PublicPlanCatalogResponse> {
-  return call('/plans', publicPlanCatalogResponse, { revalidate: 60 });
-}
 
 /**
  * Server-side read for pages. A missing, draft, or suspended store is `null` (the page 404s).

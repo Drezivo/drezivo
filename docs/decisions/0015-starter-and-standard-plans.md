@@ -8,8 +8,8 @@
 
 The pilot's single Standard offer at PHP 299/month is not suitable for every owner-operated shop.
 Add a lower-priced tier while keeping existing Standard customers' subscriptions and billing
-history intact. Price, limits, and trial duration must be authoritative in the backend and shared
-by owner onboarding and public pricing.
+history intact. Price, limits, and trial duration must be authoritative in the backend and kept in
+sync with owner onboarding and public pricing.
 
 ## Decision
 
@@ -22,7 +22,9 @@ by owner onboarding and public pricing.
    independent trial or subscription.
 3. Owner onboarding requires an explicit plan code selection. The API catalog and active database
    plan/entitlement rows own prices and limits; clients may select a code but cannot submit price or
-   entitlement values. The same public catalog supplies marketing pricing cards.
+   entitlement values. Marketing pricing cards use a code-owned static snapshot of the current
+   public catalog so they can render without a runtime API request; the snapshot must be updated
+   alongside future catalog changes.
 4. The API enforces active-garment capacity and Front Desk seat capacity regardless of client UI.
    Starter's zero Front Desk seats rejects invitations server-side. Active garment usage counts
    physical assets under the established `physical_assets.max` entitlement.
@@ -39,8 +41,9 @@ by owner onboarding and public pricing.
 - `starter` now means the new Starter tier; the old row identity representing Standard becomes
   `standard`. Consumers and tests must use the canonical code rather than infer a tier from the
   old code.
-- The backend public catalog is a release dependency for onboarding and the marketing pricing
-  section. If it cannot load, those surfaces show a retryable error instead of stale prices.
+- The backend public catalog remains a release dependency for onboarding. Marketing pricing is a
+  static snapshot and remains available without that runtime dependency; future catalog changes
+  must update the website snapshot in the same release.
 - The existing single-plan decisions are historical: ADR 0011 is superseded, and ADRs 0013/0014
   continue to describe Standard's unchanged limits/price but not the complete catalog.
 - The migration is forward-only and must be applied through the reviewed API migration workflow in
