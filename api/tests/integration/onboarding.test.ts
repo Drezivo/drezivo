@@ -1,6 +1,26 @@
 import { randomUUID } from 'node:crypto';
 
-import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import request from 'supertest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { CURRENT_TERMS_VERSION } from '@drezivo/contracts';
+
+const clerkMocks = vi.hoisted(() => ({
+  createOrganization: vi.fn(),
+  getAuth: vi.fn(),
+  getUserVerificationState: vi.fn(),
+}));
+
+vi.mock('@clerk/express', () => ({
+  clerkMiddleware: () => (_req: unknown, _res: unknown, next: (error?: unknown) => void) => next(),
+  getAuth: clerkMocks.getAuth,
+}));
+
+vi.mock('../../src/integrations/clerk/clerk.adapter.js', () => ({
+  createClerkServerAdapter: () => ({
+    createOrganization: clerkMocks.createOrganization,
+    getUserVerificationState: clerkMocks.getUserVerificationState,
+  }),
+}));
 
 import '../../src/config/load-env.js';
 import {
@@ -12,6 +32,10 @@ import {
 } from './helpers/test-db.js';
 
 const adminUrl = requireTestDatabaseUrl();
+type OnboardingHttpBody = {
+  data?: { organization_name?: string };
+  error?: { code?: string };
+};
 
 process.env.NODE_ENV = 'test';
 process.env.DATABASE_URL = buildAppRoleDatabaseUrl(adminUrl);
@@ -41,6 +65,7 @@ describe('TBF-011 onboarding persistence', async () => {
   } = await import('../../src/modules/onboarding/onboarding.repository.js');
   const { createTestTenant } = await import('./helpers/factories.js');
   const { selectOnboardingPlan } = await import('../../src/modules/onboarding/onboarding.service.js');
+  const { createApp } = await import('../../src/app.js');
   const { claimOwnerOnboardingStart } =
     await import('../../src/modules/onboarding/onboarding-attempt.repository.js');
   const { canonicalRequestHash } = await import('../../src/shared/idempotency.js');
@@ -50,12 +75,65 @@ describe('TBF-011 onboarding persistence', async () => {
     await ensureAppRoleLogin(adminUrl);
   });
 
+  beforeEach(() => {
+    clerkMocks.getAuth.mockReset().mockReturnValue({ userId: 'user_onboarding_terms_http', orgId: null });
+    clerkMocks.getUserVerificationState.mockReset().mockResolvedValue({ primaryEmailVerified: true });
+    clerkMocks.createOrganization.mockReset().mockResolvedValue({ id: 'org_onboarding_terms_http' });
+  });
+
   afterEach(async () => {
     await resetTestDatabase(adminUrl);
   });
 
   afterAll(async () => {
     await closePool();
+  });
+
+  it('blocks direct workspace creation until Terms are accepted, then permits the same intent', async () => {
+    const idempotencyKey = randomUUID();
+    const app = createApp();
+    const createRequest = () =>
+      request(app)
+        .post('/api/v1/onboarding')
+        .set('Idempotency-Key', idempotencyKey)
+        .send({ organization_name: 'Terms Studio' });
+
+    const rejected = await createRequest();
+    expect(rejected.status).toBe(409);
+    const rejectedBody = rejected.body as OnboardingHttpBody;
+    expect(rejectedBody.error?.code).toBe('STATE_CONFLICT');
+    expect(clerkMocks.createOrganization).not.toHaveBeenCalled();
+
+    const accepted = await request(app)
+      .post('/api/v1/account/terms-acceptance')
+      .set('Idempotency-Key', randomUUID())
+      .send({ terms_version: CURRENT_TERMS_VERSION });
+    expect(accepted.status).toBe(200);
+
+    const created = await createRequest();
+    expect(created.status).toBe(201);
+    const createdBody = created.body as OnboardingHttpBody;
+    expect(createdBody.data?.organization_name).toBe('Terms Studio');
+    expect(clerkMocks.createOrganization).toHaveBeenCalledTimes(1);
+  });
+
+  it('lets an existing incomplete onboarding continue while its account accepts Terms at the plan step', async () => {
+    const principalId = 'user_onboarding_terms_existing';
+    clerkMocks.getAuth.mockReturnValue({ userId: principalId, orgId: null });
+    const account = await ensureAccount(principalId);
+    await createOrResumeOnboarding(account.id, 'org_onboarding_terms_existing', principalId, {
+      organizationName: 'Existing Studio',
+    });
+
+    const response = await request(createApp())
+      .post('/api/v1/onboarding')
+      .set('Idempotency-Key', randomUUID())
+      .send({ organization_name: 'Existing Studio' });
+
+    expect(response.status).toBe(200);
+    const responseBody = response.body as OnboardingHttpBody;
+    expect(responseBody.data?.organization_name).toBe('Existing Studio');
+    expect(clerkMocks.createOrganization).not.toHaveBeenCalled();
   });
 
   it('creates one row when the same onboarding is requested concurrently', async () => {

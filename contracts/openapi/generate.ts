@@ -60,6 +60,8 @@ import {
   memberRosterResponse,
   onboardingActorContext,
   onboardingStatus,
+  termsAcceptanceRequest,
+  termsAcceptanceResponse,
   publicPlanCatalogResponse,
   operatorActionResponse,
   operationalCalendarQuery,
@@ -214,6 +216,8 @@ registry.register('MembershipInvitationStatus', membershipInvitationStatus);
 registry.register('ClerkWebhookEventType', clerkWebhookEventType);
 registry.register('OrganizationOnboarding', organizationOnboarding);
 registry.register('OnboardingActorContext', onboardingActorContext);
+registry.register('TermsAcceptanceRequest', termsAcceptanceRequest);
+registry.register('TermsAcceptanceResponse', termsAcceptanceResponse);
 registry.register('PublicPlanCatalogResponse', publicPlanCatalogResponse);
 registry.register('MembershipInvitation', membershipInvitation);
 registry.register('MembershipInvitationList', membershipInvitationList);
@@ -354,6 +358,28 @@ registry.registerPath({
       content: { 'application/json': { schema: successEnvelope(onboardingActorContext) } },
     },
     429: jsonError('Owner onboarding read rate limit exceeded.'),
+  },
+});
+
+registry.registerPath({
+  method: 'post',
+  path: '/account/terms-acceptance',
+  tags: ['onboarding'],
+  summary: 'Record the authenticated account’s acceptance of the current Terms version.',
+  request: {
+    headers: idempotencyKeyHeader,
+    body: { content: { 'application/json': { schema: termsAcceptanceRequest } } },
+  },
+  responses: {
+    200: {
+      description: 'Current Terms acceptance recorded or the same idempotent result replayed.',
+      content: { 'application/json': { schema: successEnvelope(termsAcceptanceResponse) } },
+    },
+    401: jsonError('Sign-in required.'),
+    403: jsonError('Email verification is required.'),
+    409: jsonError('The acceptance is in progress or the idempotency key was reused.'),
+    422: jsonError('The Terms acceptance request or idempotency key is invalid.'),
+    429: jsonError('Terms acceptance rate limit exceeded.'),
   },
 });
 

@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { StaffSignInForm } from "@/components/auth/staff-sign-in-form";
 
 const clerk = vi.hoisted(() => ({
@@ -92,9 +92,15 @@ function submitCurrentForm() {
 
 describe("StaffSignInForm", () => {
   beforeEach(() => {
+    sessionStorage.clear();
+    vi.stubEnv("NEXT_PUBLIC_STOREFRONT_ORIGIN", "http://localhost:3001");
     clerk.setActive.mockReset().mockResolvedValue(undefined);
     clerk.useSignIn.mockReset();
     clerk.useSignUp.mockReset();
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
   });
 
   it("starts email verification with the configured email factor", async () => {
@@ -116,7 +122,7 @@ describe("StaffSignInForm", () => {
     expect(screen.getByLabelText("Verification code")).toBeVisible();
   });
 
-  it("starts email sign-up when Clerk cannot find the account", async () => {
+  it("starts email sign-up after a not-found response without collecting Terms before verification", async () => {
     const { signIn, signUp } = useClerkMocks();
     signIn.create.mockRejectedValue({
       errors: [{ code: "form_identifier_not_found" }],
@@ -126,6 +132,12 @@ describe("StaffSignInForm", () => {
     fireEvent.change(screen.getByLabelText("Email"), {
       target: { value: "new-owner@example.com" },
     });
+    submitCurrentForm();
+
+    expect(await screen.findByText("No account was found. Create an account to continue.")).toBeVisible();
+    expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Terms of Service" })).not.toBeInTheDocument();
+    expect(signUp.create).not.toHaveBeenCalled();
     submitCurrentForm();
 
     await waitFor(() =>
@@ -139,6 +151,8 @@ describe("StaffSignInForm", () => {
     const { signUp } = useClerkMocks();
     render(<StaffSignInForm initialFlow="sign-up" />);
 
+    expect(screen.getByRole("button", { name: "Create account" })).toBeEnabled();
+    expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("Email"), {
       target: { value: "new-owner@example.com" },
     });

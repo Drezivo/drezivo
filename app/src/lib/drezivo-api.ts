@@ -71,6 +71,8 @@ import {
   chooseOnboardingPlanRequest,
   createOwnerOnboardingRequest,
   onboardingActorContext,
+  termsAcceptanceRequest,
+  termsAcceptanceResponse,
   organizationOnboarding,
   createMembershipInvitationRequest,
   claimMembershipInvitationRequest,
@@ -224,6 +226,8 @@ import {
   type UploadFinalizeResponse,
   type CreateOwnerOnboardingRequest,
   type OnboardingActorContext,
+  type TermsAcceptanceRequest,
+  type TermsAcceptanceResponse,
   type OrganizationOnboarding,
   type CreateMembershipInvitationRequest,
   type MembershipInvitation,
@@ -351,6 +355,15 @@ export function createDrezivoApiClient(getToken: TokenGetter) {
         method: "GET",
         path: "/api/v1/onboarding/current",
         responseSchema: apiEnvelope(onboardingActorContext),
+      }),
+    acceptAccountTerms: (input: TermsAcceptanceRequest, idempotencyKey: string) =>
+      request<TermsAcceptanceResponse>({
+        getToken,
+        body: termsAcceptanceRequest.parse(input),
+        idempotencyKey,
+        method: "POST",
+        path: "/api/v1/account/terms-acceptance",
+        responseSchema: apiEnvelope(termsAcceptanceResponse),
       }),
     createOnboarding: (input: CreateOwnerOnboardingRequest, idempotencyKey: string) =>
       request<OrganizationOnboarding>({

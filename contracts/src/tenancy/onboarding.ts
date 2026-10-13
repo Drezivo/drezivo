@@ -12,6 +12,19 @@ import { isoInstant } from '../common/time';
 import { paginatedResponse } from '../common/pagination';
 import { branch, branchGrant, membership, membershipRole, tenant } from './tenant';
 
+/** Current Drezivo Terms of Service revision. Bump only with an approved terms publication. */
+export const CURRENT_TERMS_VERSION = '2026-10-02' as const;
+
+export const termsAcceptanceRequest = z
+  .object({ terms_version: z.literal(CURRENT_TERMS_VERSION) })
+  .strict();
+export type TermsAcceptanceRequest = z.infer<typeof termsAcceptanceRequest>;
+
+export const termsAcceptanceResponse = z
+  .object({ terms_version: z.literal(CURRENT_TERMS_VERSION), accepted_at: isoInstant })
+  .strict();
+export type TermsAcceptanceResponse = z.infer<typeof termsAcceptanceResponse>;
+
 /** Global pre-tenant lifecycle, owned by Drezivo rather than Clerk. */
 export const onboardingStatus = z.enum(['incomplete', 'abandoned', 'payment_pending', 'provisioned']);
 export type OnboardingStatus = z.infer<typeof onboardingStatus>;
@@ -85,6 +98,8 @@ export const onboardingActorContext = z.object({
   onboarding: organizationOnboarding.nullable(),
   has_current_owned_tenant: z.boolean(),
   has_consumed_lifetime_trial: z.boolean(),
+  required_terms_version: z.literal(CURRENT_TERMS_VERSION),
+  accepted_terms_version: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable(),
 });
 export type OnboardingActorContext = z.infer<typeof onboardingActorContext>;
 

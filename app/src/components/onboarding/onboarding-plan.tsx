@@ -3,6 +3,7 @@
 import * as Dialog from "@radix-ui/react-dialog";
 import { useAuth, useClerk } from "@clerk/nextjs";
 import { ArrowRight, CheckCircle2, Package, UsersRound } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
@@ -22,6 +23,7 @@ import { OnboardingProgress } from "@/components/onboarding/onboarding-progress"
 import { OnboardingStatusPage } from "@/components/onboarding/onboarding-status-page";
 import { RestartOnboardingDialog } from "@/components/onboarding/restart-onboarding-dialog";
 import { createDrezivoApiClient, DrezivoApiError } from "@/lib/drezivo-api";
+import { publicTermsUrl } from "@/lib/public-terms";
 import { useSubmitGuard } from "@/lib/use-submit-guard";
 import { WORKSPACE_HOME } from "@/lib/workspace-routes";
 
@@ -40,6 +42,7 @@ export function OnboardingPlan() {
   const router = useRouter();
   const planSubmit = useSubmitGuard();
   const launchSubmit = useSubmitGuard();
+  const termsSubmit = useSubmitGuard();
   const [state, setState] = useState<LoadState>({ kind: "loading" });
   const [step, setStep] = useState<"plan" | "launch">("plan");
   const [selectedPlanCode, setSelectedPlanCode] = useState<PlanCode | null>(null);
@@ -48,6 +51,8 @@ export function OnboardingPlan() {
   const [launchPhase, setLaunchPhase] = useState<LaunchPhase>("idle");
   const [launchError, setLaunchError] = useState<DrezivoApiError | null>(null);
   const [bootstrapResult, setBootstrapResult] = useState<TenantBootstrapResponse | null>(null);
+  const [termsChecked, setTermsChecked] = useState(false);
+  const [termsError, setTermsError] = useState<DrezivoApiError | null>(null);
 
   const loadCurrent = useCallback(async () => {
     if (!isLoaded || !isSignedIn) return;
@@ -68,7 +73,10 @@ export function OnboardingPlan() {
       }
       setSelectedPlanCode(onboarding.selected_plan_code);
       setStep(onboarding.selected_plan_code ? "launch" : "plan");
-      setLaunchOpen(Boolean(onboarding.selected_plan_code));
+      setLaunchOpen(
+        Boolean(onboarding.selected_plan_code) &&
+          context.accepted_terms_version === context.required_terms_version
+      );
       if (catalogResult.status === "rejected") {
         setState({
           kind: "catalog-error",
@@ -127,6 +135,9 @@ export function OnboardingPlan() {
   const onboarding = readyState.context.onboarding;
   if (!onboarding) return <OnboardingStatusPage />;
   const activeOnboarding = onboarding;
+  const hasCurrentTermsAcceptance =
+    readyState.context.accepted_terms_version === readyState.context.required_terms_version;
+  const termsHref = publicTermsUrl();
   const selectedPlan = readyState.catalog.plans.find(
     (plan) => plan.code === (selectedPlanCode ?? activeOnboarding.selected_plan_code)
   );
@@ -151,7 +162,7 @@ export function OnboardingPlan() {
       setSelectedPlanCode(result.data.selected_plan_code);
       setStep("launch");
       setLaunchError(null);
-      setLaunchOpen(true);
+      setLaunchOpen(hasCurrentTermsAcceptance);
     } catch (caughtError) {
       setPlanError(toDrezivoApiError(caughtError));
     }
@@ -236,7 +247,7 @@ export function OnboardingPlan() {
   }
 
   async function handleStartTrial() {
-    if (launchPhase === "bootstrapping") return;
+    if (launchPhase === "bootstrapping" || !hasCurrentTermsAcceptance) return;
     setLaunchError(null);
     setLaunchPhase("bootstrapping");
     try {
@@ -250,6 +261,33 @@ export function OnboardingPlan() {
     } catch (caughtError) {
       setLaunchPhase("idle");
       setLaunchError(toDrezivoApiError(caughtError));
+    }
+  }
+
+  async function handleTermsCheckedChange(checked: boolean) {
+    setTermsChecked(checked);
+    setTermsError(null);
+    if (!checked || hasCurrentTermsAcceptance || termsSubmit.isSubmitting) return;
+    try {
+      const result = await termsSubmit.submit((idempotencyKey) =>
+        createDrezivoApiClient(getToken).acceptAccountTerms(
+          { terms_version: readyState.context.required_terms_version },
+          idempotencyKey
+        )
+      );
+      if (!result) return;
+      setTermsChecked(false);
+      setState({
+        kind: "ready",
+        context: {
+          ...readyState.context,
+          accepted_terms_version: result.data.terms_version,
+        },
+        catalog: readyState.catalog,
+      });
+    } catch (caughtError) {
+      setTermsChecked(false);
+      setTermsError(toDrezivoApiError(caughtError));
     }
   }
 
@@ -345,6 +383,48 @@ export function OnboardingPlan() {
           </ReviewRow>
         </div>
 
+        {!hasCurrentTermsAcceptance ? (
+          <div className="mt-5">
+            <label className="flex items-start gap-3 text-sm leading-6 text-auth-dark-muted">
+              <input
+                type="checkbox"
+                required
+                checked={termsChecked}
+                disabled={termsSubmit.isSubmitting || !termsHref}
+                onChange={(event) => void handleTermsCheckedChange(event.target.checked)}
+                className="mt-1 h-4 w-4 shrink-0 accent-auth-gold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-auth-focus"
+              />
+              <span>
+                I have read and agree to the current{" "}
+                {termsHref ? (
+                  <Link
+                    href={termsHref}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="font-medium text-auth-gold underline underline-offset-4"
+                  >
+                    Terms of Service
+                  </Link>
+                ) : (
+                  <span className="font-medium text-auth-text">Terms of Service</span>
+                )}
+                .
+                {!termsHref ? (
+                  <span className="mt-1 block text-xs text-auth-error">
+                    Terms are temporarily unavailable. Please try again later.
+                  </span>
+                ) : null}
+              </span>
+            </label>
+            {termsSubmit.isSubmitting ? (
+              <p className="mt-2 text-xs text-auth-dark-muted" role="status">
+                Saving your acceptance…
+              </p>
+            ) : null}
+            {termsError ? <InlineError error={termsError} /> : null}
+          </div>
+        ) : null}
+
         {launchError && !launchOpen ? <InlineError error={launchError} /> : null}
 
         <Dialog.Root
@@ -359,7 +439,11 @@ export function OnboardingPlan() {
           }}
         >
           <Dialog.Trigger asChild>
-            <button type="button" className={`${launchButtonClass} mt-5`}>
+            <button
+              type="button"
+              disabled={!hasCurrentTermsAcceptance || termsSubmit.isSubmitting}
+              className={`${launchButtonClass} mt-5`}
+            >
               Start {selectedPlan.trial_days}-day trial{" "}
               <ArrowRight aria-hidden="true" className="h-5 w-5" />
             </button>
@@ -386,7 +470,7 @@ export function OnboardingPlan() {
                 </Dialog.Close>
                 <button
                   type="button"
-                  disabled={isLaunching}
+                  disabled={isLaunching || !hasCurrentTermsAcceptance || termsSubmit.isSubmitting}
                   onClick={() => void handleStartTrial()}
                   className={dialogLaunchButtonClass}
                 >

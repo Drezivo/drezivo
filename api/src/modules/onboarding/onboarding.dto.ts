@@ -29,4 +29,6 @@ export interface OwnerOnboardingContextDTO {
   onboarding: PublicOnboarding | null;
   has_current_owned_tenant: boolean;
   has_consumed_lifetime_trial: boolean;
+  required_terms_version: '2026-10-02';
+  accepted_terms_version: string | null;
 }
