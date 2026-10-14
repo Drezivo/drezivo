@@ -1799,7 +1799,7 @@ export function NewReservationSheet({
                             selectedCount > 0
                               ? "border-dashboard-accent bg-dashboard-active"
                               : isBrowsing
-                                ? "border-dashboard-accent/60 ring-1 ring-dashboard-accent/30"
+                                ? "border-dashboard-accent/60 bg-dashboard-active/40 ring-1 ring-dashboard-accent/30"
                                 : "border-dashboard-border hover:bg-dashboard-active/50"
                           )}
                         >
