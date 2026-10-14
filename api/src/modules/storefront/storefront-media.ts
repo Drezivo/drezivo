@@ -5,11 +5,13 @@ import { publicStorefrontMediaUrl, staffFileMediaUrl } from '../files/file-media
 // `payment_method_material` is published only when an active online method references it.
 const DISPLAYABLE_PURPOSES = ['storefront_asset', 'catalogue_image', 'measurement_guide', 'payment_method_material'];
 
-export type MediaAudience = { kind: 'staff'; branchId: string } | { kind: 'public'; slug: string };
+export type MediaAudience =
+  | { kind: 'staff'; branchId: string }
+  | { kind: 'public'; slug: string; preview?: boolean };
 
 /**
  * Maps accepted, same-tenant file ids to application routes. The route rechecks authorization on
- * every request and streams from the private bucket; this helper never signs an R2 read URL.
+ * cache misses and privately fetches from R2; this helper never signs an R2 read URL.
  */
 export class StorefrontMediaUrlMapper {
   async map(
@@ -37,7 +39,7 @@ export class StorefrontMediaUrlMapper {
       urls.set(
         row.id,
         audience.kind === 'public'
-          ? publicStorefrontMediaUrl(audience.slug, row.id)
+          ? publicStorefrontMediaUrl(audience.slug, row.id, audience.preview ?? false)
           : staffFileMediaUrl(row.id, audience.branchId),
       );
     }

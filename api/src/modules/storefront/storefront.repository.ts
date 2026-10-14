@@ -28,6 +28,7 @@ export interface PublishedStore {
 
 export interface PublicMediaFileRow {
   id: string;
+  purpose: 'catalogue_image' | 'measurement_guide' | 'storefront_asset' | 'payment_method_material';
   storage_key: string;
   version_id: string | null;
   mime_type: 'image/jpeg' | 'image/png' | 'image/webp' | 'application/pdf';
@@ -43,7 +44,7 @@ export async function readPublicStoreMedia(
   input: { tenantId: string; storefrontId: string; fileId: string; preview: boolean },
 ): Promise<PublicMediaFileRow | null> {
   const result = await client.query<PublicMediaFileRow>(
-    `SELECT f.id, f.storage_key, f.version_id, f.mime_type, f.byte_size
+    `SELECT f.id, f.purpose, f.storage_key, f.version_id, f.mime_type, f.byte_size
        FROM file_object f
       WHERE f.tenant_id = $1
         AND f.id = $3::uuid

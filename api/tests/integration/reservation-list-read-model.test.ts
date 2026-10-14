@@ -234,7 +234,9 @@ describe('RSV Phase 1 reservation read model', async () => {
       },
     );
 
-    expect(list.items[0]?.line.image_url).toBe(`/api/media/staff/${coverFileId}?branch_id=${seed.branchId}`);
+    expect(list.items[0]?.line.image_url).toBe(
+      `/api/media/staff/${coverFileId}?branch_id=${seed.branchId}&w=960`,
+    );
   });
 
   it('uses deterministic keyset pagination and rejects a cursor reused with another sort', async () => {

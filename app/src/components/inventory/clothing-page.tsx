@@ -47,6 +47,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { createDrezivoApiClient, DrezivoApiError } from "@/lib/drezivo-api";
+import { mediaImageSrcSet } from "@/lib/media-image-srcset";
 import { useDebouncedValue } from "@/lib/use-debounced-value";
 import { displayProductSizeCount, displayProductSizes } from "@/lib/catalogue-display";
 import { cn } from "@/lib/utils";
@@ -535,6 +536,8 @@ function ClothingRow({
             // eslint-disable-next-line @next/next/no-img-element -- signed catalogue URLs are dynamic and are not configured as stable next/image remote patterns.
             <img
               src={item.primary_image_url}
+              srcSet={mediaImageSrcSet(item.primary_image_url)}
+              sizes="40px"
               alt={`${item.name} catalogue photo`}
               loading="lazy"
               decoding="async"
