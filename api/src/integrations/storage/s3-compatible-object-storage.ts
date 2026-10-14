@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import {
   DeleteObjectCommand,
   GetObjectCommand,
+  HeadObjectCommand,
   PutObjectCommand,
   S3Client,
   type S3ClientConfig,
@@ -17,6 +18,7 @@ import type {
   ObjectStorage,
   ReadAuthorization,
   StoredObjectRead,
+  StoredObjectMetadata,
   UploadAuthorization,
   UploadedObjectMetadata,
 } from './object-storage.js';
@@ -38,6 +40,8 @@ type StorageOperation =
   | 'authorize_upload'
   | 'authorize_read'
   | 'read_object'
+  | 'head_object'
+  | 'put_object'
   | 'inspect_uploaded_object'
   | 'delete_object';
 type StorageFailureClass = 'authorization' | 'configuration' | 'dependency';
@@ -151,6 +155,42 @@ export class S3CompatibleObjectStorage implements ObjectStorage {
       body: asAsyncByteStream(response.Body),
       contentLength: Number.isSafeInteger(response.ContentLength) ? response.ContentLength ?? null : null,
     };
+  }
+
+  async headObject(storageKey: string): Promise<StoredObjectMetadata | null> {
+    try {
+      const response = await this.client.send(
+        new HeadObjectCommand({
+          Bucket: this.storageConfig.OBJECT_STORAGE_BUCKET_PRIVATE,
+          Key: storageKey,
+        }),
+      );
+      return {
+        contentType: normalizeContentType(response.ContentType),
+        contentLength: Number.isSafeInteger(response.ContentLength)
+          ? response.ContentLength ?? null
+          : null,
+      };
+    } catch (error) {
+      if (isMissingObject(error)) return null;
+      throw mapStorageFailure(error, 'head_object');
+    }
+  }
+
+  async putObject(input: { storageKey: string; contentType: string; body: Uint8Array }): Promise<void> {
+    try {
+      await this.client.send(
+        new PutObjectCommand({
+          Bucket: this.storageConfig.OBJECT_STORAGE_BUCKET_PRIVATE,
+          Key: input.storageKey,
+          ContentType: input.contentType,
+          ContentLength: input.body.byteLength,
+          Body: input.body,
+        }),
+      );
+    } catch (error) {
+      throw mapStorageFailure(error, 'put_object');
+    }
   }
 
   async inspectUploadedObject(

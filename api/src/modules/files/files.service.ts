@@ -31,6 +31,8 @@ import {
   isAppError,
 } from '../../shared/errors.js';
 import { canonicalRequestHash } from '../../shared/idempotency.js';
+import { createMediaReadGrant, type MediaReadGrant } from './file-read-grant.js';
+import { enqueueAcceptedFileImageVariants } from './file-image-variants.js';
 import type { FailureEnvelope, SuccessEnvelope } from '../../shared/response.js';
 import {
   claimTenantIdempotency,
@@ -45,7 +47,11 @@ import {
   rejectFileObject,
   type FileObjectRow,
 } from './files.repository.js';
-import { staffUploadStorageKey, type SupportedUploadPurpose } from './files.storage-keys.js';
+import {
+  staffUploadStorageKey,
+  type ImageVariantWidth,
+  type SupportedUploadPurpose,
+} from './files.storage-keys.js';
 import type { FileStreamResponse } from './file-stream.js';
 
 const AUTHORIZE_UPLOAD_OPERATION = 'files.upload.authorize';
@@ -254,6 +260,7 @@ export async function finalizeUpload(
         },
         requestId: input.requestId,
       });
+      await enqueueAcceptedFileImageVariants(client, accepted);
       await finalizeSuccess(client, input, payloadHash, body);
       return { status: 200, body };
     } catch (error) {
@@ -307,6 +314,51 @@ export async function readStaffFile(
     mimeType,
     byteSize: file.byte_size,
   };
+}
+
+/** Issues a short server-to-server R2 grant after rechecking the same staff file policy. */
+export async function authorizeStaffFileRead(
+  input: FileContext & { branchId: string; requestId: string; fileId: string; width: ImageVariantWidth | null },
+  storage: ObjectStorage = objectStorage,
+): Promise<MediaReadGrant> {
+  const file = await withTenantTransaction(input.tenantId, input.principalId, (client) =>
+    readStaffFileObject(client, {
+      tenantId: input.tenantId,
+      branchId: input.branchId,
+      fileId: input.fileId,
+      permissionCodes: input.permissionCodes,
+    }),
+  );
+  if (!file) throw new NotFoundError('The requested file could not be found.');
+
+  const mimeType = safeFileContentType(file.purpose, file.mime_type);
+  const grant = await createMediaReadGrant({
+    tenantId: file.tenant_id,
+    fileId: file.id,
+    purpose: file.purpose,
+    storageKey: file.storage_key,
+    versionId: file.version_id,
+    mimeType,
+    byteSize: file.byte_size,
+    width: input.width,
+  }, storage);
+
+  await withTenantTransaction(input.tenantId, input.principalId, (client) =>
+    appendFileAuditEvent(client, {
+      tenantId: input.tenantId,
+      actorKey: input.principalId,
+      action: 'file.read.granted',
+      fileId: file.id,
+      redactedSummary: {
+        purpose: file.purpose,
+        content_type: grant.content_type,
+        byte_size: grant.byte_size,
+        expires_at: grant.expires_at,
+      },
+      requestId: input.requestId,
+    }),
+  );
+  return grant;
 }
 
 function assertFileWriteContext(input: FileContext, purpose: FileObjectRow['purpose']): void {

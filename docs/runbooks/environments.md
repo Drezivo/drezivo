@@ -152,6 +152,14 @@ naming convention) once TRD §12's "remaining selection" of hosting plans/region
 - `OBJECT_STORAGE_FORCE_PATH_STYLE` — `false` for R2; `true` for loopback MinIO.
 - `OBJECT_STORAGE_UPLOADS_ENABLED` — production cutover gate for issuing new upload URLs. If omitted
   in production it defaults to `false`; outside production it defaults to `true`.
+- `MEDIA_READ_GRANT_SECRET` — random server-only secret of at least 32 characters, shared by the
+  API/worker and matching `app` and `web` deployments. Use a different value for development,
+  staging/preview, and production. It authenticates server-to-server media grants and cache-purge
+  requests; never use a `NEXT_PUBLIC_` name or send it to a browser. Staging and production API
+  startup requires it.
+- `STOREFRONT_WEB_URL` — exact HTTPS origin of the matching `web` deployment, set on the API and
+  worker. The worker posts tenant cache-purge requests to this origin. Staging and production API
+  startup requires it. Local development may use the loopback web origin.
 - `FILE_OBJECT_CLEANUP_ENABLED` — producer gate for enqueueing cleanup when a replacement displaces
   an accepted file. Local development/test defaults to `true`; staging and production default to
   `false`. When disabled, a replacement that would enqueue cleanup returns a retryable 503 before
@@ -197,6 +205,9 @@ naming convention) once TRD §12's "remaining selection" of hosting plans/region
   verify a session before calling the API; TRD §1 is explicit that Next.js "does not become a
   second source of financial or availability logic," so this key authenticates, it does not
   authorize business writes.
+- `MEDIA_READ_GRANT_SECRET` — same environment-specific server-only value configured on the API.
+  The staff media route uses it to request an authorized read grant; it must never be prefixed with
+  `NEXT_PUBLIC_`.
 - `API_BASE_URL` — the `api` server's base URL for this environment. Next.js server rendering
   calls the API through scoped service/request adapters (TRD §1); it never holds a database
   connection string directly.
@@ -215,6 +226,9 @@ naming convention) once TRD §12's "remaining selection" of hosting plans/region
 
 - `API_ORIGIN` — server-side API origin for server-rendered storefront pages (may be an internal
   address). Falls back to `NEXT_PUBLIC_API_ORIGIN`.
+- `MEDIA_READ_GRANT_SECRET` — same environment-specific server-only value configured on the API.
+  Public and preview media routes use it for server-to-server grants and cache invalidation; it
+  must never be prefixed with `NEXT_PUBLIC_`.
 - `NEXT_PUBLIC_API_ORIGIN` — browser-reachable API origin for availability, holds, guest reservation
   proof/receipts, and fitting requests. Guest reservation calls use credentialed requests so the
   API-host-only cookie can be set/read. Must be listed in the API's `CORS_ALLOWED_ORIGINS` origin
@@ -226,6 +240,13 @@ naming convention) once TRD §12's "remaining selection" of hosting plans/region
   scoped to one reservation's API path; never copy a capability into a URL, browser storage,
   analytics, referrer, or log. The storefront uses credentialed requests and API CORS must allow
   the exact storefront origin.
+
+Public media URLs point to `web` and remain stable. The API issues a 60-second R2 GET grant only to
+the web/app server; browsers never receive that grant, the R2 host, or an object key. Public image
+bytes are cached by Vercel for at most 45 seconds and purged by tenant after visibility or
+file-reference changes. Browser caching requires revalidation, so visitors do not need to reload a
+page just because a signed grant expired. Preview and staff media use separate uncached, no-store
+routes.
 
 ## `contracts` (`@drezivo/contracts`)
 

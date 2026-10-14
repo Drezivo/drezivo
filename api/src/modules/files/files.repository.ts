@@ -22,6 +22,20 @@ export interface FileObjectRow {
   frozen_at: Date | null;
 }
 
+export type ImageVariantSourceRow = Pick<
+  FileObjectRow,
+  | 'id'
+  | 'tenant_id'
+  | 'purpose'
+  | 'storage_key'
+  | 'version_id'
+  | 'sha256'
+  | 'mime_type'
+  | 'byte_size'
+  | 'lifecycle_status'
+  | 'frozen_at'
+>;
+
 export type StaffReadableFileObjectRow = FileObjectRow;
 
 export async function insertPendingFile(
@@ -72,6 +86,27 @@ export async function readFileObject(
        FROM file_object
       WHERE tenant_id = $1 AND id = $2
       LIMIT 1${options?.forUpdate ? ' FOR UPDATE' : ''}`,
+    [tenantId, fileId],
+  );
+  return result.rows[0] ?? null;
+}
+
+/** Worker-only, tenant-scoped source lookup; optional row lock serializes derivative writes with cleanup. */
+export async function readAcceptedImageVariantSource(
+  client: PoolClient,
+  tenantId: string,
+  fileId: string,
+  forUpdate = false,
+): Promise<ImageVariantSourceRow | null> {
+  const result = await client.query<ImageVariantSourceRow>(
+    `SELECT id, tenant_id, purpose, storage_key, version_id, sha256, mime_type, byte_size,
+            lifecycle_status, frozen_at
+       FROM file_object
+      WHERE tenant_id = $1 AND id = $2::uuid
+        AND lifecycle_status = 'accepted' AND frozen_at IS NOT NULL
+        AND purpose IN ('catalogue_image', 'measurement_guide', 'storefront_asset', 'payment_method_material')
+        AND mime_type IN ('image/jpeg', 'image/png', 'image/webp')
+      LIMIT 1${forUpdate ? ' FOR UPDATE' : ''}`,
     [tenantId, fileId],
   );
   return result.rows[0] ?? null;

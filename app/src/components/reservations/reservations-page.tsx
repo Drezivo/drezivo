@@ -23,6 +23,7 @@ import type {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { mediaImageSrcSet } from "@/lib/media-image-srcset";
 import { DateRangePickerField } from "@/components/ui/date-range-picker-field";
 import { Input } from "@/components/ui/input";
 import {
@@ -695,6 +696,8 @@ function ReservationClothingThumbnail({ reservation }: { reservation: Reservatio
         // eslint-disable-next-line @next/next/no-img-element -- API-provided signed URLs are short-lived and dynamic.
         <img
           src={imageUrl}
+          srcSet={mediaImageSrcSet(imageUrl)}
+          sizes="40px"
           alt={`${reservation.line.name_snapshot} cover image`}
           className="h-full w-full object-cover"
           onError={() => setImageFailed(true)}

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 
 import type { GuestReservationView } from '@drezivo/contracts';
 
+import { mediaImageSrcSet } from '@/lib/media-image-srcset';
 import { receiptProblem, uploadReceipt } from '@/lib/receipt-upload';
 import { StorefrontApiError } from '@/lib/storefront-api';
 import { formatMinor } from '@/lib/storefront-format';
@@ -97,7 +98,7 @@ export function PaymentStep({ reservation, onSubmitted }: { reservation: GuestRe
           </h3>
           {instructions.qr_image_url ? (
             // eslint-disable-next-line @next/next/no-img-element -- app-owned public media route
-            <img src={instructions.qr_image_url} alt={`${instructions.method_name} QR code`} className="mx-auto w-56 border border-sf-line bg-white p-2" />
+            <img src={instructions.qr_image_url} srcSet={mediaImageSrcSet(instructions.qr_image_url)} sizes="224px" alt={`${instructions.method_name} QR code`} className="mx-auto w-56 border border-sf-line bg-white p-2" />
           ) : null}
           {instructions.destination_note ? <p className="whitespace-pre-line border border-sf-line bg-sf-surface px-4 py-3 text-sm leading-7">{instructions.destination_note}</p> : null}
           {instructions.material_url ? (
@@ -110,7 +111,7 @@ export function PaymentStep({ reservation, onSubmitted }: { reservation: GuestRe
               </div>
             ) : (
               // eslint-disable-next-line @next/next/no-img-element -- app-owned public media route
-              <img src={instructions.material_url} alt={`${instructions.method_name} payment instructions`} className="mx-auto w-full max-w-sm border border-sf-line bg-white" />
+              <img src={instructions.material_url} srcSet={mediaImageSrcSet(instructions.material_url)} sizes="(min-width: 640px) 24rem, 100vw" alt={`${instructions.method_name} payment instructions`} className="mx-auto w-full max-w-sm border border-sf-line bg-white" />
             )
           ) : null}
           <p className="text-xs text-sf-muted">Send exactly {formatMinor(reservation.money.due_now_minor)} and keep the receipt screenshot.</p>

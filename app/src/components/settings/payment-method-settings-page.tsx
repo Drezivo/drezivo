@@ -29,6 +29,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { ImageLightbox } from "@/components/ui/image-lightbox";
 import { Input } from "@/components/ui/input";
 import { createDrezivoApiClient, DrezivoApiError } from "@/lib/drezivo-api";
+import { mediaImageSrcSet } from "@/lib/media-image-srcset";
 import { storefrontImageProblem, uploadStorefrontImage, type ImageUploadPurpose, type UploadIntent } from "@/lib/storefront-assets";
 import { useSubmitGuard } from "@/lib/use-submit-guard";
 
@@ -661,7 +662,7 @@ function FilePreview({
       className="group relative mb-2 block w-fit max-w-full cursor-zoom-in overflow-hidden rounded-lg border border-dashboard-border bg-dashboard-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-dashboard-accent/50"
     >
       {/* eslint-disable-next-line @next/next/no-img-element -- API-proxied media route or local upload preview */}
-      <img src={url} alt={label} className="block max-h-48 max-w-full w-auto object-contain" />
+      <img src={url} srcSet={mediaImageSrcSet(url)} sizes="(min-width: 640px) 48rem, 100vw" alt={label} className="block max-h-48 max-w-full w-auto object-contain" />
       <span className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/55 to-transparent px-1 pb-1.5 pt-5 text-center text-[10px] font-medium text-white opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
         Click to enlarge
       </span>

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import type { CatalogueCard, FittingSlotsResponse, GuestFittingCreated, GuestFittingRequest, ItemDetail, PublicStorefront } from '@drezivo/contracts';
 
+import { mediaImageSrcSet } from '@/lib/media-image-srcset';
 import { getFittingSlots, getItem, requestFitting, StorefrontApiError } from '@/lib/storefront-api';
 import { addDays, dateIn, formatDay, formatInstant, formatMinor } from '@/lib/storefront-format';
 
@@ -224,7 +225,7 @@ export function FittingFlow({ store, items }: { store: PublicStorefront; items: 
                     <span className="block aspect-[3/4] overflow-hidden bg-sf-line">
                       {item.image_url ? (
                         // eslint-disable-next-line @next/next/no-img-element -- app-owned public media route
-                        <img src={item.image_url} alt="" loading="lazy" className="h-full w-full object-cover transition-transform group-hover:scale-[1.03] motion-reduce:transition-none" />
+                        <img src={item.image_url} srcSet={mediaImageSrcSet(item.image_url)} sizes="(min-width: 1024px) 25vw, 50vw" alt="" loading="lazy" className="h-full w-full object-cover transition-transform group-hover:scale-[1.03] motion-reduce:transition-none" />
                       ) : null}
                     </span>
                     <span className="mt-1.5 block truncate text-xs">{item.name}</span>
