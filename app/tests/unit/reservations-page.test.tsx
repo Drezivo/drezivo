@@ -635,7 +635,7 @@ describe("ReservationsPage", () => {
     );
 
     const firstRender = render(<ReservationsPage />);
-    expect(screen.getByText("Loading reservations…")).toBeVisible();
+    expect(screen.getByRole("status", { name: "Loading reservations" })).toBeVisible();
     resolveRequest?.(page([]));
     expect(await screen.findByText("No reservations yet")).toBeVisible();
     firstRender.unmount();

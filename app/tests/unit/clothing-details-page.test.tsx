@@ -166,6 +166,16 @@ describe("ClothingDetailsPage", () => {
     });
   });
 
+  it("shows a content-shaped skeleton while the initial detail request is pending", () => {
+    api.getCatalogueClothingDetail.mockReturnValueOnce(new Promise(() => {}));
+
+    render(<ClothingDetailsPage productId={productId} />);
+
+    expect(screen.getByRole("status", { name: "Loading clothing details" })).toBeVisible();
+    expect(screen.queryByRole("heading", { name: "Emerald Evening Gown" })).not.toBeInTheDocument();
+    expect(document.querySelectorAll('[data-slot="skeleton"]').length).toBeGreaterThan(0);
+  });
+
   it("loads and renders the real clothing detail endpoint response", async () => {
     render(<ClothingDetailsPage productId={productId} />);
 
