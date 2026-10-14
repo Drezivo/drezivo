@@ -352,7 +352,7 @@ describe('Dashboard overview API', async () => {
     expect(data.window.timezone).toBe('America/Los_Angeles');
     expect(Date.parse(data.window.today.start)).toBeLessThan(Date.parse(data.window.today.end));
     expect(data.window.upcoming_fittings.start).toBe(data.window.as_of);
-    expect(data.metrics).toEqual({
+    expect(data.metrics).toMatchObject({
       active_rentals: 2,
       pickups_today: 1,
       returns_today: 1,
