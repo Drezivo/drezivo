@@ -146,11 +146,13 @@ jobs:
           fi
           git cat-file -e "${BEFORE_SHA}^{commit}"
 
-          changed_files="$(git diff --name-only "$BEFORE_SHA" "$GITHUB_SHA" -- api/src/db/migrations/)"
+          changed_files="$(git diff --name-only "$BEFORE_SHA" "$GITHUB_SHA" -- api/src/db/migrations/ api/scripts/)"
           migration_files="$(printf '%s\n' "$changed_files" | grep -E '^api/src/db/migrations/[0-9]{4}_.*\.sql$' || true)"
-          if [[ -n "$migration_files" ]]; then
-            echo "Migration files changed on main:"
+          runner_files="$(printf '%s\n' "$changed_files" | grep -E '^api/scripts/(migrate\.ts|migration-[^/]+\.ts)$' || true)"
+          if [[ -n "$migration_files" || -n "$runner_files" ]]; then
+            echo "Migration inputs changed on main:"
             printf '%s\n' "$migration_files"
+            printf '%s\n' "$runner_files"
             echo "run=true" >> "$GITHUB_OUTPUT"
           else
             echo "run=false" >> "$GITHUB_OUTPUT"
@@ -202,11 +204,13 @@ jobs:
           fi
           git cat-file -e "${BEFORE_SHA}^{commit}"
 
-          changed_files="$(git diff --name-only "$BEFORE_SHA" "$GITHUB_SHA" -- api/src/db/migrations/)"
+          changed_files="$(git diff --name-only "$BEFORE_SHA" "$GITHUB_SHA" -- api/src/db/migrations/ api/scripts/)"
           migration_files="$(printf '%s\n' "$changed_files" | grep -E '^api/src/db/migrations/[0-9]{4}_.*\.sql$' || true)"
-          if [[ -n "$migration_files" ]]; then
-            echo "Migration files changed on staging:"
+          runner_files="$(printf '%s\n' "$changed_files" | grep -E '^api/scripts/(migrate\.ts|migration-[^/]+\.ts)$' || true)"
+          if [[ -n "$migration_files" || -n "$runner_files" ]]; then
+            echo "Migration inputs changed on staging:"
             printf '%s\n' "$migration_files"
+            printf '%s\n' "$runner_files"
             echo "run=true" >> "$GITHUB_OUTPUT"
           else
             echo "run=false" >> "$GITHUB_OUTPUT"
@@ -259,7 +263,7 @@ jobs:
       - name: Install dependencies
         run: npm ci --include=dev
       - name: Report staging migration status
-        run: npm run db:migrate:status --workspace @drezivo/api
+        run: npm run db:migrate:status --workspace @drezivo/api -- --through 0080_file_image_variants_backfill.sql
       - name: Reject a stale staging commit before applying
         if: needs.staging-migration-scope.outputs.apply == 'true'
         shell: bash
@@ -271,7 +275,10 @@ jobs:
             echo "::error::This migration run became stale before application."
             exit 1
           fi
-      - name: Apply staging migrations
+      - name: Apply staging image variants backfill
+        if: needs.staging-migration-scope.outputs.apply == 'true'
+        run: npm run db:migrate --workspace @drezivo/api -- --through 0080_file_image_variants_backfill.sql
+      - name: Apply remaining staging migrations
         if: needs.staging-migration-scope.outputs.apply == 'true'
         run: npm run db:migrate --workspace @drezivo/api
       - name: Verify staging migration status
@@ -315,7 +322,7 @@ jobs:
       - name: Install dependencies
         run: npm ci --include=dev
       - name: Report preview migration status
-        run: npm run db:migrate:status --workspace @drezivo/api
+        run: npm run db:migrate:status --workspace @drezivo/api -- --through 0080_file_image_variants_backfill.sql
       - name: Reject a stale main commit before applying
         if: needs.migration-scope.outputs.apply == 'true'
         shell: bash
@@ -327,7 +334,10 @@ jobs:
             echo "::error::This migration run became stale before application."
             exit 1
           fi
-      - name: Apply preview migrations
+      - name: Apply preview image variants backfill
+        if: needs.migration-scope.outputs.apply == 'true'
+        run: npm run db:migrate --workspace @drezivo/api -- --through 0080_file_image_variants_backfill.sql
+      - name: Apply remaining preview migrations
         if: needs.migration-scope.outputs.apply == 'true'
         run: npm run db:migrate --workspace @drezivo/api
       - name: Verify preview migration status
@@ -377,7 +387,7 @@ jobs:
       - name: Install dependencies
         run: npm ci --include=dev
       - name: Report production migration status
-        run: npm run db:migrate:status --workspace @drezivo/api
+        run: npm run db:migrate:status --workspace @drezivo/api -- --through 0080_file_image_variants_backfill.sql
       - name: Reject a stale main commit before applying
         shell: bash
         run: |
@@ -388,7 +398,9 @@ jobs:
             echo "::error::This migration run became stale before application."
             exit 1
           fi
-      - name: Apply production migrations
+      - name: Apply production image variants backfill
+        run: npm run db:migrate --workspace @drezivo/api -- --through 0080_file_image_variants_backfill.sql
+      - name: Apply remaining production migrations
         run: npm run db:migrate --workspace @drezivo/api
       - name: Verify production migration status
         run: npm run db:migrate:status --workspace @drezivo/api
