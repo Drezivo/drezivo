@@ -16891,6 +16891,24 @@ paths:
                               - current_minor
                               - previous_minor
                             additionalProperties: false
+                          projected_sales_current_month:
+                            type: object
+                            properties:
+                              current_minor:
+                                type: string
+                                pattern: ^-?(0|[1-9]\d*)$
+                              reservations:
+                                type: integer
+                                minimum: -9007199254740991
+                                maximum: 9007199254740991
+                            required:
+                              - current_minor
+                              - reservations
+                            additionalProperties: false
+                            description: Current branch-local month completed rental fees plus fees from
+                              confirmed reservations with pickup_at at or after
+                              as_of within the same month. Excludes deposits and
+                              non-completed/non-confirmed statuses.
                           new_customers:
                             type: object
                             properties:
@@ -16929,6 +16947,7 @@ paths:
                           - completed_rental_value
                           - completed_rentals
                           - average_rental_value
+                          - projected_sales_current_month
                           - new_customers
                         additionalProperties: false
                     required:

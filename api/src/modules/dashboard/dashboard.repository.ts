@@ -332,6 +332,29 @@ export const DASHBOARD_OVERVIEW_SQL = `WITH branch_clock AS MATERIALIZED (
         AND r.completed_at >= w.previous_month_start AND r.completed_at < w.month_end
        GROUP BY w.month_start, w.month_end, w.previous_month_start, w.previous_month_end
      ),
+     monthly_projection AS (
+       SELECT
+         (completed.rental_value_minor + upcoming.rental_value_minor)::text AS current_value_minor,
+         upcoming.projected_reservations
+       FROM windows w
+       CROSS JOIN LATERAL (
+         SELECT COALESCE(sum(r.rental_total_minor::numeric), 0) AS rental_value_minor
+           FROM reservation r
+          WHERE r.tenant_id = $1::uuid AND r.branch_id = $2::uuid
+            AND r.status = 'completed'
+            AND r.completed_at >= w.month_start AND r.completed_at < w.month_end
+       ) completed
+       CROSS JOIN LATERAL (
+         SELECT
+           COALESCE(sum(r.rental_total_minor::numeric), 0) AS rental_value_minor,
+           count(*)::int AS projected_reservations
+           FROM reservation r
+          WHERE r.tenant_id = $1::uuid AND r.branch_id = $2::uuid
+            AND r.status = 'confirmed'
+            AND r.pickup_at >= w.as_of
+            AND r.pickup_at >= w.month_start AND r.pickup_at < w.month_end
+       ) upcoming
+     ),
      projection AS (
        SELECT
          (completed.rental_value_minor + upcoming.rental_value_minor)::text AS projected_value_minor,
@@ -414,6 +437,10 @@ export const DASHBOARD_OVERVIEW_SQL = `WITH branch_clock AS MATERIALIZED (
            'current_minor', perf.current_average_minor,
            'previous_minor', perf.previous_average_minor
          ),
+         'projected_sales_current_month', jsonb_build_object(
+           'current_minor', monthly_projection.current_value_minor,
+           'reservations', monthly_projection.projected_reservations
+         ),
          'new_customers', jsonb_build_object(
            'current', customer_counts.current_customers,
            'previous', customer_counts.previous_customers
@@ -432,6 +459,7 @@ export const DASHBOARD_OVERVIEW_SQL = `WITH branch_clock AS MATERIALIZED (
      CROSS JOIN fitting_count fitting_total
      CROSS JOIN upcoming_fittings fittings
      CROSS JOIN performance perf
+     CROSS JOIN monthly_projection
      CROSS JOIN projection
      CROSS JOIN new_customer_counts customer_counts`;
 

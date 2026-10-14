@@ -245,6 +245,7 @@ describe('Dashboard overview API', async () => {
       completed_rental_value: { current_minor: '0', previous_minor: '0' },
       completed_rentals: { current: 0, previous: 0 },
       average_rental_value: { current_minor: null, previous_minor: null },
+      projected_sales_current_month: { current_minor: '0', reservations: 0 },
       new_customers: { current: 1, previous: 1 },
     });
   });
@@ -405,6 +406,7 @@ describe('Dashboard overview API', async () => {
       completed_rental_value: { current_minor: '12000', previous_minor: '7000' },
       completed_rentals: { current: 1, previous: 1 },
       average_rental_value: { current_minor: '12000', previous_minor: '7000' },
+      projected_sales_current_month: { current_minor: '17000', reservations: 1 },
       new_customers: { current: 1, previous: 1 },
     });
     expect(data.business_performance.projected_rental_value).toEqual({

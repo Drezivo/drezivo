@@ -472,12 +472,11 @@ export function DashboardOverview() {
           <Card className="py-0">
             <CardHeader className="border-b border-dashboard-border px-5 py-5">
               <div>
-                <CardTitle as="h2" className="text-base text-dashboard-navy">
+                <CardTitle as="h2" className="text-lg text-dashboard-navy sm:text-xl">
                   Business Performance
                 </CardTitle>
                 <p className="mt-1 text-xs text-dashboard-muted">
-                  Completed Rental Value is month-to-date; Projected Rental Value combines completed
-                  rental fees to date with upcoming confirmed bookings, excluding deposits.
+                  Monthly rental performance, projected sales, completed bookings, and new customers.
                 </p>
               </div>
               <CardAction>
@@ -488,6 +487,20 @@ export function DashboardOverview() {
             </CardHeader>
             <CardContent className="space-y-4 px-5 pb-5 pt-5">
               <div className="grid grid-cols-2 gap-3">
+                {overview.business_performance.projected_rental_value ? (
+                  <div className="col-span-2">
+                    <PerformanceMetric
+                      label="Projected Rental Value"
+                      value={formatMoneyMinor(
+                        overview.business_performance.projected_rental_value.current_minor,
+                        overview.business_performance.currency
+                      )}
+                      comparison={projectionNote(
+                        overview.business_performance.projected_rental_value.reservations
+                      )}
+                    />
+                  </div>
+                ) : null}
                 <PerformanceMetric
                   label="Completed Rental Value"
                   value={formatMoneyMinor(
@@ -510,18 +523,13 @@ export function DashboardOverview() {
                   )}
                 />
                 <PerformanceMetric
-                  label="Average Rental Value"
-                  value={
-                    overview.business_performance.average_rental_value.current_minor === null
-                      ? "—"
-                      : formatMoneyMinor(
-                          overview.business_performance.average_rental_value.current_minor,
-                          overview.business_performance.currency
-                        )
-                  }
-                  comparison={compareOptionalMoney(
-                    overview.business_performance.average_rental_value.current_minor,
-                    overview.business_performance.average_rental_value.previous_minor
+                  label="Projected Sales This Month"
+                  value={formatMoneyMinor(
+                    overview.business_performance.projected_sales_current_month.current_minor,
+                    overview.business_performance.currency
+                  )}
+                  comparison={monthlyProjectionNote(
+                    overview.business_performance.projected_sales_current_month.reservations
                   )}
                 />
                 <PerformanceMetric
@@ -534,20 +542,6 @@ export function DashboardOverview() {
                     overview.business_performance.new_customers.previous
                   )}
                 />
-                {overview.business_performance.projected_rental_value ? (
-                  <div className="col-span-2">
-                    <PerformanceMetric
-                      label="Projected Rental Value"
-                      value={formatMoneyMinor(
-                        overview.business_performance.projected_rental_value.current_minor,
-                        overview.business_performance.currency
-                      )}
-                      comparison={projectionNote(
-                        overview.business_performance.projected_rental_value.reservations
-                      )}
-                    />
-                  </div>
-                ) : null}
               </div>
             </CardContent>
           </Card>
@@ -631,6 +625,12 @@ function projectionNote(reservations: number): string {
   if (reservations === 0)
     return "Completed rental fees to date, with no upcoming confirmed bookings";
   return `Completed rental fees to date + ${reservations.toLocaleString("en-PH")} upcoming confirmed ${reservations === 1 ? "reservation" : "reservations"}`;
+}
+
+function monthlyProjectionNote(reservations: number): string {
+  if (reservations === 0)
+    return "Completed rental fees + no upcoming confirmed bookings this month";
+  return `Completed rental fees + ${reservations.toLocaleString("en-PH")} upcoming confirmed ${reservations === 1 ? "reservation" : "reservations"} this month`;
 }
 
 function PerformanceMetric({
@@ -737,12 +737,6 @@ function formatMoneyMinorWithFractionDigits(
 }
 
 function compareMoney(current: string, previous: string): string {
-  return compareBigInt(BigInt(current), BigInt(previous));
-}
-
-function compareOptionalMoney(current: string | null, previous: string | null): string {
-  if (current === null) return "No completed rentals this month";
-  if (previous === null) return "No prior-month baseline";
   return compareBigInt(BigInt(current), BigInt(previous));
 }
 
