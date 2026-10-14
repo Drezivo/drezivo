@@ -27,6 +27,12 @@ export async function enqueueReplacedFileObjectCleanup(
   await enqueueFileObjectCleanupCandidates(client, tenantId, [previousFileId]);
 }
 
+/** Queue a file whose setting reference was removed; durable snapshots may keep it alive. */
+export async function enqueueDetachedFileObjectCleanup(client: PoolClient, tenantId: string, previousFileId: string | null): Promise<void> {
+  if (!previousFileId) return;
+  await enqueueFileObjectCleanupCandidates(client, tenantId, [previousFileId]);
+}
+
 /** For set replacements, do nothing when the request only removes or reorders existing files. */
 export async function enqueueReplacedFileObjectSetCleanup(
   client: PoolClient,

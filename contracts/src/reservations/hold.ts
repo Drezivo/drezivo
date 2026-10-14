@@ -27,6 +27,24 @@ export const paymentInstructions = z
     /** A business's own instructions file (PDF or image) shown instead of, or with, the details. */
     material_url: mediaUrl.optional(),
     material_content_type: z.enum(['application/pdf', 'image/jpeg', 'image/png', 'image/webp']).optional(),
+    /** Tenant-wide renter guide frozen when a storefront reservation is created. */
+    renter_steps: z
+      .object({
+        text: z.string().trim().max(2_000).nullable(),
+        image_url: z.string().url().optional(),
+        image_content_type: z.enum(['image/jpeg', 'image/png', 'image/webp']).optional(),
+      })
+      .strict()
+      .superRefine((value, ctx) => {
+        if (value.text && value.image_url) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['image_url'],
+            message: 'Renter steps must be text or an image.',
+          });
+        }
+      })
+      .optional(),
   })
   .strict();
 export type PaymentInstructions = z.infer<typeof paymentInstructions>;

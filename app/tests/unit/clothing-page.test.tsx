@@ -173,6 +173,31 @@ describe("ClothingPage", () => {
     });
   });
 
+  it("shows summary and catalogue skeletons until the first request resolves", async () => {
+    let resolveRequest: ((value: unknown) => void) | undefined;
+    api.getCatalogueClothing.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveRequest = resolve;
+      })
+    );
+
+    render(<ClothingPage />);
+
+    expect(screen.getByRole("status", { name: "Loading clothing summary" })).toBeVisible();
+    expect(screen.getByRole("status", { name: "Loading clothing" })).toBeVisible();
+    expect(screen.queryByText("Real Black Satin Gown")).not.toBeInTheDocument();
+
+    resolveRequest?.({
+      data: {
+        items: [firstItem],
+        page_meta: { next_cursor: null, has_more: false },
+        summary: defaultSummary,
+      },
+    });
+    expect(await screen.findByText("Real Black Satin Gown")).toBeVisible();
+    expect(screen.queryByRole("status", { name: "Loading clothing" })).not.toBeInTheDocument();
+  });
+
   it("shows a one-time draft-saved notice that can be dismissed", async () => {
     sessionStorage.setItem("drezivo:inventory-notice", "draft-saved");
 
@@ -182,7 +207,7 @@ describe("ClothingPage", () => {
     expect(sessionStorage.getItem("drezivo:inventory-notice")).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "Dismiss inventory message" }));
-    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    expect(screen.queryByText("Draft saved")).not.toBeInTheDocument();
   });
 
   it("shows flexible-fit clothing as one explicit size instead of zero sizes", async () => {
@@ -218,10 +243,10 @@ describe("ClothingPage", () => {
     sessionStorage.setItem("drezivo:inventory-notice", "draft-saved");
 
     render(<ClothingPage />);
-    expect(screen.getByRole("status")).toHaveTextContent("Draft saved");
+    expect(screen.getByText("Draft saved")).toBeVisible();
 
     act(() => vi.advanceTimersByTime(3000));
-    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    expect(screen.queryByText("Draft saved")).not.toBeInTheDocument();
     vi.useRealTimers();
   });
 

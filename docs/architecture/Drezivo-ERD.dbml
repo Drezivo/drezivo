@@ -130,6 +130,21 @@ Table tenant {
   Note: 'V1. Business isolation boundary. Status active/restricted/cancelled; current state is not historical booking policy. TBF-031 resolves this row from the Clerk token organization before entering tenant RLS.'
 }
 
+Table tenant_settings {
+  tenant_id uuid [pk, not null]
+  business_email text
+  business_phone text
+  business_address text
+  notification_preferences jsonb [not null]
+  renter_steps_text text
+  renter_steps_file_id uuid
+  renter_steps_version integer [not null, default: 1]
+  version integer [not null, default: 1]
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+  Note: 'V1. One tenant-level settings row. Renter steps are mutually exclusive bounded text or an accepted same-tenant image; legacy method-specific values remain visible for consolidation when conflicting.'
+}
+
 Table branch {
   tenant_id uuid [not null]
   id uuid [not null]
@@ -447,6 +462,9 @@ Table reservation {
   due_now_minor bigint [not null]
   hold_acquired_at timestamptz [not null]
   hold_expires_at timestamptz
+  renter_steps_text_snapshot text
+  renter_steps_file_id_snapshot uuid
+  renter_steps_version_snapshot integer
   terms_accepted_at timestamptz
   submitted_at timestamptz
   confirmed_at timestamptz
@@ -459,7 +477,7 @@ Table reservation {
     (tenant_id, branch_id, status, pickup_at)
     (tenant_id, status, hold_expires_at)
   }
-  Note: 'V1. Customer/contact may be absent for anonymous short hold; nonblank address is required before pending_confirmation. customer_snapshot retains address for accepted reservation history; historical snapshots may have null address. Social media is never snapshotted. Canonical reservation states in model doc.'
+  Note: 'V1. Customer/contact may be absent for anonymous short hold; nonblank address is required before pending_confirmation. customer_snapshot retains address for accepted reservation history; renter_steps snapshots freeze the tenant guide shown at storefront hold creation. Historical snapshots may have null address. Social media is never snapshotted. Canonical reservation states in model doc.'
 }
 
 Table reservation_line {
@@ -1121,11 +1139,14 @@ Ref: measurement_guide.tenant_id > tenant.id [delete: restrict, update: no actio
 Ref: product_variant.tenant_id > tenant.id [delete: restrict, update: no action]
 Ref: physical_asset.tenant_id > tenant.id [delete: restrict, update: no action]
 Ref: file_object.tenant_id > tenant.id [delete: restrict, update: no action]
+Ref: tenant_settings.tenant_id > tenant.id [delete: restrict, update: no action]
+Ref: tenant_settings.(tenant_id, renter_steps_file_id) > file_object.(tenant_id, id) [delete: restrict, update: no action]
 Ref: product_image.tenant_id > tenant.id [delete: restrict, update: no action]
 Ref: storefront.tenant_id > tenant.id [delete: restrict, update: no action]
 Ref: policy_snapshot.tenant_id > tenant.id [delete: restrict, update: no action]
 Ref: payment_method.tenant_id > tenant.id [delete: restrict, update: no action]
 Ref: reservation.tenant_id > tenant.id [delete: restrict, update: no action]
+Ref: reservation.(tenant_id, renter_steps_file_id_snapshot) > file_object.(tenant_id, id) [delete: restrict, update: no action]
 Ref: reservation_line.tenant_id > tenant.id [delete: restrict, update: no action]
 Ref: maintenance_work_order.tenant_id > tenant.id [delete: restrict, update: no action]
 Ref: asset_allocation.tenant_id > tenant.id [delete: restrict, update: no action]

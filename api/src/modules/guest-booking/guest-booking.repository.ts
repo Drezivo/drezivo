@@ -80,7 +80,39 @@ export interface GuestReservationRow {
   presentation: 'details' | 'material';
   material_file_id: string | null;
   material_mime: string | null;
+  renter_steps_text_snapshot: string | null;
+  renter_steps_file_id_snapshot: string | null;
+  renter_steps_version_snapshot: number | null;
+  renter_steps_image_mime: string | null;
   receipt_submitted: boolean;
+}
+
+export interface SharedRenterStepsSnapshot {
+  text: string | null;
+  file_id: string | null;
+  version: number;
+}
+
+/** Locks the current tenant guide so a concurrent settings edit cannot split a reservation snapshot. */
+export async function readSharedRenterStepsSnapshot(client: PoolClient, tenantId: string): Promise<SharedRenterStepsSnapshot> {
+  await client.query('INSERT INTO tenant_settings (tenant_id) VALUES ($1) ON CONFLICT (tenant_id) DO NOTHING', [tenantId]);
+  const result = await client.query<SharedRenterStepsSnapshot>(
+    `SELECT ts.renter_steps_text AS text,
+            CASE WHEN fo.lifecycle_status = 'accepted'
+                       AND fo.purpose = 'payment_method_material'
+                       AND fo.mime_type IN ('image/jpeg', 'image/png', 'image/webp')
+                       AND fo.byte_size BETWEEN 1 AND 10485760
+                 THEN ts.renter_steps_file_id ELSE NULL END AS file_id,
+            ts.renter_steps_version AS version
+       FROM tenant_settings ts
+       LEFT JOIN file_object fo ON fo.tenant_id = ts.tenant_id AND fo.id = ts.renter_steps_file_id
+      WHERE ts.tenant_id = $1
+      FOR SHARE OF ts`,
+    [tenantId],
+  );
+  const row = result.rows[0];
+  if (!row) throw new Error('Tenant renter steps settings row was unavailable.');
+  return row;
 }
 
 export async function readGuestReservation(client: PoolClient, tenantId: string, reservationId: string): Promise<GuestReservationRow | null> {
@@ -90,6 +122,14 @@ export async function readGuestReservation(client: PoolClient, tenantId: string,
             pm.name AS method_name, pm.rail, pm.destination_snapshot, pm.qr_file_id,
             pm.presentation, pm.material_file_id,
             (SELECT fo.mime_type FROM file_object fo WHERE fo.tenant_id = pm.tenant_id AND fo.id = pm.material_file_id) AS material_mime,
+            r.renter_steps_text_snapshot,
+            r.renter_steps_file_id_snapshot,
+            r.renter_steps_version_snapshot,
+            (SELECT fo.mime_type FROM file_object fo
+              WHERE fo.tenant_id = r.tenant_id AND fo.id = r.renter_steps_file_id_snapshot
+                AND fo.lifecycle_status = 'accepted' AND fo.purpose = 'payment_method_material'
+                AND fo.mime_type IN ('image/jpeg', 'image/png', 'image/webp')
+                AND fo.byte_size BETWEEN 1 AND 10485760) AS renter_steps_image_mime,
             EXISTS (
               SELECT 1 FROM payment p
                 JOIN payment_receipt pr ON pr.tenant_id = p.tenant_id AND pr.payment_id = p.id

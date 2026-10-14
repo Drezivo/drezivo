@@ -379,6 +379,7 @@ export async function createHeldReservation(
     assetId: string;
     lines?: ClaimedReservationLine[];
     customer: ReservationCustomerSnapshotRow | null;
+    renterStepsSnapshot?: { text: string | null; fileId: string | null; version: number | null };
   },
 ): Promise<{ graph: Awaited<ReturnType<typeof createReservationGraph>>; referenceCode: string }> {
   const reservationId = randomUUID();
@@ -440,6 +441,9 @@ export async function createHeldReservation(
       : null,
     deliverySnapshot: input.quote.delivery_snapshot,
     priceSnapshot: input.quote.price_snapshot,
+    renterStepsTextSnapshot: input.renterStepsSnapshot?.text ?? null,
+    renterStepsFileIdSnapshot: input.renterStepsSnapshot?.fileId ?? null,
+    renterStepsVersionSnapshot: input.renterStepsSnapshot?.version ?? null,
     rentalTotalMinor,
     securityRequiredMinor,
     dueNowMinor,

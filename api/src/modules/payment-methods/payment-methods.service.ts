@@ -6,14 +6,18 @@ import {
   createPaymentMethodRequest,
   paymentMethodSettingsItem,
   paymentMethodSettingsList,
+  paymentRenterStepsSetting,
+  updatePaymentRenterStepsRequest,
   updatePaymentMethodSettingsRequest,
   type ArchivePaymentMethodRequest,
   type CreatePaymentMethodRequest,
   type PaymentMethodSettingsItem,
   type PaymentMethodSettingsList,
+  type PaymentRenterStepsSetting,
   type PermissionCode,
   type TenantStatus,
   type UpdatePaymentMethodSettingsRequest,
+  type UpdatePaymentRenterStepsRequest,
 } from '@drezivo/contracts';
 
 import { withTenantTransaction } from '../../db/client.js';
@@ -32,10 +36,12 @@ import {
 import { canonicalRequestHash } from '../../shared/idempotency.js';
 import type { FailureEnvelope, SuccessEnvelope } from '../../shared/response.js';
 import { claimTenantIdempotency, finalizeTenantIdempotency } from '../../shared/tenant-idempotency.js';
+import { signPaymentRenterStepsImages } from '../files/payment-renter-steps-media.js';
 import { storefrontMediaUrlMapper } from '../storefront/storefront-media.js';
 import { isPaymentMaterialContentType } from './payment-method-readiness.js';
 import {
   assertFileObjectCleanupProducerEnabled,
+  enqueueDetachedFileObjectCleanup,
   enqueueReplacedFileObjectCleanup,
 } from '../files/file-object-cleanup.repository.js';
 import {
@@ -44,16 +50,22 @@ import {
   insertPaymentMethod,
   isAcceptedStorefrontAsset,
   listPaymentMethodSettings,
+  listLegacyPaymentRenterSteps,
   lockOnlineMethodLimit,
+  readAcceptedPaymentRenterStepsImage,
+  readPaymentRenterSteps,
   readAcceptedPaymentMaterial,
   readPaymentMethodSettings,
   updatePaymentMethodSettingsRow,
+  updatePaymentRenterStepsRow,
+  appendPaymentRenterStepsAuditEvent,
   type PaymentMethodSettingsRow,
 } from './payment-methods.repository.js';
 
 const UPDATE_OPERATION = 'payment_method.settings.update';
 const CREATE_OPERATION = 'payment_method.create';
 const ARCHIVE_OPERATION = 'payment_method.archive';
+const RENTER_STEPS_OPERATION = 'payment.renter_steps.update.v1';
 
 /** E-wallets whose account number is an 11-digit Philippine mobile number. */
 const MOBILE_WALLETS = new Set(['gcash', 'maya']);
@@ -81,12 +93,21 @@ export async function getPaymentMethodSettings(input: PaymentMethodContext): Pro
   assertCanManagePayments(input);
   return withTenantTransaction(input.tenantId, input.principalId, async (client) => {
     const rows = await listPaymentMethodSettings(client, input.tenantId);
-    // Only accepted, displayable files of this tenant receive an app-owned route; anything else stays null.
+    const renterSteps = await readPaymentRenterSteps(client, input.tenantId);
+    if (!renterSteps) throw new StateConflictError('Payment settings could not be read.');
+    const legacy = renterSteps.text || renterSteps.file_id ? [] : await listLegacyPaymentRenterSteps(client, input.tenantId);
+    // Existing method assets continue to use the authorized staff media route. Shared and
+    // conflicting legacy step images use short-lived direct reads because they are not method assets.
     const urls = await storefrontMediaUrlMapper.map(
       client,
       input.tenantId,
       rows.flatMap((row) => [row.qr_file_id, row.material_file_id]),
       { kind: 'staff', branchId: input.branchId },
+    );
+    const stepImageUrls = await signPaymentRenterStepsImages(
+      client,
+      input.tenantId,
+      [renterSteps.file_id, ...legacy.map((row) => row.file_id)],
     );
     return paymentMethodSettingsList.parse({
       items: rows.map((row) => ({
@@ -94,7 +115,103 @@ export async function getPaymentMethodSettings(input: PaymentMethodContext): Pro
         qr_image_url: row.qr_file_id ? (urls.get(row.qr_file_id) ?? null) : null,
         material_url: row.material_file_id ? (urls.get(row.material_file_id) ?? null) : null,
       })),
+      renter_steps: {
+        version: renterSteps.version,
+        text: renterSteps.text,
+        image: renterSteps.file_id && renterSteps.mime_type
+          ? { file_id: renterSteps.file_id, content_type: renterSteps.mime_type, image_url: stepImageUrls.get(renterSteps.file_id) ?? null }
+          : null,
+        legacy_conflicts: legacy.map((row) => ({
+          payment_method_id: row.payment_method_id,
+          payment_method_name: row.payment_method_name,
+          text: row.text,
+          image: row.file_id && row.mime_type
+            ? { file_id: row.file_id, content_type: row.mime_type, image_url: stepImageUrls.get(row.file_id) ?? null }
+            : null,
+        })),
+      },
     });
+  });
+}
+
+export interface PaymentRenterStepsCommandResponse {
+  status: number;
+  body: SuccessEnvelope<PaymentRenterStepsSetting> | FailureEnvelope;
+}
+
+/** PUT /payment-methods/renter-steps — one permission-checked tenant-wide guide. */
+export async function updatePaymentRenterSteps(
+  input: PaymentMethodCommandContext & { request: UpdatePaymentRenterStepsRequest },
+): Promise<PaymentRenterStepsCommandResponse> {
+  const parsed = updatePaymentRenterStepsRequest.safeParse(input.request);
+  if (!parsed.success) throw new ValidationError('Renter steps settings are invalid.');
+  const request = parsed.data;
+  assertCanManagePayments(input);
+  assertWorkspaceWritable(input.effectiveTenantStatus);
+
+  const payloadHash = canonicalRequestHash(request);
+  const key = {
+    tenantId: input.tenantId,
+    principalKey: input.membershipId,
+    operation: RENTER_STEPS_OPERATION,
+    intentKey: input.idempotencyKey,
+    payloadHash,
+  };
+  return withTenantTransaction(input.tenantId, input.principalId, async (client) => {
+    const claim = await claimTenantIdempotency(client, key);
+    if (claim.kind === 'replayed') {
+      return { status: claim.responseCode, body: claim.safeResponse as SuccessEnvelope<PaymentRenterStepsSetting> | FailureEnvelope };
+    }
+    if (claim.kind === 'key_reused') throw new IdempotencyKeyReusedError('This Idempotency-Key was already used for another request.');
+    if (claim.kind === 'in_progress') throw new StateConflictError('An identical renter steps change is already being processed.');
+
+    try {
+      const current = await readPaymentRenterSteps(client, input.tenantId, true);
+      if (!current) throw new StateConflictError('Renter steps settings could not be read.');
+      if (current.version !== request.version) {
+        throw new StateConflictError('Renter steps changed while you were editing them. Refresh and try again.');
+      }
+      const text = request.text?.trim() || null;
+      const fileId = request.image_file_id;
+      let contentType: string | null = null;
+      if (fileId) {
+        if (text) throw new ValidationError('Choose either renter steps text or an image.');
+        const image = await readAcceptedPaymentRenterStepsImage(client, input.tenantId, fileId);
+        if (!image) throw new ValidationError('Choose an accepted JPEG, PNG, or WebP image from this workspace, up to 10 MB.');
+        contentType = image.mime_type;
+      }
+      if (!text && !fileId && (await listLegacyPaymentRenterSteps(client, input.tenantId)).length > 0) {
+        throw new ValidationError('Choose shared renter steps before clearing the existing method-specific steps.');
+      }
+      if (!await updatePaymentRenterStepsRow(client, { tenantId: input.tenantId, expectedVersion: current.version, text, fileId })) {
+        throw new StateConflictError('Renter steps changed while you were editing them. Refresh and try again.');
+      }
+      if (current.file_id && current.file_id !== fileId) {
+        await enqueueDetachedFileObjectCleanup(client, input.tenantId, current.file_id);
+      }
+      const data = paymentRenterStepsSetting.parse({
+        version: current.version + 1,
+        text,
+        image: fileId && contentType ? { file_id: fileId, content_type: contentType } : null,
+        legacy_conflicts: [],
+      });
+      const body: SuccessEnvelope<PaymentRenterStepsSetting> = { success: true, data, request_id: input.requestId };
+      await appendPaymentRenterStepsAuditEvent(client, {
+        tenantId: input.tenantId,
+        actorKey: input.principalId,
+        version: data.version,
+        hasText: Boolean(text),
+        hasImage: Boolean(fileId),
+        requestId: input.requestId,
+      });
+      await finalizeTenantIdempotency(client, { ...key, status: 'succeeded', responseCode: 200, safeResponse: body });
+      return { status: 200, body };
+    } catch (error) {
+      if (!isAppError(error) || error instanceof DependencyUnavailableError) throw error;
+      const body: FailureEnvelope = { success: false, error: { code: error.code, message: error.message }, request_id: input.requestId };
+      await finalizeTenantIdempotency(client, { ...key, status: 'failed', responseCode: error.status, safeResponse: body });
+      return { status: error.status, body };
+    }
   });
 }
 
@@ -114,11 +231,21 @@ export async function updatePaymentMethodSettings(
     }
     if (!cash && request.active && !current.active) await assertBelowLimit(client, input.tenantId);
     const presentation = request.presentation ?? current.presentation;
+    const sharedSteps = await readPaymentRenterSteps(client, input.tenantId, true);
+    if (!sharedSteps) throw new StateConflictError('Renter steps settings could not be read.');
+    const legacyForMethod = sharedSteps.text || sharedSteps.file_id
+      ? null
+      : (await listLegacyPaymentRenterSteps(client, input.tenantId)).find((row) => row.payment_method_id === current.id) ?? null;
     const files = await checkedFiles(client, input.tenantId, current.name, current.rail, {
       ...request,
       presentation,
-      material_file_id: request.material_file_id === undefined ? current.material_file_id : request.material_file_id,
+      material_file_id: request.material_file_id == null && presentation === 'details' && current.presentation === 'details'
+        ? current.material_file_id
+        : request.material_file_id === undefined ? current.material_file_id : request.material_file_id,
     });
+    if (legacyForMethod?.file_id && files.materialFileId !== current.material_file_id) {
+      throw new ValidationError('Save shared renter steps before replacing this existing method-specific image.');
+    }
 
     const currentFileIds = new Set([files.qrFileId, files.materialFileId].filter((fileId): fileId is string => fileId !== null));
     const cleanupCandidates = [
@@ -139,7 +266,11 @@ export async function updatePaymentMethodSettings(
       expectedVersion: request.version,
       active: request.active,
       storefrontEnabled: cash ? false : request.storefront_enabled,
-      destinationSnapshot: cash ? {} : compactDestination(request.destination),
+      destinationSnapshot: cash ? {} : compactDestination({
+        ...request.destination,
+        // Legacy method-level steps are read-only during transition; new steps use the tenant guide.
+        instructions: safeDestinationValue(current.destination_snapshot, 'instructions'),
+      }),
       qrFileId: files.qrFileId,
       presentation: cash ? 'details' : presentation,
       materialFileId: files.materialFileId,
@@ -164,6 +295,7 @@ export async function createPaymentMethod(
   const request = parsed.data;
 
   return runCommand(input, CREATE_OPERATION, request, 201, async (client) => {
+    if (request.destination.instructions?.trim()) throw new ValidationError('Renter steps are saved once for the whole workspace.');
     await assertBelowLimit(client, input.tenantId);
     const files = await checkedFiles(client, input.tenantId, request.name, request.rail, request);
     const paymentMethodId = await insertPaymentMethod(client, {
@@ -291,11 +423,16 @@ async function checkedFiles(
     if (!mime || !isPaymentMaterialContentType(mime)) {
       throw new ValidationError('The instructions file must be an accepted PDF or image from this workspace.');
     }
+  } else if (request.material_file_id !== null) {
+    const mime = await readAcceptedPaymentMaterial(client, tenantId, request.material_file_id);
+    if (!mime || !mime.startsWith('image/')) {
+      throw new ValidationError('A legacy renter-step image must be an accepted JPEG, PNG, or WebP image from this workspace.');
+    }
   }
   return {
     qrFileId: rail === 'manual_qr' ? request.qr_file_id : null,
-    // A details-mode method keeps no material reference; switching back to material means uploading again.
-    materialFileId: request.presentation === 'material' ? request.material_file_id : null,
+    // Preserve a legacy details-mode image during the read-only consolidation period.
+    materialFileId: request.material_file_id,
   };
 }
 
@@ -324,7 +461,9 @@ function safeDestinationValue(snapshot: Record<string, unknown>, key: string): s
 }
 
 function toSettingsItem(row: PaymentMethodSettingsRow): PaymentMethodSettingsItem {
-  const materialType = row.material_mime && isPaymentMaterialContentType(row.material_mime) ? row.material_mime : null;
+  const materialType = row.presentation === 'material' && row.material_mime && isPaymentMaterialContentType(row.material_mime)
+    ? row.material_mime
+    : null;
   return paymentMethodSettingsItem.parse({
     id: row.id,
     name: row.name,

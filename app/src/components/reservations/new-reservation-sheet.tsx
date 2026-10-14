@@ -49,7 +49,7 @@ import {
   type ReservationCalendarAvailabilityItem,
 } from "@/components/reservations/reservation-availability-calendar";
 import { Badge } from "@/components/ui/badge";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { DatePickerField } from "@/components/ui/date-picker-field";
 import { Input } from "@/components/ui/input";
 import { TimePickerField } from "@/components/ui/time-picker-field";
@@ -1800,7 +1800,7 @@ export function NewReservationSheet({
                             selectedCount > 0
                               ? "border-dashboard-accent bg-dashboard-active"
                               : isBrowsing
-                                ? "border-dashboard-accent/60 ring-1 ring-dashboard-accent/30"
+                                ? "border-dashboard-accent/60 bg-dashboard-active/40 ring-1 ring-dashboard-accent/30"
                                 : "border-dashboard-border hover:bg-dashboard-active/50"
                           )}
                         >
@@ -1862,25 +1862,13 @@ export function NewReservationSheet({
                   serialized garments and bookings.
                 </p>
                 {productDetail.sizing_mode === "free_size" ? (
-                  <div className="mt-3 rounded-lg border border-dashboard-border bg-dashboard-active/40 p-3 text-sm">
-                    <p className="font-medium text-dashboard-navy">Flexible fit</p>
-                    <p className="mt-1 text-xs text-dashboard-muted">
-                      This clothing item has one rentable size.
-                    </p>
-                    {activeVariant ? (
-                      rebookFrom &&
-                      rebookLines.some((line) => line.variantId === activeVariant.id) ? (
-                        <span
-                          className={buttonVariants({
-                            variant: "default",
-                            size: "sm",
-                            className: "mt-3 pointer-events-none cursor-default",
-                          })}
-                          role="status"
-                        >
-                          Already selected
-                        </span>
-                      ) : (
+                  rebookFrom ? null : (
+                    <div className="mt-3 rounded-lg border border-dashboard-border bg-dashboard-active/40 p-3 text-sm">
+                      <p className="font-medium text-dashboard-navy">Flexible fit</p>
+                      <p className="mt-1 text-xs text-dashboard-muted">
+                        This clothing item has one rentable size.
+                      </p>
+                      {activeVariant ? (
                         <Button
                           type="button"
                           size="sm"
@@ -1909,9 +1897,9 @@ export function NewReservationSheet({
                               ? "Remove flexible fit"
                               : "Select flexible fit"}
                         </Button>
-                      )
-                    ) : null}
-                  </div>
+                      ) : null}
+                    </div>
+                  )
                 ) : (
                   <div className="mt-3 flex flex-wrap gap-2">
                     {productDetail.variants

@@ -562,14 +562,14 @@ function AvailabilityControls({
             />
           </label>
 
-          <div className="grid min-w-0 grid-cols-[2.25rem_minmax(0,1fr)_2.25rem_auto] items-center gap-2 sm:flex sm:flex-wrap">
+          <div className="grid min-w-0 grid-cols-[2.25rem_2.25rem_minmax(0,1fr)] items-center gap-2 sm:flex sm:flex-wrap">
             <Button
               variant="ghost"
               size="icon"
               aria-label="Previous date range"
               disabled={dateNavigationDisabled}
               onClick={onPreviousRange}
-              className="h-9 w-9 border border-dashboard-border bg-dashboard-surface text-dashboard-navy hover:bg-dashboard-active"
+              className="row-start-2 col-start-1 h-9 w-9 border border-dashboard-border bg-dashboard-surface text-dashboard-navy hover:bg-dashboard-active"
             >
               <ChevronLeft className="h-4 w-4" aria-hidden="true" />
             </Button>
@@ -581,7 +581,8 @@ function AvailabilityControls({
               popoverAlign="start"
               disabled={dateNavigationDisabled}
               placeholder={dateRangeLabel}
-              className="min-w-0 w-full sm:w-[13rem]"
+              truncateValue={false}
+              className="col-span-3 row-start-1 min-w-0 w-full sm:col-span-1 sm:row-auto sm:w-[19rem]"
             />
             <Button
               variant="ghost"
@@ -589,7 +590,7 @@ function AvailabilityControls({
               aria-label="Next date range"
               disabled={dateNavigationDisabled}
               onClick={onNextRange}
-              className="h-9 w-9 border border-dashboard-border bg-dashboard-surface text-dashboard-navy hover:bg-dashboard-active"
+              className="row-start-2 col-start-2 h-9 w-9 border border-dashboard-border bg-dashboard-surface text-dashboard-navy hover:bg-dashboard-active"
             >
               <ChevronRight className="h-4 w-4" aria-hidden="true" />
             </Button>
@@ -599,7 +600,7 @@ function AvailabilityControls({
               aria-label="Return to the current date range"
               disabled={dateNavigationDisabled}
               onClick={onResetRange}
-              className="h-9 border border-dashboard-border bg-dashboard-surface px-2.5 text-xs text-dashboard-muted hover:bg-dashboard-active hover:text-dashboard-navy sm:px-3 sm:text-sm"
+              className="row-start-2 col-start-3 justify-self-end h-9 border border-dashboard-border bg-dashboard-surface px-2.5 text-xs text-dashboard-muted hover:bg-dashboard-active hover:text-dashboard-navy sm:row-auto sm:col-auto sm:justify-self-auto sm:px-3 sm:text-sm"
             >
               Today
             </Button>

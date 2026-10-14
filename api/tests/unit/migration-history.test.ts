@@ -82,6 +82,21 @@ describe('migration history inspection', () => {
     });
   });
 
+  it('orders shared renter steps after the existing payment and fitting migrations', () => {
+    const migrationFilesOnDisk = readdirSync(new URL('../../src/db/migrations/', import.meta.url))
+      .filter((fileName) => /^\d{4}_.*\.sql$/.test(fileName))
+      .sort();
+    const membershipClaimIndex = migrationFilesOnDisk.indexOf('0077_membership_invitation_claimed_membership.sql');
+    const fittingOptionalIndex = migrationFilesOnDisk.indexOf('0078_fitting_garments_optional.sql');
+    const accountTermsIndex = migrationFilesOnDisk.indexOf('0079_account_terms_acceptance.sql');
+    const sharedRenterStepsIndex = migrationFilesOnDisk.indexOf('0080_shared_payment_renter_steps.sql');
+
+    expect(membershipClaimIndex).toBeGreaterThanOrEqual(0);
+    expect(fittingOptionalIndex).toBeGreaterThan(membershipClaimIndex);
+    if (accountTermsIndex >= 0) expect(accountTermsIndex).toBeGreaterThan(fittingOptionalIndex);
+    expect(sharedRenterStepsIndex).toBeGreaterThan(Math.max(fittingOptionalIndex, accountTermsIndex));
+  });
+
   it('allows an existing but empty ledger to report the full initial migration set', () => {
     expect(inspectMigrationHistory(migrationFiles, [])).toEqual({
       appliedFiles: [],

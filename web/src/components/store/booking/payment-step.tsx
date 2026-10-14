@@ -101,6 +101,16 @@ export function PaymentStep({ reservation, onSubmitted }: { reservation: GuestRe
             <img src={instructions.qr_image_url} srcSet={mediaImageSrcSet(instructions.qr_image_url)} sizes="224px" alt={`${instructions.method_name} QR code`} className="mx-auto w-56 border border-sf-line bg-white p-2" />
           ) : null}
           {instructions.destination_note ? <p className="whitespace-pre-line border border-sf-line bg-sf-surface px-4 py-3 text-sm leading-7">{instructions.destination_note}</p> : null}
+          {instructions.renter_steps ? (
+            <div className="space-y-2 border border-sf-line bg-sf-surface px-4 py-3">
+              <h4 className="text-sm font-medium">Steps for renters</h4>
+              {instructions.renter_steps.text ? <p className="whitespace-pre-line text-sm leading-7">{instructions.renter_steps.text}</p> : null}
+              {instructions.renter_steps.image_url ? (
+                // eslint-disable-next-line @next/next/no-img-element -- short-lived signed URL from the reservation snapshot
+                <img src={instructions.renter_steps.image_url} alt="Steps for renters" className="mx-auto w-full max-w-sm border border-sf-line bg-white" />
+              ) : null}
+            </div>
+          ) : null}
           {instructions.material_url ? (
             instructions.material_content_type === 'application/pdf' ? (
               <div className="space-y-2">

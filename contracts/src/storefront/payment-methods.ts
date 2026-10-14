@@ -31,6 +31,50 @@ export const paymentMethodMaterial = z
   .strict();
 export type PaymentMethodMaterial = z.infer<typeof paymentMethodMaterial>;
 
+export const renterStepsImage = z
+  .object({
+    file_id: fileObjectId,
+    content_type: z.enum(['image/jpeg', 'image/png', 'image/webp']),
+    image_url: z.string().url().nullable().optional(),
+  })
+  .strict();
+export type RenterStepsImage = z.infer<typeof renterStepsImage>;
+
+export const legacyRenterSteps = z
+  .object({
+    payment_method_id: paymentMethodId,
+    payment_method_name: z.string().trim().min(1).max(200),
+    text: z.string().trim().max(2_000).nullable(),
+    image: renterStepsImage.nullable(),
+  })
+  .strict();
+export type LegacyRenterSteps = z.infer<typeof legacyRenterSteps>;
+
+/** One tenant-wide renter guide. Legacy values are present only while unresolved legacy methods remain. */
+export const paymentRenterStepsSetting = z
+  .object({
+    version: z.number().int().positive(),
+    text: z.string().trim().max(2_000).nullable(),
+    image: renterStepsImage.nullable(),
+    legacy_conflicts: z.array(legacyRenterSteps).max(20),
+  })
+  .strict();
+export type PaymentRenterStepsSetting = z.infer<typeof paymentRenterStepsSetting>;
+
+export const updatePaymentRenterStepsRequest = z
+  .object({
+    version: z.number().int().positive(),
+    text: z.string().trim().max(2_000).nullable(),
+    image_file_id: fileObjectId.nullable(),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    if (value.text && value.image_file_id) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['image_file_id'], message: 'Choose either renter steps text or an image.' });
+    }
+  });
+export type UpdatePaymentRenterStepsRequest = z.infer<typeof updatePaymentRenterStepsRequest>;
+
 export const paymentMethodSettingsItem = z
   .object({
     id: paymentMethodId,
@@ -57,6 +101,7 @@ export type PaymentMethodSettingsItem = z.infer<typeof paymentMethodSettingsItem
 export const paymentMethodSettingsList = z
   .object({
     items: z.array(paymentMethodSettingsItem).max(20),
+    renter_steps: paymentRenterStepsSetting,
   })
   .strict();
 export type PaymentMethodSettingsList = z.infer<typeof paymentMethodSettingsList>;

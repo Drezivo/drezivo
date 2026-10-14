@@ -114,6 +114,7 @@ const overview: DashboardOverviewResponse = {
     completed_rental_value: { current_minor: "4850000", previous_minor: "4320000" },
     completed_rentals: { current: 32, previous: 27 },
     average_rental_value: { current_minor: "151562", previous_minor: "160000" },
+    projected_sales_current_month: { current_minor: "5300000", reservations: 2 },
     new_customers: { current: 26, previous: 21 },
     projected_rental_value: { current_minor: "1250000", reservations: 4 },
   },
@@ -163,16 +164,28 @@ describe("DashboardOverview", () => {
     expect(metrics).not.toHaveClass("[&>*:last-child]:col-span-2");
 
     expect(screen.getByText("₱48,500.00")).toBeVisible();
+    expect(screen.getByText("Business Performance")).toHaveClass("text-lg", "sm:text-xl");
     expect(
       screen.getByText(
-        "Completed Rental Value is month-to-date; Projected Rental Value combines completed rental fees to date with upcoming confirmed bookings, excluding deposits."
+        "Monthly rental performance, projected sales, completed bookings, and new customers."
       )
     ).toBeVisible();
+    expect(
+      screen.queryByText(
+        /Completed Rental Value is month-to-date; Projected Rental Value combines completed/
+      )
+    ).not.toBeInTheDocument();
     expect(screen.getByText("Projected Rental Value")).toBeVisible();
     expect(screen.getByText("₱12,500.00")).toBeVisible();
     expect(
       screen.getByText("Completed rental fees to date + 4 upcoming confirmed reservations")
     ).toBeVisible();
+    expect(screen.getByText("Projected Sales This Month")).toBeVisible();
+    expect(screen.getByText("₱53,000.00")).toBeVisible();
+    expect(
+      screen.getByText("Completed rental fees + 2 upcoming confirmed reservations this month")
+    ).toBeVisible();
+    expect(screen.queryByText("Average Rental Value")).not.toBeInTheDocument();
     expect(screen.queryByText(/sample|prototype|maria|2025/i)).not.toBeInTheDocument();
   });
 
@@ -204,11 +217,12 @@ describe("DashboardOverview", () => {
     ).toBeVisible();
   });
 
-  it("shows a loading state without presenting fabricated dashboard values", () => {
+  it("shows dashboard skeletons without presenting fabricated dashboard values", () => {
     dashboardApi.getDashboardOverview.mockReturnValue(new Promise(() => {}));
     render(<DashboardOverview />);
 
-    expect(screen.getByRole("status")).toHaveTextContent("Loading your dashboard");
+    expect(screen.getByRole("status", { name: "Loading dashboard" })).toBeVisible();
+    expect(document.querySelectorAll('[data-slot="skeleton"]').length).toBeGreaterThan(0);
     expect(screen.queryByText("Active Rentals")).not.toBeInTheDocument();
     expect(screen.queryByText(/sample data|maria santos/i)).not.toBeInTheDocument();
   });
@@ -305,7 +319,7 @@ describe("DashboardOverview", () => {
     expect(dashboardApi.getDashboardOverview).toHaveBeenCalledTimes(2);
   });
 
-  it("uses an explicit no-baseline comparison when the prior month is zero", async () => {
+  it("uses explicit no-baseline and no-upcoming-booking copy when values are zero", async () => {
     const zeroBaseline = {
       ...overview,
       business_performance: {
@@ -313,6 +327,7 @@ describe("DashboardOverview", () => {
         completed_rental_value: { current_minor: "0", previous_minor: "0" },
         completed_rentals: { current: 0, previous: 0 },
         average_rental_value: { current_minor: null, previous_minor: null },
+        projected_sales_current_month: { current_minor: "0", reservations: 0 },
         new_customers: { current: 0, previous: 0 },
       },
     } satisfies DashboardOverviewResponse;
@@ -325,6 +340,8 @@ describe("DashboardOverview", () => {
     await waitFor(() =>
       expect(screen.getAllByText("No prior-month baseline").length).toBeGreaterThan(0)
     );
-    expect(screen.getByText("No completed rentals this month")).toBeVisible();
+    expect(
+      screen.getByText("Completed rental fees + no upcoming confirmed bookings this month")
+    ).toBeVisible();
   });
 });

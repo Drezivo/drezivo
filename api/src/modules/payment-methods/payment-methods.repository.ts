@@ -17,6 +17,23 @@ export interface PaymentMethodSettingsRow {
   presentation: 'details' | 'material';
   material_file_id: string | null;
   material_mime: string | null;
+  instructions: string | null;
+}
+
+export interface PaymentRenterStepsRow {
+  version: number;
+  text: string | null;
+  file_id: string | null;
+  mime_type: string | null;
+  byte_size: number | null;
+}
+
+export interface LegacyPaymentRenterStepsRow {
+  payment_method_id: string;
+  payment_method_name: string;
+  text: string | null;
+  file_id: string | null;
+  mime_type: string | null;
 }
 
 const settingsProjection = `
@@ -32,6 +49,7 @@ const settingsProjection = `
     pm.presentation,
     pm.material_file_id,
     mat.mime_type AS material_mime,
+    NULLIF(btrim(pm.destination_snapshot ->> 'instructions'), '') AS instructions,
     COALESCE(${onlinePaymentMethodReadySql()}, false) AS storefront_ready
   FROM payment_method pm
   ${paymentMethodFileJoinsSql()}
@@ -49,6 +67,92 @@ export async function listPaymentMethodSettings(
     [tenantId],
   );
   return result.rows;
+}
+
+/** Ensure and read the one tenant-level guide, locking it when it is being replaced or snapshotted. */
+export async function readPaymentRenterSteps(
+  client: PoolClient,
+  tenantId: string,
+  forUpdate = false,
+): Promise<PaymentRenterStepsRow | null> {
+  await client.query('INSERT INTO tenant_settings (tenant_id) VALUES ($1) ON CONFLICT (tenant_id) DO NOTHING', [tenantId]);
+  const result = await client.query<PaymentRenterStepsRow>(
+    `SELECT ts.renter_steps_version AS version, ts.renter_steps_text AS text,
+            ts.renter_steps_file_id AS file_id,
+            CASE WHEN fo.lifecycle_status = 'accepted'
+                       AND fo.purpose = 'payment_method_material'
+                       AND fo.mime_type IN ('image/jpeg', 'image/png', 'image/webp')
+                       AND fo.byte_size BETWEEN 1 AND 10485760
+                 THEN fo.mime_type ELSE NULL END AS mime_type,
+            fo.byte_size
+       FROM tenant_settings ts
+       LEFT JOIN file_object fo ON fo.tenant_id = ts.tenant_id AND fo.id = ts.renter_steps_file_id
+      WHERE ts.tenant_id = $1${forUpdate ? ' FOR UPDATE OF ts' : ''}`,
+    [tenantId],
+  );
+  return result.rows[0] ?? null;
+}
+
+export async function listLegacyPaymentRenterSteps(client: PoolClient, tenantId: string): Promise<LegacyPaymentRenterStepsRow[]> {
+  const result = await client.query<LegacyPaymentRenterStepsRow>(
+    `SELECT pm.id AS payment_method_id, pm.name AS payment_method_name,
+            NULLIF(btrim(pm.destination_snapshot ->> 'instructions'), '') AS text,
+            CASE WHEN pm.presentation = 'details'
+                       AND fo.lifecycle_status = 'accepted'
+                       AND fo.purpose = 'payment_method_material'
+                       AND fo.mime_type IN ('image/jpeg', 'image/png', 'image/webp')
+                       AND fo.byte_size BETWEEN 1 AND 10485760
+                 THEN fo.id ELSE NULL END AS file_id,
+            CASE WHEN pm.presentation = 'details'
+                       AND fo.lifecycle_status = 'accepted'
+                       AND fo.purpose = 'payment_method_material'
+                       AND fo.mime_type IN ('image/jpeg', 'image/png', 'image/webp')
+                       AND fo.byte_size BETWEEN 1 AND 10485760
+                 THEN fo.mime_type ELSE NULL END AS mime_type
+       FROM payment_method pm
+       LEFT JOIN file_object fo ON fo.tenant_id = pm.tenant_id AND fo.id = pm.material_file_id
+      WHERE pm.tenant_id = $1
+        AND (NULLIF(btrim(pm.destination_snapshot ->> 'instructions'), '') IS NOT NULL
+             OR (pm.presentation = 'details' AND fo.id IS NOT NULL AND fo.lifecycle_status = 'accepted'
+                 AND fo.purpose = 'payment_method_material'
+                 AND fo.mime_type IN ('image/jpeg', 'image/png', 'image/webp')
+                 AND fo.byte_size BETWEEN 1 AND 10485760))
+      ORDER BY lower(pm.name), pm.id`,
+    [tenantId],
+  );
+  return result.rows;
+}
+
+export async function readAcceptedPaymentRenterStepsImage(
+  client: PoolClient,
+  tenantId: string,
+  fileId: string,
+): Promise<{ mime_type: string; byte_size: number } | null> {
+  const result = await client.query<{ mime_type: string; byte_size: number }>(
+    `SELECT mime_type, byte_size FROM file_object
+      WHERE tenant_id = $1 AND id = $2 AND purpose = 'payment_method_material'
+        AND lifecycle_status = 'accepted' AND mime_type IN ('image/jpeg', 'image/png', 'image/webp')
+        AND byte_size BETWEEN 1 AND 10485760
+      LIMIT 1 FOR SHARE`,
+    [tenantId, fileId],
+  );
+  return result.rows[0] ?? null;
+}
+
+export async function updatePaymentRenterStepsRow(
+  client: PoolClient,
+  input: { tenantId: string; expectedVersion: number; text: string | null; fileId: string | null },
+): Promise<boolean> {
+  const result = await client.query(
+    `UPDATE tenant_settings
+        SET renter_steps_text = $3,
+            renter_steps_file_id = $4,
+            renter_steps_version = renter_steps_version + 1,
+            updated_at = statement_timestamp()
+      WHERE tenant_id = $1 AND renter_steps_version = $2`,
+    [input.tenantId, input.expectedVersion, input.text, input.fileId],
+  );
+  return result.rowCount === 1;
 }
 
 export async function readPaymentMethodSettings(
@@ -207,5 +311,19 @@ export async function appendPaymentMethodAuditEvent(
       input.requestId,
       input.action ?? 'payment_method.settings.updated',
     ],
+  );
+}
+
+export async function appendPaymentRenterStepsAuditEvent(
+  client: PoolClient,
+  input: { tenantId: string; actorKey: string; version: number; hasText: boolean; hasImage: boolean; requestId: string },
+): Promise<void> {
+  await client.query(
+    `INSERT INTO audit_event
+       (tenant_id, actor_kind, actor_key, action, entity_type, entity_id,
+        redacted_summary, request_id, occurred_at, outcome)
+     VALUES ($1, 'staff', $2, 'payment.renter_steps.updated', 'tenant_settings', $1,
+             $3::jsonb, $4, statement_timestamp(), 'succeeded')`,
+    [input.tenantId, input.actorKey, JSON.stringify({ version: input.version, has_text: input.hasText, has_image: input.hasImage }), input.requestId],
   );
 }
