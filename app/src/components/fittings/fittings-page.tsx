@@ -609,7 +609,7 @@ function AppointmentList({
                     <div className="flex min-w-0 items-start gap-2">
                       <span className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-dashboard-active text-dashboard-accent">
                         {firstGarment.variant.primary_image_url ? (
-                          // eslint-disable-next-line @next/next/no-img-element -- fitting garment images use short-lived signed catalogue URLs.
+                          // eslint-disable-next-line @next/next/no-img-element -- fitting garment media uses an authenticated same-origin API route.
                           <img
                             src={firstGarment.variant.primary_image_url}
                             alt={`${firstGarment.variant.product_name} catalogue photo`}

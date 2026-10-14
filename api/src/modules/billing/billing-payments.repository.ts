@@ -234,13 +234,14 @@ export async function readPaymentProofFile(
   client: PoolClient,
   tenantId: string,
   paymentId: string,
-): Promise<{ storage_key: string; version_id: string | null; mime_type: string } | null> {
-  const result = await client.query<{ storage_key: string; version_id: string | null; mime_type: string }>(
-    `SELECT f.storage_key, f.version_id, f.mime_type
+): Promise<{ storage_key: string; version_id: string | null; mime_type: string; byte_size: number } | null> {
+  const result = await client.query<{ storage_key: string; version_id: string | null; mime_type: string; byte_size: number }>(
+    `SELECT f.storage_key, f.version_id, f.mime_type, f.byte_size
        FROM subscription_payment sp
        JOIN file_object f ON f.tenant_id = sp.tenant_id AND f.id = sp.proof_file_id
       WHERE sp.tenant_id = $1 AND sp.id = $2
-        AND f.purpose = 'subscription_payment_proof' AND f.lifecycle_status = 'accepted'`,
+        AND f.purpose = 'subscription_payment_proof' AND f.lifecycle_status = 'accepted'
+        AND f.frozen_at IS NOT NULL AND (f.version_id IS NOT NULL OR f.sha256 IS NOT NULL)`,
     [tenantId, paymentId],
   );
   return result.rows[0] ?? null;

@@ -16,6 +16,7 @@ import { logger } from '../../shared/logger.js';
 import type {
   ObjectStorage,
   ReadAuthorization,
+  StoredObjectRead,
   UploadAuthorization,
   UploadedObjectMetadata,
 } from './object-storage.js';
@@ -36,6 +37,7 @@ const INSPECTION_PREFIX_BYTES = 16;
 type StorageOperation =
   | 'authorize_upload'
   | 'authorize_read'
+  | 'read_object'
   | 'inspect_uploaded_object'
   | 'delete_object';
 type StorageFailureClass = 'authorization' | 'configuration' | 'dependency';
@@ -117,6 +119,37 @@ export class S3CompatibleObjectStorage implements ObjectStorage {
     return {
       readUrl,
       expiresAt: new Date(now.getTime() + input.expiresInSeconds * 1000),
+    };
+  }
+
+  /** Reads bytes through the API process after its caller has checked tenant and file access. */
+  async readObject(input: { storageKey: string; versionId?: string | null }): Promise<StoredObjectRead | null> {
+    if (input.versionId && isR2Endpoint(this.storageConfig.OBJECT_STORAGE_ENDPOINT)) {
+      throw new DependencyUnavailableError(
+        'Legacy versioned objects must be reconciled before they can be read from Cloudflare R2.',
+      );
+    }
+
+    let response: GetObjectCommandOutput;
+    try {
+      response = await this.client.send(
+        new GetObjectCommand({
+          Bucket: this.storageConfig.OBJECT_STORAGE_BUCKET_PRIVATE,
+          Key: input.storageKey,
+          ...(input.versionId ? { VersionId: input.versionId } : {}),
+        }),
+      );
+    } catch (error) {
+      if (isMissingObject(error)) return null;
+      throw mapStorageFailure(error, 'read_object');
+    }
+
+    if (!response.Body) {
+      throw new DependencyUnavailableError('Object storage returned no file body.');
+    }
+    return {
+      body: asAsyncByteStream(response.Body),
+      contentLength: Number.isSafeInteger(response.ContentLength) ? response.ContentLength ?? null : null,
     };
   }
 

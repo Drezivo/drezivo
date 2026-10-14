@@ -63,5 +63,7 @@ settings, and online fitting requests in one delivery.
   and `TRUST_PROXY_HOPS` behind a load balancer so per-IP limits see real addresses.
 - The worker must run for verification codes to arrive. If it runs as a scheduled job, codes wait
   for the next run; see the hosting guide.
-- Signed image URLs contain the files module's object key, which includes the tenant UUID. This
-  is accepted, because no API trusts a browser-sent tenant id.
+- Public storefront media is intentionally readable by visitors only while an accepted file is
+  referenced by published content. The private object bucket is reached through an app-owned API
+  stream route; staff media paths recheck tenant, branch, purpose, relationship, and permission.
+  Direct upload URLs remain short-lived and scoped to one object.

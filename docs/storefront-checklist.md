@@ -120,7 +120,7 @@ MinIO community builds are no longer published, so a small local S3 stand-in out
 
 ## Milestone 2 — Staff API: storefront CMS and settings
 
-- [x] `GET /storefront`: document, status, slug, public path, current policy, signed image
+- [x] `GET /storefront`: document, status, slug, public path, current policy, application media
       previews, and publish readiness.
 - [x] `PATCH /storefront`: replaces the whole document on a version check. Images must be accepted
       `storefront_asset` files from the same workspace. Featured items must be active clothing
@@ -172,22 +172,24 @@ MinIO community builds are no longer published, so a small local S3 stand-in out
       minimum notice are unavailable, and internal reasons collapse to `unavailable`.
 - [x] `GET /public/stores/:slug/fitting-slots`: 30-minute starts inside the active branch Business Hours, with recurring closed weekdays, special closed dates, and capacity applied. It uses the same rules as fitting creation.
 - [x] The repository was rewritten set-based. The old per-product image and variant loop (N+1)
-      is gone. Images are signed in one query per response.
+      is gone. Media routes are mapped in one query per response and authorization is rechecked on
+      every stream request.
 - [x] Fixed an existing bug: public product images were filtered on `is_private = false`, but
       staff uploads are always private, so the storefront would have shown no photos. The public
-      read now signs accepted `catalogue_image` files.
+      read now streams accepted, currently referenced `catalogue_image` files through the API.
 - [x] `Cache-Control` headers:
   - catalogue data: `public, max-age=60, s-maxage=300, stale-while-revalidate=600`;
   - live data: `public, max-age=15, s-maxage=30`;
-  - signed image URLs last one hour.
+  - public media: `public, max-age=60, s-maxage=300, stale-while-revalidate=600`;
+  - previews and staff media: `private, no-store`.
 - [x] Per-IP limit of 240 reads a minute. `TRUST_PROXY_HOPS` (default 0) makes `req.ip` the real
       client behind a load balancer without trusting spoofed `X-Forwarded-For`.
 - [x] Removed the 501 stub controller, DTO, and schema files. Four existing catalogue and fitting
       tests now read through the new service, and all 22 of their cases pass.
 - [x] Verified with `api/tests/integration/storefront-public-read.test.ts` (5/5):
   - drafts, unknown slugs, and unpublished stores return `404`;
-  - the projection contains no tenant, branch, or storefront id, account number, or storage key
-    outside signed URLs;
+  - the projection contains no tenant, branch, or storefront id, account number, object key, or
+    R2 host; media URLs are application-owned paths;
   - the filters work, and `%` is matched literally;
   - `page_size` 500 and unknown keys get `422`;
   - an archived item returns `404`;
@@ -195,9 +197,9 @@ MinIO community builds are no longer published, so a small local S3 stand-in out
     `422`;
   - fitting slots follow opt-in, active-branch Business Hours, recurring closed weekdays, special closed dates, and capacity.
 
-> Accepted exposure: a signed image URL contains the files module's object key, which includes
-> the tenant UUID. The UUID grants nothing, because no API trusts a browser-sent tenant id. If
-> that changes, serve images through a CDN path keyed by file id.
+> Public image bytes are intentionally viewable to storefront visitors. The application media path
+> does not disclose R2 hosts, object keys, or signatures, and the API checks that each requested
+> file is still referenced by currently visible storefront content before streaming it.
 
 ## Milestone 4 — Guest reservation and fitting requests
 

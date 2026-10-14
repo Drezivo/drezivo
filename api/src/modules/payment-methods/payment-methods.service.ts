@@ -32,7 +32,7 @@ import {
 import { canonicalRequestHash } from '../../shared/idempotency.js';
 import type { FailureEnvelope, SuccessEnvelope } from '../../shared/response.js';
 import { claimTenantIdempotency, finalizeTenantIdempotency } from '../../shared/tenant-idempotency.js';
-import { storefrontMediaSigner } from '../storefront/storefront-media.js';
+import { storefrontMediaUrlMapper } from '../storefront/storefront-media.js';
 import { isPaymentMaterialContentType } from './payment-method-readiness.js';
 import {
   assertFileObjectCleanupProducerEnabled,
@@ -60,6 +60,7 @@ const MOBILE_WALLETS = new Set(['gcash', 'maya']);
 
 export interface PaymentMethodContext {
   tenantId: string;
+  branchId: string;
   membershipId: string;
   principalId: string;
   permissionCodes: PermissionCode[];
@@ -80,11 +81,12 @@ export async function getPaymentMethodSettings(input: PaymentMethodContext): Pro
   assertCanManagePayments(input);
   return withTenantTransaction(input.tenantId, input.principalId, async (client) => {
     const rows = await listPaymentMethodSettings(client, input.tenantId);
-    // Only accepted, displayable files of this tenant are signed; anything else stays null.
-    const urls = await storefrontMediaSigner.sign(
+    // Only accepted, displayable files of this tenant receive an app-owned route; anything else stays null.
+    const urls = await storefrontMediaUrlMapper.map(
       client,
       input.tenantId,
       rows.flatMap((row) => [row.qr_file_id, row.material_file_id]),
+      { kind: 'staff', branchId: input.branchId },
     );
     return paymentMethodSettingsList.parse({
       items: rows.map((row) => ({

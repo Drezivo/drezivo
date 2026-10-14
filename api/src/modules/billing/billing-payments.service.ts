@@ -16,6 +16,7 @@ import {
 import { withTenantTransaction } from '../../db/client.js';
 import type { ObjectStorage } from '../../integrations/storage/object-storage.js';
 import { objectStorage } from '../../integrations/storage/s3-compatible-object-storage.js';
+import type { FileStreamResponse } from '../files/file-stream.js';
 import {
   ForbiddenError,
   NotFoundError,
@@ -45,9 +46,6 @@ import {
 const SUBMIT_OPERATION = 'subscription.payment.submit';
 const PAYMENT_HISTORY_LIMIT = 24;
 const PENDING_UNIQUE_INDEX = 'subscription_payment_one_pending_per_tenant';
-/** Operator proof links are short-lived: long enough to open, too short to be worth sharing. */
-export const PROOF_URL_TTL_SECONDS = 5 * 60;
-
 export interface BillingActor {
   tenantId: string;
   membershipId: string;
@@ -195,27 +193,24 @@ export async function readPlatformQr(
   return { bytes: qr.qr_image, contentType: qr.qr_mime };
 }
 
-/** Operator-only: a 5-minute signed URL for a payment's proof, within the operator's tenant scope. */
-export async function signPaymentProofUrl(
+/** Operator-only: stream an accepted payment proof without exposing its R2 location. */
+export async function readPaymentProof(
   tenantId: string,
   paymentId: string,
   operatorSubject: string,
   storage: ObjectStorage = objectStorage,
-): Promise<{ url: string; expires_at: string; content_type: string } | null> {
+): Promise<FileStreamResponse | null> {
   const file = await withTenantTransaction(tenantId, `operator:${operatorSubject}`, (client) =>
     readPaymentProofFile(client, tenantId, paymentId),
   );
   if (!file) return null;
-  const read = await storage.authorizeRead({
+  if (!['image/jpeg', 'image/png', 'image/webp', 'application/pdf'].includes(file.mime_type)) return null;
+  const read = await storage.readObject({
     storageKey: file.storage_key,
     versionId: file.version_id,
-    expiresInSeconds: PROOF_URL_TTL_SECONDS,
   });
-  return {
-    url: read.readUrl,
-    expires_at: read.expiresAt.toISOString(),
-    content_type: file.mime_type,
-  };
+  if (!read || read.contentLength !== file.byte_size) return null;
+  return { body: read.body, byteSize: file.byte_size, mimeType: file.mime_type as FileStreamResponse['mimeType'] };
 }
 
 function toPaymentView(row: SubscriptionPaymentRow): SubscriptionPaymentView {

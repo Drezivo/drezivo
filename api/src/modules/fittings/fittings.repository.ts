@@ -190,7 +190,7 @@ function baseSelect(extra = ''): string {
            'sku', pv.sku,
            'size_label', pv.size_label,
            'color_label', pv.color_label,
-           'primary_image_storage_key', cover_image.storage_key,
+           'primary_image_file_id', cover_image.file_id,
            'primary_image_version_id', cover_image.version_id,
            'garment_guaranteed', fl.garment_guaranteed,
            'asset_id', fl.asset_id,
@@ -201,7 +201,7 @@ function baseSelect(extra = ''): string {
        JOIN product_variant pv ON pv.tenant_id = fl.tenant_id AND pv.id = fl.variant_id
        JOIN product p ON p.tenant_id = pv.tenant_id AND p.id = pv.product_id
        LEFT JOIN LATERAL (
-         SELECT f.storage_key, f.version_id
+         SELECT f.id AS file_id, f.storage_key, f.version_id
            FROM product_image pi
            JOIN file_object f
              ON f.tenant_id = pi.tenant_id

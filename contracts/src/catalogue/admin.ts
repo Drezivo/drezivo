@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { categoryId, fileObjectId, measurementGuideId, productId } from '../common/ids';
+import { mediaUrl } from '../common/media';
 import { nonNegativeMoneyString } from '../common/money';
 import { isoInstant } from '../common/time';
 
@@ -48,8 +49,8 @@ export const measurementGuide = z.object({
   id: measurementGuideId,
   name: z.string().trim().min(1).max(160),
   file_id: fileObjectId,
-  /** Short-lived signed URL for the accepted private guide image. */
-  image_url: z.string().url().nullable().default(null),
+  /** App-owned route for reading the accepted guide image through the authenticated API. */
+  image_url: mediaUrl.nullable().default(null),
   is_default: z.boolean(),
   status: measurementGuideStatus,
   created_at: isoInstant,

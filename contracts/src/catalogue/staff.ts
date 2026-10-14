@@ -10,6 +10,7 @@ import {
   productVariantId,
   reservationLineId,
 } from '../common/ids';
+import { mediaUrl } from '../common/media';
 import { currencyCode, nonNegativeMoneyString } from '../common/money';
 import { paginatedResponse, paginationRequest } from '../common/pagination';
 import { instantInterval, isoInstant } from '../common/time';
@@ -151,7 +152,7 @@ export const clothingListItem = z.object({
   size_labels: z.array(z.string().trim().min(1).max(40)),
   price_from_minor: nonNegativeMoneyString,
   currency: currencyCode,
-  primary_image_url: z.string().url().nullable(),
+  primary_image_url: mediaUrl.nullable(),
   readiness: clothingReadinessSummary,
   availability: clothingAvailabilitySummary,
   created_at: isoInstant,
@@ -258,7 +259,7 @@ export type ClothingVariantDetail = z.infer<typeof clothingVariantDetail>;
 export const clothingImageSummary = z.object({
   file_id: fileObjectId,
   display_order: z.number().int().nonnegative(),
-  image_url: z.string().url().nullable(),
+  image_url: mediaUrl.nullable(),
 });
 export type ClothingImageSummary = z.infer<typeof clothingImageSummary>;
 

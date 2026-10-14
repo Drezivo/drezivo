@@ -21,6 +21,7 @@ import {
 import { withTenantTransaction } from '../../db/client.js';
 import type { ObjectStorage } from '../../integrations/storage/object-storage.js';
 import { objectStorage } from '../../integrations/storage/s3-compatible-object-storage.js';
+import { staffFileMediaUrl } from '../files/file-media-url.js';
 import { ForbiddenError, NotFoundError, TenantCancelledError, TenantRestrictedError } from '../../shared/errors.js';
 import {
   listFittingsReadModel,
@@ -31,7 +32,6 @@ import {
 import { toFittingSettings } from './fittings.settings.mapper.js';
 import { readFittingSettingsModel } from './fittings.settings.repository.js';
 
-const FITTING_IMAGE_VIEW_EXPIRY_SECONDS = 10 * 60;
 
 export interface FittingReadContext {
   tenantId: string;
@@ -59,15 +59,15 @@ export async function getFittingIntakeOptions(
 export async function getFittingList(
   input: FittingReadContext,
   query: FittingListQuery,
-  storage: ObjectStorage = objectStorage,
+  _storage: ObjectStorage = objectStorage,
 ): Promise<FittingListResponse> {
+  void _storage;
   assertFittingReadContext(input);
   return withTenantTransaction(input.tenantId, input.principalId, async (client) => {
     const page = await listFittingsReadModel(client, { tenantId: input.tenantId, branchId: input.branchId, query });
-    const imageAuthorizations = new Map<string, Promise<string>>();
     const items = await Promise.all(
       page.rows.map(async (row) =>
-        toListItem(row, await mapGarmentsWithImages(row.garments, storage, imageAuthorizations)),
+        toListItem(row, await mapGarmentsWithImages(row.garments, input.branchId)),
       ),
     );
     return fittingListResponse.parse({
@@ -80,13 +80,14 @@ export async function getFittingList(
 export async function getFittingDetail(
   input: FittingReadContext,
   fittingId: string,
-  storage: ObjectStorage = objectStorage,
+  _storage: ObjectStorage = objectStorage,
 ): Promise<FittingDetail> {
+  void _storage;
   assertFittingReadContext(input);
   return withTenantTransaction(input.tenantId, input.principalId, async (client) => {
     const row = await readFittingDetailModel(client, { tenantId: input.tenantId, branchId: input.branchId, fittingId });
     if (!row) throw new NotFoundError('Fitting could not be found.');
-    const garments = await mapGarmentsWithImages(row.garments, storage, new Map(), true);
+    const garments = await mapGarmentsWithImages(row.garments, true, input.branchId);
     return fittingDetail.parse({
       ...toListItem(row),
       branch_id: row.branch_id,
@@ -144,49 +145,25 @@ type GarmentJson = {
   sku: string;
   size_label: string | null;
   color_label: string | null;
-  primary_image_storage_key: string | null;
-  primary_image_version_id: string | null;
+  primary_image_file_id: string | null;
   garment_guaranteed: boolean;
   asset_id: string | null;
   asset_code: string | null;
 };
+function mapGarmentsWithImages(value: unknown, branchId: string): Promise<FittingGarmentLineSummary[]>;
+function mapGarmentsWithImages(value: unknown, includeAsset: true, branchId: string): Promise<FittingGarmentLineDetail[]>;
 function mapGarmentsWithImages(
   value: unknown,
-  storage: ObjectStorage,
-  authorizations: Map<string, Promise<string>>,
-  includeAsset: true,
-): Promise<FittingGarmentLineDetail[]>;
-function mapGarmentsWithImages(
-  value: unknown,
-  storage: ObjectStorage,
-  authorizations: Map<string, Promise<string>>,
-  includeAsset?: false,
-): Promise<FittingGarmentLineSummary[]>;
-async function mapGarmentsWithImages(
-  value: unknown,
-  storage: ObjectStorage,
-  authorizations: Map<string, Promise<string>>,
-  includeAsset = false,
+  includeAssetOrBranchId: boolean | string,
+  branchIdInput?: string,
 ): Promise<Array<FittingGarmentLineDetail | FittingGarmentLineSummary>> {
+  const includeAsset = typeof includeAssetOrBranchId === 'boolean' ? includeAssetOrBranchId : false;
+  const branchId = typeof includeAssetOrBranchId === 'string' ? includeAssetOrBranchId : branchIdInput;
+  if (!branchId) throw new Error('Active branch is required to map staff media URLs.');
   const rows = Array.isArray(value) ? (value as GarmentJson[]) : [];
-  return Promise.all(
-    rows.map(async (row) => {
-      let primaryImageUrl: string | null = null;
-      if (row.primary_image_storage_key) {
-        const authorizationKey = `${row.primary_image_storage_key}\u0000${row.primary_image_version_id ?? ''}`;
-        let authorization = authorizations.get(authorizationKey);
-        if (!authorization) {
-          authorization = storage
-            .authorizeRead({
-              storageKey: row.primary_image_storage_key,
-              versionId: row.primary_image_version_id,
-              expiresInSeconds: FITTING_IMAGE_VIEW_EXPIRY_SECONDS,
-            })
-            .then((result) => result.readUrl);
-          authorizations.set(authorizationKey, authorization);
-        }
-        primaryImageUrl = await authorization;
-      }
+  return Promise.resolve(
+    rows.map((row) => {
+      const primaryImageUrl = row.primary_image_file_id ? staffFileMediaUrl(row.primary_image_file_id, branchId) : null;
 
       return {
         id: row.id as FittingGarmentLineSummary['id'],

@@ -54,6 +54,7 @@ import {
 import { withTenantTransaction } from '../../db/client.js';
 import { objectStorage } from '../../integrations/storage/s3-compatible-object-storage.js';
 import type { ObjectStorage } from '../../integrations/storage/object-storage.js';
+import { staffFileMediaUrl } from '../files/file-media-url.js';
 import {
   ForbiddenError,
   NotFoundError,
@@ -504,8 +505,9 @@ export async function rejectReservation(
 export async function getReservationList(
   input: ReservationReadContext,
   query: ReservationListQuery,
-  storage: ObjectStorage = objectStorage,
+  _storage: ObjectStorage = objectStorage,
 ): Promise<ReservationListResponse> {
+  void _storage;
   assertReservationReadContext(input);
 
   const page = await withTenantTransaction(input.tenantId, input.principalId, async (client) =>
@@ -515,22 +517,7 @@ export async function getReservationList(
       query,
     }),
   );
-  const imageUrls = await Promise.all(
-    page.rows.map(async (row) => {
-      if (!row.line_cover_storage_key) return null;
-      try {
-        return (
-          await storage.authorizeRead({
-            storageKey: row.line_cover_storage_key,
-            versionId: row.line_cover_version_id,
-            expiresInSeconds: 5 * 60,
-          })
-        ).readUrl;
-      } catch {
-        return null;
-      }
-    }),
-  );
+  const imageUrls = page.rows.map((row) => row.line_cover_file_id ? staffFileMediaUrl(row.line_cover_file_id, input.branchId) : null);
 
   return reservationListResponse.parse({
     items: page.rows.map((row, index) => toReservationListItem(row, imageUrls[index] ?? null)),
@@ -543,15 +530,15 @@ export async function getReservationList(
 
 /**
  * The renter's uploaded payment receipts, for staff who may verify payments. Receipts are private
- * evidence, so this is its own permission-gated read with five-minute signed links instead of part
- * of the reservation detail. A receipt whose link cannot be signed is left out rather than failing
- * the whole list.
+ * evidence, so this is its own permission-gated read instead of part of the reservation detail.
+ * The app-owned stream endpoint rechecks the tenant, branch, purpose, and permissions.
  */
 export async function getReservationPaymentReceipts(
   input: ReservationReadContext,
   reservationId: string,
-  storage: ObjectStorage = objectStorage,
+  _storage: ObjectStorage = objectStorage,
 ): Promise<ReservationPaymentReceiptsResponse> {
+  void _storage;
   assertReservationReadContext(input);
   if (!input.permissionCodes.includes('payments.manage') || !input.permissionCodes.includes('evidence.verify')) {
     throw new ForbiddenError('Payment evidence verification permission is required.');
@@ -561,35 +548,23 @@ export async function getReservationPaymentReceipts(
   );
   if (!rows) throw new NotFoundError('Reservation could not be found.');
 
-  const receipts = await Promise.all(
-    rows.map(async (row) => {
-      try {
-        const { readUrl } = await storage.authorizeRead({
-          storageKey: row.storage_key,
-          versionId: row.version_id,
-          expiresInSeconds: 5 * 60,
-        });
-        return {
+  const receipts = rows.map((row) => ({
           file_id: row.file_id,
           content_type: row.mime_type,
-          url: readUrl,
+          url: staffFileMediaUrl(row.file_id, input.branchId),
           submitted_at: row.submitted_at.toISOString(),
           evidence_status: row.evidence_status,
-        };
-      } catch {
-        return null;
-      }
-    }),
-  );
-  return reservationPaymentReceiptsResponse.parse({ receipts: receipts.filter((receipt) => receipt !== null) });
+        }));
+  return reservationPaymentReceiptsResponse.parse({ receipts });
 }
 
 /** Authoritative staff detail shared by Reservations and Schedule drawers. */
 export async function getReservationDetail(
   input: ReservationReadContext,
   reservationId: string,
-  storage: ObjectStorage = objectStorage,
+  _storage: ObjectStorage = objectStorage,
 ): Promise<ReservationDetail> {
+  void _storage;
   assertReservationReadContext(input);
 
   const model = await withTenantTransaction(input.tenantId, input.principalId, async (client) => {
@@ -606,22 +581,7 @@ export async function getReservationDetail(
     throw new StateConflictError('Reservation data is incomplete for staff display.');
   }
 
-  const lineImageUrls = await Promise.all(
-    model.lines.map(async (line) => {
-      if (!line.variant_cover_storage_key) return null;
-      try {
-        return (
-          await storage.authorizeRead({
-            storageKey: line.variant_cover_storage_key,
-            versionId: line.variant_cover_version_id,
-            expiresInSeconds: 5 * 60,
-          })
-        ).readUrl;
-      } catch {
-        return null;
-      }
-    }),
-  );
+  const lineImageUrls = model.lines.map((line) => line.variant_cover_file_id ? staffFileMediaUrl(line.variant_cover_file_id, input.branchId) : null);
 
   const header = model.header;
   const customerSnapshot = header.customer_full_name

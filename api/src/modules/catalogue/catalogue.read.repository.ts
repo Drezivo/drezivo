@@ -22,6 +22,7 @@ export interface ClothingListReadRow {
   size_labels: string[];
   price_from_minor: number;
   currency: string;
+  primary_image_file_id: string | null;
   primary_image_storage_key: string | null;
   primary_image_version_id: string | null;
   active_assets: number;
@@ -266,6 +267,7 @@ export async function listClothingReadModel(
        COALESCE(variant_summary.size_labels, ARRAY[]::text[]) AS size_labels,
        COALESCE(variant_summary.price_from_minor, 0)::int AS price_from_minor,
        COALESCE(variant_summary.currency, 'PHP') AS currency,
+       cover_image.file_id AS primary_image_file_id,
        cover_image.storage_key AS primary_image_storage_key,
        cover_image.version_id AS primary_image_version_id,
        COALESCE(asset_summary.active_assets, 0)::int AS active_assets,
@@ -289,7 +291,7 @@ export async function listClothingReadModel(
        lower(p.code) AS sort_code
      FROM candidate_products p
      LEFT JOIN LATERAL (
-       SELECT f.storage_key, f.version_id
+       SELECT f.id AS file_id, f.storage_key, f.version_id
          FROM product_image pi
          JOIN file_object f
            ON f.tenant_id = pi.tenant_id

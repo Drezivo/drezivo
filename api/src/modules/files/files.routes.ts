@@ -1,10 +1,14 @@
 import { Router } from 'express';
+import { z } from 'zod';
+
+import { fileObjectId } from '@drezivo/contracts';
 
 import { requireStaffAuth } from '../../middleware/auth.js';
 import { rateLimit } from '../../middleware/rate-limit.js';
 import { requireTenantContext } from '../../middleware/tenant-context.js';
 import { requireTenantAction } from '../tenancy/tenancy.service.js';
-import { authorizeUploadController, finalizeUploadController } from './files.controller.js';
+import { authorizeUploadController, finalizeUploadController, readStaffFileController } from './files.controller.js';
+import { validate } from '../../middleware/validate.js';
 import {
   requireFileIdempotencyKey,
   requireFileUploadPermission,
@@ -43,4 +47,14 @@ filesRouter.post(
   validateUploadFinalize,
   requireFileIdempotencyKey,
   finalizeUploadController,
+);
+
+filesRouter.get(
+  '/media/staff/:fileId',
+  requireStaffAuth,
+  requireTenantContext,
+  rateLimit({ windowMs: 60_000, max: 120, keyOf: (req) => req.tenantContext?.tenantId ?? req.ip ?? 'unknown' }),
+  requireTenantAction('context_read'),
+  validate({ params: z.object({ fileId: fileObjectId }).strict() }),
+  readStaffFileController,
 );

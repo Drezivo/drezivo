@@ -7,6 +7,7 @@ import { z } from 'zod';
 
 import { customerAddress } from '../common/customer';
 import { customerId, paymentMethodId, productVariantId } from '../common/ids';
+import { mediaUrl } from '../common/media';
 import { paymentRail } from '../finance/payment-status';
 import { instantInterval, isoDate } from '../common/time';
 import {
@@ -21,10 +22,10 @@ export const paymentInstructions = z
   .object({
     method_name: z.string().trim().min(1),
     rail: z.enum(['cash', 'manual_qr', 'manual_transfer']),
-    qr_image_url: z.string().url().optional(),
+    qr_image_url: mediaUrl.optional(),
     destination_note: z.string().trim().max(2_000).optional(),
     /** A business's own instructions file (PDF or image) shown instead of, or with, the details. */
-    material_url: z.string().url().optional(),
+    material_url: mediaUrl.optional(),
     material_content_type: z.enum(['application/pdf', 'image/jpeg', 'image/png', 'image/webp']).optional(),
   })
   .strict();

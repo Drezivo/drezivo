@@ -251,7 +251,7 @@ function DetailContent({
                       aria-label={`Open ${item.name} image preview`}
                       className="group relative h-full min-h-60 w-full cursor-zoom-in overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-dashboard-accent/50"
                     >
-                      {/* eslint-disable-next-line @next/next/no-img-element -- API-provided catalogue URLs are short-lived signed URLs. */}
+                      {/* eslint-disable-next-line @next/next/no-img-element -- API-provided catalogue URLs use the authenticated media proxy. */}
                       <img
                         src={primaryImage}
                         alt={`${item.name} catalogue photo`}
@@ -288,7 +288,7 @@ function DetailContent({
                           primaryImage === url ? "border-dashboard-accent" : "border-dashboard-border"
                         )}
                       >
-                        {/* eslint-disable-next-line @next/next/no-img-element -- API-provided catalogue URLs are short-lived signed URLs. */}
+                        {/* eslint-disable-next-line @next/next/no-img-element -- API-provided catalogue URLs use the authenticated media proxy. */}
                         <img
                           src={url}
                           alt={`${item.name} catalogue thumbnail ${index + 1}`}

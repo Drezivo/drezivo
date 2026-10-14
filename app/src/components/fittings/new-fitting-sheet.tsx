@@ -1015,7 +1015,7 @@ function StepGarments({
                 <span className="flex items-start gap-3">
                   <span className="flex h-12 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-dashboard-active text-dashboard-accent">
                     {product.primary_image_url ? (
-                      // eslint-disable-next-line @next/next/no-img-element -- catalogue images use short-lived signed URLs.
+                      // eslint-disable-next-line @next/next/no-img-element -- catalogue media uses an authenticated same-origin API route.
                       <img
                         src={product.primary_image_url}
                         alt={`${product.name} catalogue photo`}

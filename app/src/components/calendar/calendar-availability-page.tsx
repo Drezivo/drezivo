@@ -1308,7 +1308,7 @@ function ClothingThumbnail({
       )}
     >
       {item.product.primary_image_url ? (
-        // eslint-disable-next-line @next/next/no-img-element -- catalogue images use short-lived signed URLs that cannot be configured as stable Next.js image hosts.
+        // eslint-disable-next-line @next/next/no-img-element -- catalogue media uses an authenticated same-origin API route.
         <img
           src={item.product.primary_image_url}
           alt={`${item.product.name} catalogue photo`}

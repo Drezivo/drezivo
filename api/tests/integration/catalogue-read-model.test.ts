@@ -59,6 +59,10 @@ class FakeReadStorage {
   inspectUploadedObject() {
     return Promise.reject(new Error('Object inspection is not used by catalogue read tests.'));
   }
+
+  readObject() {
+    return Promise.resolve(null);
+  }
 }
 
 describe('CLT Phase 1 catalogue read model', async () => {
@@ -236,13 +240,13 @@ describe('CLT Phase 1 catalogue read model', async () => {
     expect(archivedSizeFilter.items).toEqual([]);
   });
 
-  it('returns a signed cover image URL for display order zero and null when no cover exists', async () => {
+  it('returns an application-owned staff URL for display order zero and null when no cover exists', async () => {
     const tenant = await createTestTenant({ clerkOrgId: 'org_clt010_cover_image' });
     const seeded = await seedLargeCatalogue(tenant.id, 'user_clt010_cover_image');
     const context = catalogueContext(tenant.id, seeded.branchId, 'user_clt010_cover_image');
     const storage = new FakeReadStorage();
 
-    await withTenantTransaction(tenant.id, 'user_clt010_cover_image', async (client) => {
+    const coverFileId = await withTenantTransaction(tenant.id, 'user_clt010_cover_image', async (client) => {
       const product = await client.query<{ id: string }>(
         `SELECT id FROM product WHERE tenant_id = $1 AND code = 'LOOK-001' LIMIT 1`,
         [tenant.id],
@@ -267,6 +271,7 @@ describe('CLT Phase 1 catalogue read model', async () => {
          VALUES ($1, $2, $3, 1), ($1, $2, $4, 0)`,
         [tenant.id, productId, secondary.id, cover.id],
       );
+      return cover.id;
     });
 
     const withCover = await getCatalogueClothingList(
@@ -275,16 +280,9 @@ describe('CLT Phase 1 catalogue read model', async () => {
       storage,
     );
     expect(withCover.items).toHaveLength(1);
-    expect(withCover.items[0]?.primary_image_url).toBe(
-      'https://reads.example.test/catalogue%2Flook-001-cover.webp?version=cover-v7',
-    );
-    expect(storage.authorizedReads).toEqual([
-      {
-        storageKey: 'catalogue/look-001-cover.webp',
-        versionId: 'cover-v7',
-        expiresInSeconds: 300,
-      },
-    ]);
+    expect(withCover.items[0]?.primary_image_url).toBe(`/api/media/staff/${coverFileId}?branch_id=${context.branchId}`);
+    expect(storage.authorizedReads).toEqual([]);
+    expect(JSON.stringify(withCover)).not.toContain('reads.example.test');
 
     const withoutCover = await getCatalogueClothingList(
       context,
@@ -293,16 +291,16 @@ describe('CLT Phase 1 catalogue read model', async () => {
     );
     expect(withoutCover.items).toHaveLength(1);
     expect(withoutCover.items[0]?.primary_image_url).toBeNull();
-    expect(storage.authorizedReads).toHaveLength(1);
+    expect(storage.authorizedReads).toHaveLength(0);
   });
 
-  it('returns signed Clothing Detail image URLs in display order and degrades failed authorizations to null', async () => {
+  it('returns application-owned staff URLs for accepted Clothing Detail images in display order', async () => {
     const tenant = await createTestTenant({ clerkOrgId: 'org_clt071_detail_images' });
     const seeded = await seedLargeCatalogue(tenant.id, 'user_clt071_detail_images');
     const context = catalogueContext(tenant.id, seeded.branchId, 'user_clt071_detail_images');
     const storage = new FakeReadStorage(new Set(['catalogue/look-001-secondary.webp']));
 
-    const productId = await withTenantTransaction(tenant.id, 'user_clt071_detail_images', async (client) => {
+    const seededImages = await withTenantTransaction(tenant.id, 'user_clt071_detail_images', async (client) => {
       const product = await client.query<{ id: string }>(
         `SELECT id FROM product WHERE tenant_id = $1 AND code = 'LOOK-001' LIMIT 1`,
         [tenant.id],
@@ -327,33 +325,23 @@ describe('CLT Phase 1 catalogue read model', async () => {
          VALUES ($1, $2, $3, 0), ($1, $2, $4, 1)`,
         [tenant.id, selectedProductId, cover.id, secondary.id],
       );
-      return selectedProductId;
+      return { productId: selectedProductId, coverId: cover.id, secondaryId: secondary.id };
     });
 
-    const detail = await getCatalogueClothingDetail(context, productId, storage);
+    const detail = await getCatalogueClothingDetail(context, seededImages.productId, storage);
     expect(detail.images).toHaveLength(2);
     expect(typeof detail.images[0]?.file_id).toBe('string');
     expect(detail.images[0]).toMatchObject({
       display_order: 0,
-      image_url: 'https://reads.example.test/catalogue%2Flook-001-cover.webp?version=cover-v1',
+      image_url: `/api/media/staff/${seededImages.coverId}?branch_id=${context.branchId}`,
     });
     expect(typeof detail.images[1]?.file_id).toBe('string');
     expect(detail.images[1]).toMatchObject({
       display_order: 1,
-      image_url: null,
+      image_url: `/api/media/staff/${seededImages.secondaryId}?branch_id=${context.branchId}`,
     });
-    expect(storage.authorizedReads).toEqual([
-      {
-        storageKey: 'catalogue/look-001-cover.webp',
-        versionId: 'cover-v1',
-        expiresInSeconds: 300,
-      },
-      {
-        storageKey: 'catalogue/look-001-secondary.webp',
-        versionId: 'secondary-v2',
-        expiresInSeconds: 300,
-      },
-    ]);
+    expect(storage.authorizedReads).toEqual([]);
+    expect(JSON.stringify(detail)).not.toContain('reads.example.test');
   });
 
   it('rejects an invalid or sort-mismatched cursor instead of drifting pagination', async () => {

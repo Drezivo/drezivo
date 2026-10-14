@@ -49,6 +49,21 @@ describe('payment method settings', async () => {
     const principalId = 'user_payment_settings';
     const tenant = await createTestTenant({ clerkOrgId: 'org_payment_settings' });
     const membershipId = await createTestMembership(tenant.id, principalId, 'owner');
+    const branchId = await withTenantTransaction(tenant.id, principalId, async (client) => {
+      const branch = await client.query<{ id: string }>(
+        `INSERT INTO branch (tenant_id, name, code, is_default, timezone, status)
+         VALUES ($1, 'Main', 'MAIN', true, 'Asia/Manila', 'active') RETURNING id`,
+        [tenant.id],
+      );
+      const id = branch.rows[0]?.id;
+      if (!id) throw new Error('expected branch');
+      await client.query(
+        `INSERT INTO branch_membership (tenant_id, branch_id, membership_id, permission_codes)
+         VALUES ($1, $2, $3, $4::jsonb)`,
+        [tenant.id, id, membershipId, JSON.stringify(['payments.manage'])],
+      );
+      return id;
+    });
     const paymentMethodId = await withTenantTransaction(tenant.id, principalId, async (client) => {
       const result = await client.query<{ id: string }>(
         `INSERT INTO payment_method
@@ -63,6 +78,7 @@ describe('payment method settings', async () => {
     });
     return {
       tenantId: tenant.id,
+      branchId,
       principalId,
       membershipId,
       paymentMethodId,
@@ -168,7 +184,7 @@ describe('payment method settings', async () => {
     expect(result.body.data).toMatchObject({ storefront_enabled: true, storefront_ready: true });
   });
 
-  it('shows the owner a signed link to the saved QR, and none for an unfinished upload', async () => {
+  it('shows the owner an application media route for the saved QR, and none for an unfinished upload', async () => {
     const context = await seed();
     const insertQr = (status: 'accepted' | 'pending_upload', label: string) =>
       withTenantTransaction(context.tenantId, context.principalId, async (client) => {
@@ -205,8 +221,7 @@ describe('payment method settings', async () => {
 
     const item = (await list()).items[0];
     expect(item?.qr_file_id).toBe(qrFileId);
-    expect(item?.qr_image_url).toEqual(expect.stringMatching(/^https?:\/\//));
-    expect(item?.qr_image_url).toContain('preview-qr');
+    expect(item?.qr_image_url).toBe(`/api/media/staff/${qrFileId}?branch_id=${context.branchId}`);
 
     // A file that never finished uploading is not signed, even if a row points at it.
     const unfinished = await insertQr('pending_upload', 'unfinished-qr');

@@ -6,6 +6,7 @@
 import { z } from 'zod';
 
 import { categoryId, productId, productVariantId } from '../common/ids';
+import { mediaUrl } from '../common/media';
 import { moneyString } from '../common/money';
 import { isoDate, isoInstant } from '../common/time';
 import { MAX_CLOTHING_PHOTOS, variantFitRange } from '../catalogue/admin';
@@ -37,7 +38,7 @@ export const catalogueCard = z
     name: z.string().min(1),
     category: z.string().nullable(),
     subcategory: z.string().min(1).max(120).nullable().optional(),
-    image_url: z.string().url().nullable(),
+    image_url: mediaUrl.nullable(),
     price_from_minor: moneyString,
     pricing_mode: pricingMode,
     included_duration_minutes: z.number().int().positive(),
@@ -67,7 +68,7 @@ export const publicMeasurement = z.discriminatedUnion('mode', [
       values: z.array(z.object({ label: z.string(), value: z.string() }).strict()).max(20),
     })
     .strict(),
-  z.object({ mode: z.literal('default_guide'), guide_image_url: z.string().url().nullable() }).strict(),
+  z.object({ mode: z.literal('default_guide'), guide_image_url: mediaUrl.nullable() }).strict(),
 ]);
 export type PublicMeasurement = z.infer<typeof publicMeasurement>;
 
@@ -95,7 +96,7 @@ export const itemDetail = z
     description: z.string().nullable(),
     category: z.string().nullable(),
     subcategory: z.string().min(1).max(120).nullable().optional(),
-    image_urls: z.array(z.string().url()).max(MAX_CLOTHING_PHOTOS),
+    image_urls: z.array(mediaUrl).max(MAX_CLOTHING_PHOTOS),
     variants: z.array(catalogueVariant).min(1),
   })
   .strict();

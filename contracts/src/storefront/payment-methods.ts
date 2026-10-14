@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { fileObjectId, paymentMethodId } from '../common/ids';
+import { mediaUrl } from '../common/media';
 import { paymentRail } from '../finance/payment-status';
 
 export const paymentDestination = z
@@ -44,11 +45,11 @@ export const paymentMethodSettingsItem = z
     presentation: paymentMethodPresentation,
     material: paymentMethodMaterial.nullable(),
     /**
-     * Short-lived signed links so the owner sees the saved QR image and instructions file. Only the
-     * settings list sends them; command responses omit them because replays are stored.
+     * Same-origin media routes let the app proxy authorized reads from the private object bucket.
+     * Only the settings list sends them; command responses omit them because replays are stored.
      */
-    qr_image_url: z.string().url().nullable().optional(),
-    material_url: z.string().url().nullable().optional(),
+    qr_image_url: mediaUrl.nullable().optional(),
+    material_url: mediaUrl.nullable().optional(),
   })
   .strict();
 export type PaymentMethodSettingsItem = z.infer<typeof paymentMethodSettingsItem>;

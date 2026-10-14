@@ -13,7 +13,11 @@ import {
 
 import { config } from '../../config/index.js';
 import { withTenantTransaction } from '../../db/client.js';
-import type { ObjectStorage, UploadedObjectMetadata } from '../../integrations/storage/object-storage.js';
+import {
+  boundStoredObjectBody,
+  type ObjectStorage,
+  type UploadedObjectMetadata,
+} from '../../integrations/storage/object-storage.js';
 import { objectStorage } from '../../integrations/storage/s3-compatible-object-storage.js';
 import {
   DependencyUnavailableError,
@@ -37,10 +41,12 @@ import {
   appendFileAuditEvent,
   insertPendingFile,
   readFileObject,
+  readStaffFileObject,
   rejectFileObject,
   type FileObjectRow,
 } from './files.repository.js';
 import { staffUploadStorageKey, type SupportedUploadPurpose } from './files.storage-keys.js';
+import type { FileStreamResponse } from './file-stream.js';
 
 const AUTHORIZE_UPLOAD_OPERATION = 'files.upload.authorize';
 const FINALIZE_UPLOAD_OPERATION = 'files.upload.finalize';
@@ -232,7 +238,8 @@ export async function finalizeUpload(
         fileId: input.fileId,
         versionId: uploaded.versionId,
       });
-      if (!accepted) throw new StateConflictError('This upload changed while it was being finalized.');
+      if (!accepted)
+        throw new StateConflictError('This upload changed while it was being finalized.');
       const data = toFinalizeResponse(accepted);
       const body = successBody(input.requestId, data);
       await appendFileAuditEvent(client, {
@@ -259,6 +266,47 @@ export async function finalizeUpload(
       );
     }
   });
+}
+
+/** Rechecks the active tenant permission and exact file relationship before streaming bytes. */
+export async function readStaffFile(
+  input: FileContext & { branchId: string; requestId: string; fileId: string },
+  storage: ObjectStorage = objectStorage,
+): Promise<FileStreamResponse> {
+  const file = await withTenantTransaction(input.tenantId, input.principalId, (client) =>
+    readStaffFileObject(client, {
+      tenantId: input.tenantId,
+      branchId: input.branchId,
+      fileId: input.fileId,
+      permissionCodes: input.permissionCodes,
+    }),
+  );
+  if (!file) throw new NotFoundError('The requested file could not be found.');
+
+  const mimeType = safeFileContentType(file.purpose, file.mime_type);
+  const stored = await storage.readObject({
+    storageKey: file.storage_key,
+    versionId: file.version_id,
+  });
+  if (!stored || (stored.contentLength !== null && stored.contentLength !== file.byte_size)) {
+    throw new DependencyUnavailableError('The requested file is temporarily unavailable.');
+  }
+
+  await withTenantTransaction(input.tenantId, input.principalId, (client) =>
+    appendFileAuditEvent(client, {
+      tenantId: input.tenantId,
+      actorKey: input.principalId,
+      action: 'file.read.opened',
+      fileId: file.id,
+      redactedSummary: { purpose: file.purpose, content_type: mimeType, byte_size: file.byte_size },
+      requestId: input.requestId,
+    }),
+  );
+  return {
+    body: boundStoredObjectBody(stored.body, file.byte_size),
+    mimeType,
+    byteSize: file.byte_size,
+  };
 }
 
 function assertFileWriteContext(input: FileContext, purpose: FileObjectRow['purpose']): void {
@@ -295,6 +343,20 @@ function assertFileWriteContext(input: FileContext, purpose: FileObjectRow['purp
   }
 }
 
+function safeFileContentType(
+  purpose: FileObjectRow['purpose'],
+  mimeType: string,
+): FileStreamResponse['mimeType'] {
+  if (mimeType === 'image/jpeg' || mimeType === 'image/png' || mimeType === 'image/webp')
+    return mimeType;
+  if (
+    mimeType === 'application/pdf' &&
+    (purpose === 'payment_method_material' || purpose === 'payment_receipt')
+  )
+    return mimeType;
+  throw new NotFoundError('The requested file could not be found.');
+}
+
 function assertSupportedUpload(
   request: UploadAuthorizationRequest,
 ): asserts request is UploadAuthorizationRequest & { purpose: SupportedUploadPurpose } {
@@ -315,7 +377,9 @@ function assertSupportedUpload(
       throw new ValidationError('This file must be a JPEG, PNG, WebP, or PDF.');
     }
   } else {
-    throw new ValidationError('This upload purpose is not available through the staff upload flow.');
+    throw new ValidationError(
+      'This upload purpose is not available through the staff upload flow.',
+    );
   }
   if (request.byte_size > FILE_UPLOAD_MAX_BYTES) {
     throw new ValidationError('Uploads must be 10 MB or smaller.');
@@ -336,9 +400,14 @@ function assertSupportedFilePurpose(row: FileObjectRow): void {
 }
 
 /** Size, type, checksum, and magic-byte checks for an uploaded object against its authorization. */
-export function validateUploadedObject(row: FileObjectRow, uploaded: UploadedObjectMetadata): string | null {
-  if (uploaded.byteSize !== row.byte_size) return 'Uploaded file size does not match the authorized size.';
-  if (uploaded.contentType !== row.mime_type) return 'Uploaded file type does not match the authorized type.';
+export function validateUploadedObject(
+  row: FileObjectRow,
+  uploaded: UploadedObjectMetadata,
+): string | null {
+  if (uploaded.byteSize !== row.byte_size)
+    return 'Uploaded file size does not match the authorized size.';
+  if (uploaded.contentType !== row.mime_type)
+    return 'Uploaded file type does not match the authorized type.';
   if (!uploaded.sha256 || uploaded.sha256 !== row.sha256) {
     return 'Uploaded file checksum does not match the authorized content.';
   }
@@ -357,11 +426,7 @@ function matchesFileSignature(prefix: Uint8Array, mimeType: string): boolean {
     return expected.every((value, index) => prefix[index] === value);
   }
   if (mimeType === 'image/webp') {
-    return (
-      prefix.length >= 12 &&
-      ascii(prefix, 0, 4) === 'RIFF' &&
-      ascii(prefix, 8, 12) === 'WEBP'
-    );
+    return prefix.length >= 12 && ascii(prefix, 0, 4) === 'RIFF' && ascii(prefix, 8, 12) === 'WEBP';
   }
   if (mimeType === 'application/pdf') {
     return prefix.length >= 5 && ascii(prefix, 0, 5) === '%PDF-';
@@ -430,12 +495,16 @@ async function finalizeSuccess(
   });
 }
 
-function replayOrThrow<T>(claim: Awaited<ReturnType<typeof claimTenantIdempotency>>): FileCommandResponse<T> | null {
+function replayOrThrow<T>(
+  claim: Awaited<ReturnType<typeof claimTenantIdempotency>>,
+): FileCommandResponse<T> | null {
   if (claim.kind === 'replayed') {
     return { status: claim.responseCode, body: claim.safeResponse as FileCommandBody<T> };
   }
   if (claim.kind === 'key_reused') {
-    throw new IdempotencyKeyReusedError('This Idempotency-Key was already used for another request.');
+    throw new IdempotencyKeyReusedError(
+      'This Idempotency-Key was already used for another request.',
+    );
   }
   if (claim.kind === 'in_progress') {
     throw new StateConflictError('An identical request is already being processed. Retry shortly.');

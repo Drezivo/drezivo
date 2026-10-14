@@ -62,6 +62,7 @@ export async function readGuestTokenScopes(client: PoolClient, tenantId: string,
 
 export interface GuestReservationRow {
   id: string;
+  storefront_slug: string;
   branch_id: string;
   reference_code: string;
   status: 'held' | 'pending_confirmation' | 'confirmed' | 'picked_up' | 'returned' | 'completed' | 'cancelled' | 'rejected' | 'expired';
@@ -84,7 +85,7 @@ export interface GuestReservationRow {
 
 export async function readGuestReservation(client: PoolClient, tenantId: string, reservationId: string): Promise<GuestReservationRow | null> {
   const result = await client.query<GuestReservationRow>(
-    `SELECT r.id, r.branch_id, r.reference_code, r.status, r.pickup_at, r.due_at, r.hold_expires_at,
+    `SELECT r.id, s.slug AS storefront_slug, r.branch_id, r.reference_code, r.status, r.pickup_at, r.due_at, r.hold_expires_at,
             r.price_snapshot, r.delivery_snapshot, rl.name_snapshot AS item_name, pv.size_label,
             pm.name AS method_name, pm.rail, pm.destination_snapshot, pm.qr_file_id,
             pm.presentation, pm.material_file_id,
@@ -96,6 +97,7 @@ export async function readGuestReservation(client: PoolClient, tenantId: string,
                  AND pr.evidence_status IN ('uploaded', 'under_review', 'verified')
             ) AS receipt_submitted
        FROM reservation r
+       JOIN storefront s ON s.tenant_id = r.tenant_id AND s.id = r.storefront_id
        JOIN payment_method pm ON pm.tenant_id = r.tenant_id AND pm.id = r.payment_method_id
        LEFT JOIN reservation_line rl ON rl.tenant_id = r.tenant_id AND rl.reservation_id = r.id AND rl.line_number = 1
        LEFT JOIN product_variant pv ON pv.tenant_id = rl.tenant_id AND pv.id = rl.variant_id

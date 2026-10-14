@@ -1,49 +1,48 @@
 import type { PoolClient } from 'pg';
 
-import type { ObjectStorage } from '../../integrations/storage/object-storage.js';
-import { objectStorage } from '../../integrations/storage/s3-compatible-object-storage.js';
+import { publicStorefrontMediaUrl, staffFileMediaUrl } from '../files/file-media-url.js';
 
-/** Signed image URLs outlive the public cache (`s-maxage` 300 s) with a wide margin. */
-export const STOREFRONT_IMAGE_URL_TTL_SECONDS = 3600;
-
-// `payment_method_material` is a business's own payment instructions, shown to its renters at checkout.
+// `payment_method_material` is published only when an active online method references it.
 const DISPLAYABLE_PURPOSES = ['storefront_asset', 'catalogue_image', 'measurement_guide', 'payment_method_material'];
 
-/**
- * Turns accepted file ids into short-lived signed read URLs in one query. Unknown, foreign,
- * unaccepted, or receipt files are simply absent from the result, so a caller can never be tricked
- * into signing a private document by referencing its id.
- */
-export class StorefrontMediaSigner {
-  constructor(
-    private readonly storage: ObjectStorage = objectStorage,
-    private readonly ttlSeconds = STOREFRONT_IMAGE_URL_TTL_SECONDS,
-  ) {}
+export type MediaAudience = { kind: 'staff'; branchId: string } | { kind: 'public'; slug: string };
 
-  async sign(client: PoolClient, tenantId: string, fileIds: ReadonlyArray<string | null>): Promise<Map<string, string>> {
+/**
+ * Maps accepted, same-tenant file ids to application routes. The route rechecks authorization on
+ * every request and streams from the private bucket; this helper never signs an R2 read URL.
+ */
+export class StorefrontMediaUrlMapper {
+  async map(
+    client: PoolClient,
+    tenantId: string,
+    fileIds: ReadonlyArray<string | null>,
+    audience: MediaAudience,
+  ): Promise<Map<string, string>> {
     const ids = [...new Set(fileIds.filter((id): id is string => id !== null))];
     const urls = new Map<string, string>();
     if (ids.length === 0) return urls;
 
-    const rows = await client.query<{ id: string; storage_key: string; version_id: string | null }>(
-      `SELECT id, storage_key, version_id
+    const rows = await client.query<{ id: string }>(
+      `SELECT id
          FROM file_object
         WHERE tenant_id = $1
           AND id = ANY($2::uuid[])
           AND lifecycle_status = 'accepted'
-          AND purpose = ANY($3::text[])`,
+          AND frozen_at IS NOT NULL
+          AND purpose = ANY($3::text[])
+          AND mime_type IN ('image/jpeg', 'image/png', 'image/webp', 'application/pdf')`,
       [tenantId, ids, DISPLAYABLE_PURPOSES],
     );
     for (const row of rows.rows) {
-      const { readUrl } = await this.storage.authorizeRead({
-        storageKey: row.storage_key,
-        versionId: row.version_id,
-        expiresInSeconds: this.ttlSeconds,
-      });
-      urls.set(row.id, readUrl);
+      urls.set(
+        row.id,
+        audience.kind === 'public'
+          ? publicStorefrontMediaUrl(audience.slug, row.id)
+          : staffFileMediaUrl(row.id, audience.branchId),
+      );
     }
     return urls;
   }
 }
 
-export const storefrontMediaSigner = new StorefrontMediaSigner();
+export const storefrontMediaUrlMapper = new StorefrontMediaUrlMapper();

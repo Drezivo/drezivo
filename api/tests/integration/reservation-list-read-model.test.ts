@@ -194,7 +194,7 @@ describe('RSV Phase 1 reservation read model', async () => {
     expect(hold).toMatchObject({ customer: { customer_id: null, snapshot: null }, payment: null });
   });
 
-  it('projects an accepted catalogue cover through a short-lived signed read URL', async () => {
+  it('projects an accepted catalogue cover through the staff media route', async () => {
     const seed = await seedWorkspace('org_rsv010_cover', 'user_rsv010_cover', ['reservations.manage']);
     await seedReservation(seed, {
       referenceCode: 'RSV-COVER-1',
@@ -205,7 +205,7 @@ describe('RSV Phase 1 reservation read model', async () => {
       customer: { fullName: 'Cover Customer', email: 'cover@example.test' },
     });
 
-    await withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
+    const coverFileId = await withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
       const file = await client.query<{ id: string }>(
         `INSERT INTO file_object
            (tenant_id, purpose, storage_key, version_id, mime_type, byte_size, lifecycle_status,
@@ -220,30 +220,21 @@ describe('RSV Phase 1 reservation read model', async () => {
          VALUES ($1, $2, $3, 0)`,
         [seed.tenantId, seed.productId, requireRow(file.rows, 'catalogue cover file').id],
       );
+      return requireRow(file.rows, 'catalogue cover file').id;
     });
 
-    const authorizeRead = vi.fn().mockResolvedValue({
-      readUrl: 'https://reads.example.test/catalogue/cover-image.webp?version=cover-v1',
-      expiresAt: new Date('2026-10-18T02:05:00.000Z'),
-    });
     const list = await getReservationList(
       reservationContext(seed),
       { limit: 20, sort: 'pickup_asc' },
       {
-        authorizeRead,
+        authorizeRead: vi.fn(),
         authorizeUpload: vi.fn().mockRejectedValue(new Error('Upload authorization is not used.')),
+        readObject: vi.fn().mockResolvedValue(null),
         inspectUploadedObject: vi.fn().mockResolvedValue(null),
       },
     );
 
-    expect(list.items[0]?.line.image_url).toBe(
-      'https://reads.example.test/catalogue/cover-image.webp?version=cover-v1',
-    );
-    expect(authorizeRead).toHaveBeenCalledWith({
-      storageKey: 'private/catalogue/cover-image.webp',
-      versionId: 'cover-v1',
-      expiresInSeconds: 300,
-    });
+    expect(list.items[0]?.line.image_url).toBe(`/api/media/staff/${coverFileId}?branch_id=${seed.branchId}`);
   });
 
   it('uses deterministic keyset pagination and rejects a cursor reused with another sort', async () => {
