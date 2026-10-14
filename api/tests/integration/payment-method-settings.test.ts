@@ -221,7 +221,9 @@ describe('payment method settings', async () => {
 
     const item = (await list()).items[0];
     expect(item?.qr_file_id).toBe(qrFileId);
-    expect(item?.qr_image_url).toBe(`/api/media/staff/${qrFileId}?branch_id=${context.branchId}`);
+    expect(item?.qr_image_url).toBe(
+      `/api/media/staff/${qrFileId}?branch_id=${context.branchId}&w=960`,
+    );
 
     // A file that never finished uploading is not signed, even if a row points at it.
     const unfinished = await insertQr('pending_upload', 'unfinished-qr');
