@@ -706,7 +706,7 @@ describe("NewReservationSheet", () => {
     expect(api.createStaffReservation).not.toHaveBeenCalled();
   });
 
-  it("shows an already-selected flexible-fit rebooking line as a status, not a button", async () => {
+  it("hides the flexible-fit card when that item is copied into a rebooking", async () => {
     api.getCatalogueClothingDetail.mockResolvedValueOnce({
       data: freeSizeDetail,
       requestId: "req-free-size-rebook",
@@ -738,9 +738,82 @@ describe("NewReservationSheet", () => {
       },
     });
 
-    const selectedStatus = await screen.findByText("Already selected");
-    expect(selectedStatus).toHaveAttribute("role", "status");
+    expect(
+      await screen.findByRole("button", { name: "Variant already in replacement" })
+    ).toBeDisabled();
+    const copiedItems = screen.getByText("Items in the new reservation").closest("section");
+    expect(copiedItems).not.toBeNull();
+    expect(within(copiedItems!).getByText("Emerald Gown")).toBeVisible();
+    expect(screen.queryByText("This clothing item has one rentable size.")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Select flexible fit" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Already selected")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Already selected" })).not.toBeInTheDocument();
+  });
+
+  it("keeps the add-to-rebooking action for a newly chosen flexible-fit item without the card", async () => {
+    const rosalieProductId = "00000000-0000-4000-8000-000000000121";
+    const rosalieVariantId = "00000000-0000-4000-8000-000000000122";
+    const rosalieProduct = clothingListItem.parse({
+      ...product,
+      product_id: rosalieProductId,
+      code: "ROSALIE-FS",
+      name: "Rosalie",
+      sizing_mode: "free_size",
+      has_free_size: true,
+      size_labels: [],
+    });
+    const rosalieDetail = clothingDetail.parse({
+      ...freeSizeDetail,
+      product_id: rosalieProductId,
+      code: "ROSALIE-FS",
+      name: "Rosalie",
+      variants: freeSizeDetail.variants.map((variant) => ({
+        ...variant,
+        id: rosalieVariantId,
+        sku: "ROSALIE-FS",
+        assets: variant.assets.map((asset) => ({ ...asset, variant_id: rosalieVariantId })),
+      })),
+    });
+    api.getCatalogueClothing.mockResolvedValue(listPage([product, rosalieProduct]));
+    api.getCatalogueClothingDetail.mockImplementation((productId: string) =>
+      Promise.resolve({
+        data: productId === rosalieProductId ? rosalieDetail : multiSizeDetail,
+        requestId: `req-detail-${productId}`,
+      })
+    );
+
+    renderSheet({
+      rebookFrom: {
+        referenceCode: "RSV-OLD-ADDING-FLEXIBLE",
+        lines: [
+          {
+            sourceLineId: "source-line-sized",
+            productId: ids.product as never,
+            variantId: ids.variant as never,
+            name: "Emerald Gown",
+          },
+        ],
+        pickupAt: "2027-03-12T02:00:00.000Z",
+        dueAt: "2027-03-15T02:00:00.000Z",
+        eventDate: null,
+        fulfillmentMethod: "pickup",
+        paymentMethodId: ids.paymentMethod as never,
+        customer: null,
+      },
+    });
+
+    fireEvent.click(await screen.findByRole("button", { name: "Choose Rosalie" }));
+
+    const addFlexibleFit = await screen.findByRole("button", {
+      name: "Add selected item to replacement",
+    });
+    expect(screen.queryByText("This clothing item has one rentable size.")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Select flexible fit" })).not.toBeInTheDocument();
+    expect(addFlexibleFit).toBeEnabled();
+    fireEvent.click(addFlexibleFit);
+    const replacementItems = screen.getByText("Items in the new reservation").closest("section");
+    expect(replacementItems).not.toBeNull();
+    expect(within(replacementItems!).getByText("Rosalie")).toBeVisible();
   });
 
   it("uses the source reservation as a fallback only for blank fields on the current profile", async () => {
