@@ -43,6 +43,14 @@ export const DASHBOARD_OVERVIEW_SQL = `WITH branch_clock AS MATERIALIZED (
             FROM reservation r
            WHERE r.tenant_id = $1::uuid AND r.branch_id = $2::uuid AND r.status = 'picked_up'
          ) AS active_rentals,
+         (SELECT count(rl.id)::int
+            FROM reservation r
+            JOIN reservation_line rl
+              ON rl.tenant_id = r.tenant_id AND rl.reservation_id = r.id
+           WHERE r.tenant_id = $1::uuid AND r.branch_id = $2::uuid
+             AND r.status IN ('confirmed', 'picked_up', 'returned', 'completed')
+             AND r.pickup_at >= w.month_start AND r.pickup_at < w.month_end
+         ) AS confirmed_rental_items_current_month,
          (SELECT count(*)::int
             FROM reservation r
            WHERE r.tenant_id = $1::uuid AND r.branch_id = $2::uuid
@@ -371,6 +379,7 @@ export const DASHBOARD_OVERVIEW_SQL = `WITH branch_clock AS MATERIALIZED (
        ),
        'metrics', jsonb_build_object(
          'active_rentals', m.active_rentals,
+         'confirmed_rental_items_current_month', m.confirmed_rental_items_current_month,
          'pickups_today', m.pickups_today,
          'returns_today', m.returns_today,
          'fittings_today', m.fittings_today,
