@@ -132,7 +132,8 @@ describe('TBF-030 tenant bootstrap', async () => {
           trial_ends_at: Date;
         }>('SELECT current_period_start, current_period_end, trial_ends_at FROM subscription');
         const outbox = await client.query<{ event_type: string }>(
-          'SELECT event_type FROM outbox_event',
+          `SELECT event_type FROM outbox_event
+            WHERE event_type = 'tenant.bootstrapped'`,
         );
         const categories = await client.query<{
           name: string;

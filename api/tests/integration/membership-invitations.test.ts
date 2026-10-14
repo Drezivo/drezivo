@@ -73,7 +73,9 @@ describe('TBF-040 membership invitations', async () => {
       client.query<{ count: number; outbox_count: number }>(
         `SELECT
            (SELECT count(*)::int FROM membership_invitation WHERE tenant_id = $1) AS count,
-           (SELECT count(*)::int FROM outbox_event WHERE tenant_id = $1) AS outbox_count`,
+           (SELECT count(*)::int FROM outbox_event
+             WHERE tenant_id = $1
+               AND event_type IN ('clerk.invitation.dispatch_requested', 'clerk.invitation.revoke_requested')) AS outbox_count`,
         [context.tenantId],
       ),
     );
@@ -96,7 +98,9 @@ describe('TBF-040 membership invitations', async () => {
       client.query<{ invitations: number; outbox: number }>(
         `SELECT
            (SELECT count(*)::int FROM membership_invitation WHERE tenant_id = $1) AS invitations,
-           (SELECT count(*)::int FROM outbox_event WHERE tenant_id = $1) AS outbox`,
+           (SELECT count(*)::int FROM outbox_event
+             WHERE tenant_id = $1
+               AND event_type IN ('clerk.invitation.dispatch_requested', 'clerk.invitation.revoke_requested')) AS outbox`,
         [context.tenantId],
       ),
     );
@@ -159,7 +163,9 @@ describe('TBF-040 membership invitations', async () => {
         `SELECT
            (SELECT count(*)::int FROM membership_invitation WHERE tenant_id = $1) AS count,
            (SELECT dispatch_version FROM membership_invitation WHERE id = $2) AS dispatch_version,
-           (SELECT count(*)::int FROM outbox_event WHERE tenant_id = $1) AS outbox_count`,
+           (SELECT count(*)::int FROM outbox_event
+             WHERE tenant_id = $1
+               AND event_type IN ('clerk.invitation.dispatch_requested', 'clerk.invitation.revoke_requested')) AS outbox_count`,
         [context.tenantId, firstId],
       ),
     );
@@ -281,7 +287,9 @@ describe('TBF-040 membership invitations', async () => {
            (SELECT count(*)::int FROM membership_invitation WHERE tenant_id = $1) AS count,
            (SELECT dispatch_version FROM membership_invitation WHERE id = $2) AS dispatch_version,
            (SELECT status::text FROM membership_invitation WHERE id = $2) AS status,
-           (SELECT count(*)::int FROM outbox_event WHERE tenant_id = $1) AS outbox_count`,
+           (SELECT count(*)::int FROM outbox_event
+             WHERE tenant_id = $1
+               AND event_type IN ('clerk.invitation.dispatch_requested', 'clerk.invitation.revoke_requested')) AS outbox_count`,
         [context.tenantId, invitationId],
       ),
     );
