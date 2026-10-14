@@ -34,7 +34,8 @@
     "react-day-picker": "^9.14.0",
     "react-dom": "19.2.3",
     "read-excel-file": "^9.3.10",
-    "tailwind-merge": "^2.6.0"
+    "tailwind-merge": "^2.6.0",
+    "zod": "^3.23.0"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.2.0",
