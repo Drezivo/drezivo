@@ -112,6 +112,8 @@ import {
   updateStorefrontRequest,
   updateStorefrontSlugRequest,
   paymentMethodSettingsList,
+  paymentRenterStepsSetting,
+  updatePaymentRenterStepsRequest,
   tenantBootstrapResponse,
   updatePaymentMethodSettingsRequest,
   updateCatalogueCategoryRequest,
@@ -235,6 +237,7 @@ import {
   type MemberRosterResponse,
   type PaginationRequest,
   type PaymentMethodSettingsItem,
+  type PaymentRenterStepsSetting,
   type BranchBusinessHours,
   type BranchClosureCreateRequest,
   type BranchClosureListQuery,
@@ -261,6 +264,7 @@ import {
   type PaymentMethodSettingsList,
   type TenantBootstrapResponse,
   type UpdatePaymentMethodSettingsRequest,
+  type UpdatePaymentRenterStepsRequest,
   type UpdateCatalogueCategoryRequest,
   type UpdateCatalogueCategoryStatusRequest,
   type UpdateClothingProductRequest,
@@ -601,6 +605,15 @@ export function createDrezivoApiClient(getToken: TokenGetter) {
         method: "GET",
         path: "/api/v1/payment-methods",
         responseSchema: apiEnvelope(paymentMethodSettingsList),
+      }),
+    updatePaymentRenterSteps: (input: UpdatePaymentRenterStepsRequest, idempotencyKey: string) =>
+      request<PaymentRenterStepsSetting>({
+        getToken,
+        body: updatePaymentRenterStepsRequest.parse(input),
+        idempotencyKey,
+        method: "PUT",
+        path: "/api/v1/payment-methods/renter-steps",
+        responseSchema: apiEnvelope(paymentRenterStepsSetting),
       }),
     createPaymentMethod: (input: CreatePaymentMethodRequest, idempotencyKey: string) =>
       request<PaymentMethodSettingsItem>({

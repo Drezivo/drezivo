@@ -144,6 +144,8 @@ import {
   paginationRequest,
   paymentMethodSettingsItem,
   paymentMethodSettingsList,
+  paymentRenterStepsSetting,
+  updatePaymentRenterStepsRequest,
   updatePaymentMethodSettingsRequest,
   publicStorefront,
   refundCreateRequest,
@@ -241,6 +243,8 @@ registry.register('ClaimMembershipInvitationRequest', claimMembershipInvitationR
 registry.register('ChangeSubscriptionPlanRequest', changeSubscriptionPlanRequest);
 registry.register('PaymentMethodSettingsItem', paymentMethodSettingsItem);
 registry.register('PaymentMethodSettingsList', paymentMethodSettingsList);
+registry.register('PaymentRenterStepsSetting', paymentRenterStepsSetting);
+registry.register('UpdatePaymentRenterStepsRequest', updatePaymentRenterStepsRequest);
 registry.register('UpdatePaymentMethodSettingsRequest', updatePaymentMethodSettingsRequest);
 registry.register('VerifyOnboardingPaymentRequest', verifyOnboardingPaymentRequest);
 registry.register('CloseTenantRequest', closeTenantRequest);
@@ -602,6 +606,26 @@ registry.registerPath({
       content: { 'application/json': { schema: successEnvelope(paymentMethodSettingsList) } },
     },
     403: jsonError('Payment management permission is required.'),
+  },
+});
+
+registry.registerPath({
+  method: 'put',
+  path: '/payment-methods/renter-steps',
+  tags: ['payments'],
+  summary: 'Update the tenant-wide renter payment guide.',
+  request: {
+    headers: idempotencyKeyHeader,
+    body: { content: { 'application/json': { schema: updatePaymentRenterStepsRequest } } },
+  },
+  responses: {
+    200: {
+      description: 'Shared renter steps updated or replayed.',
+      content: { 'application/json': { schema: successEnvelope(paymentRenterStepsSetting) } },
+    },
+    403: jsonError('Payment management permission is required.'),
+    409: jsonError('The renter steps changed or an identical request is in progress.'),
+    422: jsonError('The renter steps must be text or an accepted same-tenant image.'),
   },
 });
 

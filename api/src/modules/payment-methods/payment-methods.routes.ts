@@ -4,7 +4,7 @@ import { requireStaffAuth } from '../../middleware/auth.js';
 import { rateLimit } from '../../middleware/rate-limit.js';
 import { requireTenantContext } from '../../middleware/tenant-context.js';
 import { requireTenantAction } from '../tenancy/tenancy.service.js';
-import { archivePaymentMethodRequest, createPaymentMethodRequest } from '@drezivo/contracts';
+import { archivePaymentMethodRequest, createPaymentMethodRequest, updatePaymentRenterStepsRequest } from '@drezivo/contracts';
 
 import { validate } from '../../middleware/validate.js';
 import {
@@ -12,6 +12,7 @@ import {
   createPaymentMethodController,
   listPaymentMethodSettingsController,
   updatePaymentMethodSettingsController,
+  updatePaymentRenterStepsController,
 } from './payment-methods.controller.js';
 import {
   requirePaymentManagePermission,
@@ -42,6 +43,18 @@ paymentMethodsRouter.get(
   requireTenantAction('context_read'),
   requirePaymentManagePermission,
   listPaymentMethodSettingsController,
+);
+
+paymentMethodsRouter.put(
+  '/payment-methods/renter-steps',
+  requireStaffAuth,
+  requireTenantContext,
+  writeRateLimit,
+  requireTenantAction('publish'),
+  requirePaymentManagePermission,
+  validate({ body: updatePaymentRenterStepsRequest }),
+  requirePaymentMethodSettingsIdempotencyKey,
+  updatePaymentRenterStepsController,
 );
 
 paymentMethodsRouter.patch(
