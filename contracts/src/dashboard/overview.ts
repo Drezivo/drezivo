@@ -164,6 +164,15 @@ export const dashboardOverviewResponse = z
             previous_minor: nonNegativeMoneyString.nullable(),
           })
           .strict(),
+        projected_sales_current_month: z
+          .object({
+            current_minor: nonNegativeMoneyString,
+            reservations: dashboardCount,
+          })
+          .strict()
+          .describe(
+            'Current branch-local month completed rental fees plus fees from confirmed reservations with pickup_at at or after as_of within the same month. Excludes deposits and non-completed/non-confirmed statuses.',
+          ),
         new_customers: z.object({ current: dashboardCount, previous: dashboardCount }).strict(),
         /**
          * Cumulative projected rental fees: all completed rental fees to date plus the rental fees

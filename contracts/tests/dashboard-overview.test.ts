@@ -87,6 +87,7 @@ function validOverview() {
       completed_rental_value: { current_minor: '30000', previous_minor: '20000' },
       completed_rentals: { current: 3, previous: 2 },
       average_rental_value: { current_minor: '10000', previous_minor: '10000' },
+      projected_sales_current_month: { current_minor: '42000', reservations: 2 },
       new_customers: { current: 2, previous: 1 },
     },
   };
