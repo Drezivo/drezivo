@@ -519,9 +519,12 @@ describe("CalendarAvailabilityPage", () => {
         expect.objectContaining({ start_date: "2026-10-05", end_date: "2026-10-10" })
       )
     );
-    expect(screen.getByRole("button", { name: "Calendar availability date range" })).toHaveTextContent(
-      "Oct 5, 2026 – Oct 10, 2026"
-    );
+    const selectedRange = screen.getByRole("button", {
+      name: "Calendar availability date range",
+    });
+    expect(selectedRange).toHaveTextContent("Oct 5, 2026 – Oct 10, 2026");
+    expect(selectedRange.querySelector(".whitespace-nowrap")).not.toBeNull();
+    expect(selectedRange.querySelector(".truncate")).toBeNull();
     const timeline = screen.getByLabelText("Clothing availability timeline");
     expect(within(timeline).getByText("Oct 5")).toBeVisible();
     expect(within(timeline).getByText("Oct 10")).toBeVisible();

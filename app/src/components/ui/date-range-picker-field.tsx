@@ -23,6 +23,7 @@ export function DateRangePickerField({
   className,
   startFreshOnOpen = false,
   popoverAlign = "start",
+  truncateValue = true,
 }: {
   value: DateRangeValue;
   onChange: (value: DateRangeValue) => void;
@@ -33,6 +34,7 @@ export function DateRangePickerField({
   className?: string;
   startFreshOnOpen?: boolean;
   popoverAlign?: "start" | "end";
+  truncateValue?: boolean;
 }) {
   const externalRange = useMemo<DayPickerDateRange | undefined>(() => {
     const from = parseIsoDate(value.from);
@@ -93,7 +95,12 @@ export function DateRangePickerField({
       >
         <span className="flex min-w-0 items-center gap-2">
           <CalendarDays className="h-4 w-4 shrink-0 text-dashboard-muted" />
-          <span className={cn("truncate", !displayValue && "text-dashboard-muted")}>
+          <span
+            className={cn(
+              truncateValue ? "truncate" : "whitespace-nowrap",
+              !displayValue && "text-dashboard-muted"
+            )}
+          >
             {displayValue || placeholder}
           </span>
         </span>
