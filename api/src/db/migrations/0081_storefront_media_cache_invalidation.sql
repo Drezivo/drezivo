@@ -28,7 +28,21 @@ BEGIN
 END;
 $$;
 
-REVOKE ALL ON FUNCTION enqueue_storefront_media_cache_invalidation() FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION enqueue_storefront_media_cache_invalidation() FROM PUBLIC;
+
+DO $$
+DECLARE
+  role_name text;
+BEGIN
+  FOREACH role_name IN ARRAY ARRAY['anon', 'authenticated', 'service_role'] LOOP
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = role_name) THEN
+      EXECUTE format(
+        'REVOKE ALL PRIVILEGES ON FUNCTION public.enqueue_storefront_media_cache_invalidation() FROM %I',
+        role_name
+      );
+    END IF;
+  END LOOP;
+END $$;
 
 CREATE TRIGGER storefront_media_cache_invalidation
   AFTER INSERT OR DELETE OR UPDATE OF status, branch_id, slug, branding, content ON storefront
