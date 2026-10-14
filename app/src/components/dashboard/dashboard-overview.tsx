@@ -30,6 +30,7 @@ import {
   type DashboardTone,
   type ScheduleEventType,
 } from "./dashboard-data";
+import { DashboardLoadingState } from "./dashboard-loading-state";
 
 const metricToneClasses: Record<DashboardTone, string> = {
   purple: "dashboard-tone-purple",
@@ -137,14 +138,8 @@ export function DashboardOverview() {
     };
   }, [getToken, isLoaded, isSignedIn, reloadVersion]);
 
-  if (!isLoaded || isLoading) {
-    return (
-      <div className="min-h-[calc(100svh-72px)] px-10 py-5 sm:py-6" aria-busy="true">
-        <p role="status" className="text-sm text-dashboard-muted">
-          Loading your dashboard…
-        </p>
-      </div>
-    );
+  if (!isLoaded || (isLoading && overview === null)) {
+    return <DashboardLoadingState />;
   }
 
   if (error || !overview) {
@@ -202,7 +197,7 @@ export function DashboardOverview() {
   };
 
   return (
-    <div className="min-h-full px-ws-gutter py-5 sm:py-6">
+    <div className="min-h-full px-ws-gutter py-5 sm:py-6" aria-busy={isLoading || undefined}>
       <div className="mx-auto space-y-5">
         <PageHero
           headingId="dashboard-heading"

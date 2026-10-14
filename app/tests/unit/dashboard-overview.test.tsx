@@ -217,11 +217,12 @@ describe("DashboardOverview", () => {
     ).toBeVisible();
   });
 
-  it("shows a loading state without presenting fabricated dashboard values", () => {
+  it("shows dashboard skeletons without presenting fabricated dashboard values", () => {
     dashboardApi.getDashboardOverview.mockReturnValue(new Promise(() => {}));
     render(<DashboardOverview />);
 
-    expect(screen.getByRole("status")).toHaveTextContent("Loading your dashboard");
+    expect(screen.getByRole("status", { name: "Loading dashboard" })).toBeVisible();
+    expect(document.querySelectorAll('[data-slot="skeleton"]').length).toBeGreaterThan(0);
     expect(screen.queryByText("Active Rentals")).not.toBeInTheDocument();
     expect(screen.queryByText(/sample data|maria santos/i)).not.toBeInTheDocument();
   });

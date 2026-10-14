@@ -39,6 +39,7 @@ import { useDebouncedValue } from "@/lib/use-debounced-value";
 import { cn } from "@/lib/utils";
 
 import { NewReservationSheet, type ReservationRebookSource } from "./new-reservation-sheet";
+import { ReservationsLoadingState } from "./reservations-loading-state";
 import { RESERVATIONS_CHANGED_EVENT } from "./pending-hold-guard";
 import { ReservationDetailsSheet } from "./reservation-details-sheet";
 import {
@@ -104,6 +105,7 @@ export function ReservationsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<DrezivoApiError | null>(null);
   const [reloadVersion, setReloadVersion] = useState(0);
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
 
   const currentCursor = pageCursors[pageIndex] ?? null;
   const dateRangeError = validateDateRange(dateRange);
@@ -218,6 +220,7 @@ export function ReservationsPage() {
         if (cancelled) return;
         setRows(result.data.items);
         setPageMeta(result.data.page_meta);
+        setHasLoadedOnce(true);
       })
       .catch((caughtError) => {
         if (cancelled) return;
@@ -226,7 +229,9 @@ export function ReservationsPage() {
         setError(toDrezivoApiError(caughtError));
       })
       .finally(() => {
-        if (!cancelled) setIsLoading(false);
+        if (!cancelled) {
+          setIsLoading(false);
+        }
       });
 
     return () => {
@@ -245,6 +250,8 @@ export function ReservationsPage() {
     reloadVersion,
     status,
   ]);
+
+  const isInitialLoading = isLoading && !hasLoadedOnce;
 
   const resetPagination = useCallback(() => {
     setPageIndex(0);
@@ -296,7 +303,7 @@ export function ReservationsPage() {
           onNewReservation={() => setIsNewReservationOpen(true)}
         />
 
-        <Card className="gap-0 overflow-visible py-0">
+        <Card className="gap-0 overflow-visible py-0" aria-busy={isLoading || undefined}>
           <CardContent className="p-0">
             <ReservationToolbar
               query={query}
@@ -309,11 +316,8 @@ export function ReservationsPage() {
             />
             <ReservationStatusTabs activeStatus={status} onChange={updateStatus} />
 
-            {isLoading ? (
-              <ReservationListState
-                title="Loading reservations…"
-                message="Fetching the latest reservations for this workspace."
-              />
+            {isInitialLoading ? (
+              <ReservationsLoadingState />
             ) : dateRangeError ? (
               <ReservationListState
                 title="Check the pickup date range"
