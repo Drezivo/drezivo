@@ -3,6 +3,7 @@ import type { Request, Response } from 'express';
 import { ValidationError } from '../../shared/errors.js';
 import { sendSuccess } from '../../shared/response.js';
 import type { ArchivePaymentMethodRequest, CreatePaymentMethodRequest } from '@drezivo/contracts';
+import { updatePaymentRenterStepsRequest } from '@drezivo/contracts';
 
 import { idempotencyKeyOf } from '../../middleware/staff-command.js';
 import {
@@ -10,11 +11,24 @@ import {
   createPaymentMethod,
   getPaymentMethodSettings,
   updatePaymentMethodSettings,
+  updatePaymentRenterSteps,
   type PaymentMethodContext,
 } from './payment-methods.service.js';
 
 export async function listPaymentMethodSettingsController(req: Request, res: Response): Promise<void> {
   sendSuccess(req, res, await getPaymentMethodSettings(requireContext(req)));
+}
+
+export async function updatePaymentRenterStepsController(req: Request, res: Response): Promise<void> {
+  const parsed = updatePaymentRenterStepsRequest.safeParse(req.body);
+  if (!parsed.success) throw new ValidationError('Renter steps settings are invalid.');
+  const result = await updatePaymentRenterSteps({
+    ...requireContext(req),
+    request: parsed.data,
+    idempotencyKey: idempotencyKeyOf(req),
+    requestId: req.requestId,
+  });
+  res.status(result.status).json(result.body);
 }
 
 export async function updatePaymentMethodSettingsController(req: Request, res: Response): Promise<void> {

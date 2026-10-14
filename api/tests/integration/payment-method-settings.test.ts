@@ -28,7 +28,7 @@ process.env.S3_SECRET_ACCESS_KEY ??= 'test';
 describe('payment method settings', async () => {
   const { closePool, withTenantTransaction } = await import('../../src/db/client.js');
   const { config } = await import('../../src/config/index.js');
-  const { updatePaymentMethodSettings, getPaymentMethodSettings } =
+  const { updatePaymentMethodSettings, getPaymentMethodSettings, updatePaymentRenterSteps } =
     await import('../../src/modules/payment-methods/payment-methods.service.js');
   const { createTestMembership, createTestTenant } = await import('./helpers/factories.js');
 
@@ -233,6 +233,180 @@ describe('payment method settings', async () => {
       ]),
     );
     expect((await list()).items[0]).toMatchObject({ qr_file_id: unfinished, qr_image_url: null });
+  });
+
+  it('saves one shared renter guide idempotently and audits only one change', async () => {
+    const context = await seed();
+    const input = {
+      ...context,
+      permissionCodes: [...context.permissionCodes],
+      requestId: 'req-renter-steps-shared',
+      idempotencyKey: 'renter-steps-shared-001',
+      request: { version: 1, text: 'Send payment, then share the receipt.', image_file_id: null },
+    };
+
+    const first = await updatePaymentRenterSteps(input);
+    const replay = await updatePaymentRenterSteps(input);
+    expect(first.status).toBe(200);
+    expect(replay).toEqual(first);
+    if (!first.body.success) throw new Error('expected shared renter steps to save');
+    expect(first.body.data).toMatchObject({ version: 2, text: 'Send payment, then share the receipt.', image: null });
+
+    const settings = await getPaymentMethodSettings({ ...context, permissionCodes: [...context.permissionCodes] });
+    expect(settings.renter_steps).toMatchObject({ version: 2, text: 'Send payment, then share the receipt.', legacy_conflicts: [] });
+    const audit = await withTenantTransaction(context.tenantId, context.principalId, async (client) => {
+      const result = await client.query<{ count: number; version: number }>(
+        `SELECT (SELECT count(*)::int FROM audit_event
+                  WHERE tenant_id = $1 AND action = 'payment.renter_steps.updated') AS count,
+                (SELECT renter_steps_version FROM tenant_settings WHERE tenant_id = $1) AS version`,
+        [context.tenantId],
+      );
+      return result.rows[0];
+    });
+    expect(audit).toEqual({ count: 1, version: 2 });
+  });
+
+  it('accepts and signs only same-tenant, accepted image files for the shared guide', async () => {
+    const context = await seed();
+    const accepted = await createPaymentFile(context, 'payment_method_material', 'image/png', 'shared-steps');
+    const saved = await updatePaymentRenterSteps({
+      ...context,
+      permissionCodes: [...context.permissionCodes],
+      requestId: 'req-renter-steps-image',
+      idempotencyKey: 'renter-steps-image-001',
+      request: { version: 1, text: null, image_file_id: accepted },
+    });
+    expect(saved.status).toBe(200);
+
+    const settings = await getPaymentMethodSettings({ ...context, permissionCodes: [...context.permissionCodes] });
+    expect(settings.renter_steps.image).toMatchObject({
+      file_id: accepted,
+      content_type: 'image/png',
+      image_url: expect.stringMatching(/^https?:\/\//),
+    });
+  });
+
+  it('rejects PDF, unfinished, and foreign-tenant files as the shared guide image', async () => {
+    const context = await seed();
+    const otherTenant = await createTestTenant({ clerkOrgId: 'org_payment_steps_foreign' });
+    const invalidFiles = [
+      await createPaymentFile(context, 'payment_method_material', 'application/pdf', 'steps-pdf'),
+      await createPaymentFile(context, 'payment_method_material', 'image/png', 'steps-pending', 'uploaded'),
+      await createPaymentFile({ ...context, tenantId: otherTenant.id }, 'payment_method_material', 'image/png', 'steps-foreign'),
+    ];
+
+    for (const [index, fileId] of invalidFiles.entries()) {
+      const result = await updatePaymentRenterSteps({
+        ...context,
+        permissionCodes: [...context.permissionCodes],
+        requestId: `req-renter-steps-invalid-${index}`,
+        idempotencyKey: `renter-steps-invalid-${index}`,
+        request: { version: 1, text: null, image_file_id: fileId },
+      });
+      expect(result.status).toBe(422);
+    }
+
+    const settings = await getPaymentMethodSettings({ ...context, permissionCodes: [...context.permissionCodes] });
+    expect(settings.renter_steps).toMatchObject({ version: 1, text: null, image: null });
+  });
+
+  it('preserves conflicting legacy method guides and surfaces them until a shared guide is saved', async () => {
+    const context = await seed();
+    await withTenantTransaction(context.tenantId, context.principalId, async (client) => {
+      await client.query(
+        `UPDATE payment_method SET destination_snapshot = $3::jsonb WHERE tenant_id = $1 AND id = $2`,
+        [context.tenantId, context.paymentMethodId, JSON.stringify({ instructions: 'GCash-specific steps.' })],
+      );
+      await client.query(
+        `INSERT INTO payment_method (tenant_id, name, rail, destination_snapshot, active, storefront_enabled, version)
+         VALUES ($1, 'Maya', 'manual_transfer', $2::jsonb, true, true, 1)`,
+        [context.tenantId, JSON.stringify({ instructions: 'Maya-specific steps.' })],
+      );
+    });
+
+    const legacy = await getPaymentMethodSettings({ ...context, permissionCodes: [...context.permissionCodes] });
+    expect(legacy.renter_steps.legacy_conflicts).toEqual([
+      expect.objectContaining({ payment_method_name: 'GCash', text: 'GCash-specific steps.' }),
+      expect.objectContaining({ payment_method_name: 'Maya', text: 'Maya-specific steps.' }),
+    ]);
+
+    const empty = await updatePaymentRenterSteps({
+      ...context,
+      permissionCodes: [...context.permissionCodes],
+      requestId: 'req-renter-steps-consolidate-empty',
+      idempotencyKey: 'renter-steps-consolidate-empty',
+      request: { version: 1, text: null, image_file_id: null },
+    });
+    expect(empty.status).toBe(422);
+
+    const saved = await updatePaymentRenterSteps({
+      ...context,
+      permissionCodes: [...context.permissionCodes],
+      requestId: 'req-renter-steps-consolidate',
+      idempotencyKey: 'renter-steps-consolidate-001',
+      request: { version: 1, text: 'Shared payment steps.', image_file_id: null },
+    });
+    expect(saved.status).toBe(200);
+    expect((await getPaymentMethodSettings({ ...context, permissionCodes: [...context.permissionCodes] })).renter_steps.legacy_conflicts).toEqual([]);
+    const preserved = await withTenantTransaction(context.tenantId, context.principalId, async (client) => {
+      const result = await client.query<{ name: string; instructions: string }>(
+        `SELECT name, destination_snapshot ->> 'instructions' AS instructions
+           FROM payment_method WHERE tenant_id = $1 ORDER BY name`,
+        [context.tenantId],
+      );
+      return result.rows;
+    });
+    expect(preserved).toEqual([
+      { name: 'GCash', instructions: 'GCash-specific steps.' },
+      { name: 'Maya', instructions: 'Maya-specific steps.' },
+    ]);
+  });
+
+  it('prevents replacing a conflicting legacy step image before a shared guide is saved', async () => {
+    const context = await seed();
+    const legacyImage = await createPaymentFile(context, 'payment_method_material', 'image/png', 'legacy-renter-steps');
+    const replacement = await createPaymentFile(context, 'payment_method_material', 'application/pdf', 'method-instructions');
+    await withTenantTransaction(context.tenantId, context.principalId, async (client) => {
+      await client.query(
+        `UPDATE payment_method
+            SET presentation = 'details', material_file_id = $3,
+                destination_snapshot = '{"instructions":"Original renter steps."}'::jsonb
+          WHERE tenant_id = $1 AND id = $2`,
+        [context.tenantId, context.paymentMethodId, legacyImage],
+      );
+    });
+
+    const result = await updatePaymentMethodSettings({
+      ...context,
+      permissionCodes: [...context.permissionCodes],
+      requestId: 'req-payment-method-replace-legacy-steps',
+      idempotencyKey: 'payment-method-replace-legacy-steps-001',
+      paymentMethodId: context.paymentMethodId,
+      request: {
+        ...request(),
+        presentation: 'material',
+        material_file_id: replacement,
+      },
+    });
+    expect(result.status).toBe(422);
+    expect((await getPaymentMethodSettings({ ...context, permissionCodes: [...context.permissionCodes] })).renter_steps.legacy_conflicts)
+      .toEqual([expect.objectContaining({
+        payment_method_id: context.paymentMethodId,
+        payment_method_name: 'GCash',
+        text: 'Original renter steps.',
+        image: expect.objectContaining({ file_id: legacyImage }),
+      })]);
+  });
+
+  it('requires payment-management permission to update shared renter steps', async () => {
+    const context = await seed();
+    await expect(updatePaymentRenterSteps({
+      ...context,
+      permissionCodes: [],
+      requestId: 'req-renter-steps-forbidden',
+      idempotencyKey: 'renter-steps-forbidden-001',
+      request: { version: 1, text: 'Shared steps.', image_file_id: null },
+    })).rejects.toMatchObject({ status: 403 });
   });
 
   it('queues displaced QR and instructions files when replacing both payment-method assets', async () => {
@@ -494,13 +668,14 @@ describe('payment method settings', async () => {
     purpose: 'storefront_asset' | 'payment_method_material',
     mimeType: 'image/png' | 'application/pdf',
     label: string,
+    status: 'accepted' | 'uploaded' = 'accepted',
   ): Promise<FileObjectId> {
     return withTenantTransaction(context.tenantId, context.principalId, async (client) => {
       const result = await client.query<{ id: string }>(
         `INSERT INTO file_object
            (tenant_id, purpose, storage_key, version_id, mime_type, byte_size, lifecycle_status,
             is_private, upload_expires_at, frozen_at)
-         VALUES ($1, $2, $3, $4, $5, 512, 'accepted', true, now(), now())
+         VALUES ($1, $2, $3, $4, $5, 512, $6, true, now(), CASE WHEN $6 = 'accepted' THEN now() END)
          RETURNING id`,
         [
           context.tenantId,
@@ -508,6 +683,7 @@ describe('payment method settings', async () => {
           `tenant-files/${context.tenantId}/${label}/source`,
           `v-${label}`,
           mimeType,
+          status,
         ],
       );
       const id = result.rows[0]?.id;

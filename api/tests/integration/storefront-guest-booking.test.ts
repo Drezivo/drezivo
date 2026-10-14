@@ -11,7 +11,9 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest
 import '../../src/config/load-env.js';
 import {
   buildAppRoleDatabaseUrl,
+  buildWorkerRoleDatabaseUrl,
   ensureAppRoleLogin,
+  ensureWorkerRoleLogin,
   migrateTestDatabase,
   requireTestDatabaseUrl,
   resetTestDatabase,
@@ -45,9 +47,11 @@ describe('storefront guest booking', async () => {
   const { addDays, localDate } = await import('../../src/modules/storefront/storefront.service.js');
   const { weekdayOf } = await import('../../src/modules/storefront/shop-closures.js');
   const { createStorefrontWorkspace } = await import('./helpers/storefront-fixture.js');
-  const { completeStaffReservation, getReservationDetail, getReservationPaymentReceipts } = await import('../../src/modules/reservations/reservations.service.js');
+  const { cancelReservation, completeStaffReservation, getReservationDetail, getReservationPaymentReceipts } = await import('../../src/modules/reservations/reservations.service.js');
+  const { prepareFileObjectCleanup } = await import('../../src/modules/files/file-object-cleanup.repository.js');
   const { defaultStorefrontDocument, guestFittingRequest, guestReservationRequest } = await import('@drezivo/contracts');
   const admin = new pg.Pool({ connectionString: adminUrl, max: 3 });
+  const worker = new pg.Pool({ connectionString: buildWorkerRoleDatabaseUrl(adminUrl), max: 2 });
 
   const uploads = new Map<string, { contentType: string; byteSize: number; sha256: string }>();
   const storage = {
@@ -83,6 +87,7 @@ describe('storefront guest booking', async () => {
   beforeAll(async () => {
     await migrateTestDatabase(adminUrl);
     await ensureAppRoleLogin(adminUrl);
+    await ensureWorkerRoleLogin(adminUrl);
   });
   afterEach(async () => {
     turnstileState.outcome = 'skipped';
@@ -91,6 +96,7 @@ describe('storefront guest booking', async () => {
   });
   afterAll(async () => {
     await admin.end();
+    await worker.end();
     await closePool();
   });
 
@@ -189,6 +195,102 @@ describe('storefront guest booking', async () => {
 
     const audit = await admin.query<Record<string, unknown>>(`SELECT actor_kind FROM audit_event WHERE tenant_id = $1 AND action = 'reservation.created'`, [ws.tenantId]);
     expect(audit.rows).toEqual([{ actor_kind: 'guest' }]);
+  });
+
+  it('snapshots shared renter text on a new hold and keeps it after the setting changes', async () => {
+    const ws = await liveStore('gv-shared-renter-text');
+    await admin.query(
+      `INSERT INTO tenant_settings (tenant_id, renter_steps_text, renter_steps_version)
+       VALUES ($1, $2, 2)
+       ON CONFLICT (tenant_id) DO UPDATE
+         SET renter_steps_text = EXCLUDED.renter_steps_text,
+             renter_steps_file_id = NULL,
+             renter_steps_version = EXCLUDED.renter_steps_version`,
+      [ws.tenantId, 'Pay the listed amount, then send your receipt.'],
+    );
+
+    const created = await booking.createReservation(
+      ws.slug,
+      { requestId: 'shared-renter-text', idempotencyKey: 'shared-renter-text-1' },
+      holdRequest(ws, 'ana@example.test'),
+    );
+    if (!created.body.success) throw new Error('hold failed');
+    const reservation = created.body.data.reservation;
+    expect(reservation.payment_instructions?.renter_steps).toEqual({
+      text: 'Pay the listed amount, then send your receipt.',
+    });
+
+    await admin.query(
+      `UPDATE tenant_settings
+          SET renter_steps_text = 'New steps for future renters.', renter_steps_version = renter_steps_version + 1
+        WHERE tenant_id = $1`,
+      [ws.tenantId],
+    );
+    const reread = await booking.getReservation(reservation.id, guestTokenFor(reservation.id));
+    expect(reread.payment_instructions?.renter_steps).toEqual({
+      text: 'Pay the listed amount, then send your receipt.',
+    });
+  });
+
+  it('signs the shared image only while payable and retains its file snapshot for cleanup', async () => {
+    const ws = await liveStore('gv-shared-renter-image');
+    const inserted = await admin.query<{ id: string }>(
+      `INSERT INTO file_object
+         (tenant_id, purpose, storage_key, version_id, mime_type, byte_size, lifecycle_status,
+          is_private, upload_expires_at, frozen_at)
+       VALUES ($1, 'payment_method_material', $2, 'shared-renter-steps-v1', 'image/png', 512,
+               'accepted', true, now(), now())
+       RETURNING id`,
+      [ws.tenantId, `tenant-files/${ws.tenantId}/shared-renter-steps/source`],
+    );
+    const fileId = inserted.rows[0]?.id;
+    if (!fileId) throw new Error('expected accepted shared renter image');
+    await admin.query(
+      `INSERT INTO tenant_settings (tenant_id, renter_steps_file_id, renter_steps_version)
+       VALUES ($1, $2, 2)
+       ON CONFLICT (tenant_id) DO UPDATE
+         SET renter_steps_text = NULL,
+             renter_steps_file_id = EXCLUDED.renter_steps_file_id,
+             renter_steps_version = EXCLUDED.renter_steps_version`,
+      [ws.tenantId, fileId],
+    );
+
+    const created = await booking.createReservation(
+      ws.slug,
+      { requestId: 'shared-renter-image', idempotencyKey: 'shared-renter-image-1' },
+      holdRequest(ws, 'ana@example.test'),
+    );
+    if (!created.body.success) throw new Error('hold failed');
+    const reservation = created.body.data.reservation;
+    expect(reservation.payment_instructions?.renter_steps).toMatchObject({
+      text: null,
+      image_url: expect.stringMatching(/^https:\/\/files\.test\//),
+      image_content_type: 'image/png',
+    });
+
+    await admin.query(
+      `UPDATE tenant_settings
+          SET renter_steps_file_id = NULL, renter_steps_version = renter_steps_version + 1
+        WHERE tenant_id = $1`,
+      [ws.tenantId],
+    );
+    const cancelled = await cancelReservation(
+      { ...ws.owner, requestId: 'cancel-shared-image', idempotencyKey: 'cancel-shared-image-1' },
+      reservation.id,
+      { version: 1 },
+    );
+    expect(cancelled.body).toMatchObject({ success: true, data: { reservation: { status: 'cancelled' } } });
+    const afterCancel = await booking.getReservation(reservation.id, guestTokenFor(reservation.id));
+    expect(afterCancel.payment_instructions).toBeNull();
+    const snapshot = await admin.query<{ file_id: string | null }>(
+      'SELECT renter_steps_file_id_snapshot AS file_id FROM reservation WHERE tenant_id = $1 AND id = $2',
+      [ws.tenantId, reservation.id],
+    );
+    expect(snapshot.rows[0]?.file_id).toBe(fileId);
+
+    await expect(withWorkerTransaction(ws.tenantId, (client) =>
+      prepareFileObjectCleanup(client, ws.tenantId, fileId),
+    )).rejects.toMatchObject({ name: 'DeferredOutboxError' });
   });
 
   it('rejects guest reservation submissions when Turnstile fails before writing customer or hold data', async () => {
@@ -659,5 +761,23 @@ describe('storefront guest booking', async () => {
     );
     expect(saved.rows).toEqual([{ id: created.rows[0]?.id, phone: '09170000000', address: 'Saved address' }]);
   });
+
+  async function withWorkerTransaction<T>(tenantId: string, operation: (client: pg.PoolClient) => Promise<T>): Promise<T> {
+    const client = await worker.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query("SELECT set_config('app.tenant_id', $1, true)", [tenantId]);
+      await client.query("SELECT set_config('app.principal_id', 'shared-renter-steps-cleanup', true)");
+      await client.query("SELECT set_config('app.actor_kind', 'system', true)");
+      const result = await operation(client);
+      await client.query('COMMIT');
+      return result;
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
 
 });
