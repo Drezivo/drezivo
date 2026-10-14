@@ -341,6 +341,7 @@ describe('pilot billing', async () => {
       destination: {
         account_name: 'Luna Rentals',
         account_number: '001234567890',
+        instructions: null,
       },
       qr_file_id: null,
       presentation: 'details',
