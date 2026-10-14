@@ -746,6 +746,12 @@ describe("NewReservationSheet", () => {
     expect(within(copiedItems!).getByText("Emerald Gown")).toBeVisible();
     expect(screen.queryByText("This clothing item has one rentable size.")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Select flexible fit" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Choose Emerald Gown" })).toHaveClass(
+      "border-dashboard-accent/60",
+      "bg-dashboard-active/40",
+      "ring-1",
+      "ring-dashboard-accent/30"
+    );
     expect(screen.queryByText("Already selected")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Already selected" })).not.toBeInTheDocument();
   });
