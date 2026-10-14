@@ -264,9 +264,9 @@ describe('storefront guest booking', async () => {
     const reservation = created.body.data.reservation;
     expect(reservation.payment_instructions?.renter_steps).toMatchObject({
       text: null,
-      image_url: expect.stringMatching(/^https:\/\/files\.test\//),
       image_content_type: 'image/png',
     });
+    expect(reservation.payment_instructions?.renter_steps?.image_url).toMatch(/^https:\/\/files\.test\//);
 
     await admin.query(
       `UPDATE tenant_settings

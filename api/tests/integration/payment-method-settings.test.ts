@@ -282,8 +282,8 @@ describe('payment method settings', async () => {
     expect(settings.renter_steps.image).toMatchObject({
       file_id: accepted,
       content_type: 'image/png',
-      image_url: expect.stringMatching(/^https?:\/\//),
     });
+    expect(settings.renter_steps.image?.image_url).toMatch(/^https?:\/\//);
   });
 
   it('rejects PDF, unfinished, and foreign-tenant files as the shared guide image', async () => {
@@ -389,13 +389,17 @@ describe('payment method settings', async () => {
       },
     });
     expect(result.status).toBe(422);
-    expect((await getPaymentMethodSettings({ ...context, permissionCodes: [...context.permissionCodes] })).renter_steps.legacy_conflicts)
-      .toEqual([expect.objectContaining({
-        payment_method_id: context.paymentMethodId,
-        payment_method_name: 'GCash',
-        text: 'Original renter steps.',
-        image: expect.objectContaining({ file_id: legacyImage }),
-      })]);
+    const conflicts = (await getPaymentMethodSettings({
+      ...context,
+      permissionCodes: [...context.permissionCodes],
+    })).renter_steps.legacy_conflicts;
+    expect(conflicts).toHaveLength(1);
+    expect(conflicts[0]).toMatchObject({
+      payment_method_id: context.paymentMethodId,
+      payment_method_name: 'GCash',
+      text: 'Original renter steps.',
+    });
+    expect(conflicts[0]?.image?.file_id).toBe(legacyImage);
   });
 
   it('requires payment-management permission to update shared renter steps', async () => {
