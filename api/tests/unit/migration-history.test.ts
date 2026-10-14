@@ -5,7 +5,9 @@ import {
   assertInvitationResolverIsNotAlreadyInstalled,
   inspectMigrationHistory,
   MigrationHistoryError,
+  OUT_OF_ORDER_SAFE_IMAGE_VARIANTS_MIGRATION,
   OUT_OF_ORDER_SAFE_MIGRATION,
+  parseMigrationArguments,
   selectPendingMigrations,
 } from '../../scripts/migration-history.js';
 
@@ -86,15 +88,21 @@ describe('migration history inspection', () => {
     const migrationFilesOnDisk = readdirSync(new URL('../../src/db/migrations/', import.meta.url))
       .filter((fileName) => /^\d{4}_.*\.sql$/.test(fileName))
       .sort();
-    const membershipClaimIndex = migrationFilesOnDisk.indexOf('0077_membership_invitation_claimed_membership.sql');
+    const membershipClaimIndex = migrationFilesOnDisk.indexOf(
+      '0077_membership_invitation_claimed_membership.sql',
+    );
     const fittingOptionalIndex = migrationFilesOnDisk.indexOf('0078_fitting_garments_optional.sql');
     const accountTermsIndex = migrationFilesOnDisk.indexOf('0079_account_terms_acceptance.sql');
-    const sharedRenterStepsIndex = migrationFilesOnDisk.indexOf('0080_shared_payment_renter_steps.sql');
+    const sharedRenterStepsIndex = migrationFilesOnDisk.indexOf(
+      '0080_shared_payment_renter_steps.sql',
+    );
 
     expect(membershipClaimIndex).toBeGreaterThanOrEqual(0);
     expect(fittingOptionalIndex).toBeGreaterThan(membershipClaimIndex);
     if (accountTermsIndex >= 0) expect(accountTermsIndex).toBeGreaterThan(fittingOptionalIndex);
-    expect(sharedRenterStepsIndex).toBeGreaterThan(Math.max(fittingOptionalIndex, accountTermsIndex));
+    expect(sharedRenterStepsIndex).toBeGreaterThan(
+      Math.max(fittingOptionalIndex, accountTermsIndex),
+    );
   });
 
   it('allows an existing but empty ledger to report the full initial migration set', () => {
@@ -137,6 +145,128 @@ describe('migration history inspection', () => {
     expect(() =>
       inspectMigrationHistory(files, applied, '0075_starter_standard_plan_tiers.sql'),
     ).toThrow(/history gap/);
+  });
+
+  it('allows only the explicitly targeted image variants backfill to close its single history gap', () => {
+    const files = [
+      '0079_account_terms_acceptance.sql',
+      OUT_OF_ORDER_SAFE_IMAGE_VARIANTS_MIGRATION,
+      '0080_shared_payment_renter_steps.sql',
+      '0081_storefront_media_cache_invalidation.sql',
+    ];
+    const applied = [
+      '0079_account_terms_acceptance.sql',
+      '0080_shared_payment_renter_steps.sql',
+      '0081_storefront_media_cache_invalidation.sql',
+    ];
+
+    expect(() => inspectMigrationHistory(files, applied)).toThrow(/history gap/);
+    const status = inspectMigrationHistory(
+      files,
+      applied,
+      OUT_OF_ORDER_SAFE_IMAGE_VARIANTS_MIGRATION,
+    );
+    expect(status).toEqual({
+      appliedFiles: applied,
+      pendingFiles: [OUT_OF_ORDER_SAFE_IMAGE_VARIANTS_MIGRATION],
+    });
+    expect(
+      selectPendingMigrations(status, files, OUT_OF_ORDER_SAFE_IMAGE_VARIANTS_MIGRATION),
+    ).toEqual([OUT_OF_ORDER_SAFE_IMAGE_VARIANTS_MIGRATION]);
+    expect(() =>
+      inspectMigrationHistory(files, applied, '0081_storefront_media_cache_invalidation.sql'),
+    ).toThrow(/history gap/);
+  });
+
+  it('rejects unknown ledger entries when the image variants backfill is explicitly targeted', () => {
+    const files = [
+      '0079_account_terms_acceptance.sql',
+      OUT_OF_ORDER_SAFE_IMAGE_VARIANTS_MIGRATION,
+      '0080_shared_payment_renter_steps.sql',
+    ];
+    expect(() =>
+      inspectMigrationHistory(
+        files,
+        [
+          '0079_account_terms_acceptance.sql',
+          '0080_shared_payment_renter_steps.sql',
+          '0082_missing_from_checkout.sql',
+        ],
+        OUT_OF_ORDER_SAFE_IMAGE_VARIANTS_MIGRATION,
+      ),
+    ).toThrow(/files missing from this checkout: 0082_missing_from_checkout\.sql/);
+  });
+
+  it('does not allow the image variants backfill to hide another gap or an earlier pending migration', () => {
+    const files = [
+      '0078_fitting_garments_optional.sql',
+      '0079_account_terms_acceptance.sql',
+      OUT_OF_ORDER_SAFE_IMAGE_VARIANTS_MIGRATION,
+      '0080_shared_payment_renter_steps.sql',
+      '0081_storefront_media_cache_invalidation.sql',
+      '0082_next_migration.sql',
+    ];
+
+    expect(() =>
+      inspectMigrationHistory(
+        files,
+        [
+          '0078_fitting_garments_optional.sql',
+          '0079_account_terms_acceptance.sql',
+          '0080_shared_payment_renter_steps.sql',
+          '0082_next_migration.sql',
+        ],
+        OUT_OF_ORDER_SAFE_IMAGE_VARIANTS_MIGRATION,
+      ),
+    ).toThrow(/history gap: 0081_storefront_media_cache_invalidation\.sql is pending/);
+
+    expect(() =>
+      inspectMigrationHistory(
+        files,
+        ['0078_fitting_garments_optional.sql', '0080_shared_payment_renter_steps.sql'],
+        OUT_OF_ORDER_SAFE_IMAGE_VARIANTS_MIGRATION,
+      ),
+    ).toThrow(/history gap: 0079_account_terms_acceptance\.sql is pending/);
+  });
+
+  it('parses read-only status with an exact migration target', () => {
+    expect(
+      parseMigrationArguments([
+        '--status',
+        '--through',
+        OUT_OF_ORDER_SAFE_IMAGE_VARIANTS_MIGRATION,
+      ]),
+    ).toEqual({
+      statusOnly: true,
+      throughFile: OUT_OF_ORDER_SAFE_IMAGE_VARIANTS_MIGRATION,
+    });
+    expect(
+      parseMigrationArguments([
+        '--through',
+        OUT_OF_ORDER_SAFE_IMAGE_VARIANTS_MIGRATION,
+        '--status',
+      ]),
+    ).toEqual({
+      statusOnly: true,
+      throughFile: OUT_OF_ORDER_SAFE_IMAGE_VARIANTS_MIGRATION,
+    });
+    expect(parseMigrationArguments(['--status'])).toEqual({ statusOnly: true, throughFile: null });
+    expect(
+      parseMigrationArguments(['--through', OUT_OF_ORDER_SAFE_IMAGE_VARIANTS_MIGRATION]),
+    ).toEqual({
+      statusOnly: false,
+      throughFile: OUT_OF_ORDER_SAFE_IMAGE_VARIANTS_MIGRATION,
+    });
+  });
+
+  it.each([
+    ['--status', '--status'],
+    ['--status', '--through'],
+    ['--through', '--status'],
+    ['--status', '--unknown'],
+    ['--through', '0080_unknown.sql', '--through', OUT_OF_ORDER_SAFE_IMAGE_VARIANTS_MIGRATION],
+  ])('rejects invalid migration CLI arguments: %s', (...args) => {
+    expect(() => parseMigrationArguments(args)).toThrow(/Usage:/);
   });
 
   it('does not allow the invitation migration to hide another gap or an earlier pending migration', () => {

@@ -10,6 +10,7 @@ import {
   assertInvitationResolverIsNotAlreadyInstalled,
   inspectMigrationHistory,
   OUT_OF_ORDER_SAFE_MIGRATION,
+  parseMigrationArguments,
   selectPendingMigrations,
 } from './migration-history.js';
 import { applyMigrationTransaction } from './migration-transaction.js';
@@ -31,12 +32,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const MIGRATIONS_DIR = path.join(__dirname, '..', 'src', 'db', 'migrations');
 
 async function main(): Promise<void> {
-  const args = process.argv.slice(2);
-  const statusOnly = args.length === 1 && args[0] === '--status';
-  const through = args.length === 2 && args[0] === '--through' && args[1] ? args[1] : null;
-  if (args.length > 0 && !statusOnly && through === null) {
-    throw new Error('Usage: npm run db:migrate -- [--status | --through <migration-filename.sql>]');
-  }
+  const { statusOnly, throughFile } = parseMigrationArguments(process.argv.slice(2));
 
   const isRemoteEnvironment =
     process.env.NODE_ENV === 'staging' || process.env.NODE_ENV === 'production';
@@ -49,8 +45,8 @@ async function main(): Promise<void> {
 
   const entries = await readdir(MIGRATIONS_DIR);
   const allFiles = entries.filter((name) => /^\d{4}_.*\.sql$/.test(name)).sort();
-  if (through !== null && !allFiles.includes(through)) {
-    throw new Error(`Unknown migration filename: ${through}`);
+  if (throughFile !== null && !allFiles.includes(throughFile)) {
+    throw new Error(`Unknown migration filename: ${throughFile}`);
   }
   const client = new Client({ connectionString: databaseUrl });
   await client.connect();
@@ -80,7 +76,7 @@ async function main(): Promise<void> {
     const status = inspectMigrationHistory(
       allFiles,
       applied.map((row) => row.filename),
-      through,
+      throughFile,
     );
 
     if (statusOnly) {
@@ -96,16 +92,14 @@ async function main(): Promise<void> {
       return;
     }
 
-    const pendingFiles = selectPendingMigrations(status, allFiles, through);
+    const pendingFiles = selectPendingMigrations(status, allFiles, throughFile);
     for (const file of pendingFiles) {
       if (file === OUT_OF_ORDER_SAFE_MIGRATION) {
         const { rows: preflightRows } = await client.query<{ function_exists: boolean }>(
           `SELECT to_regprocedure('public.resolve_membership_invitation_webhook(text,text)')
                     IS NOT NULL AS function_exists`,
         );
-        assertInvitationResolverIsNotAlreadyInstalled(
-          preflightRows[0]?.function_exists === true,
-        );
+        assertInvitationResolverIsNotAlreadyInstalled(preflightRows[0]?.function_exists === true);
       }
 
       const sql = await readFile(path.join(MIGRATIONS_DIR, file), 'utf8');
@@ -128,7 +122,7 @@ async function main(): Promise<void> {
       allFiles,
       refreshedApplied.map((row) => row.filename),
     );
-    const remainingPending = selectPendingMigrations(refreshedStatus, allFiles, through);
+    const remainingPending = selectPendingMigrations(refreshedStatus, allFiles, throughFile);
     if (remainingPending.length > 0) {
       throw new Error(`Migration run finished with pending files: ${remainingPending.join(', ')}`);
     }
