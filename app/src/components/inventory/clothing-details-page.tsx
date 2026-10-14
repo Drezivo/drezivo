@@ -46,6 +46,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { createDrezivoApiClient, DrezivoApiError } from "@/lib/drezivo-api";
+import { mediaImageSrcSet } from "@/lib/media-image-srcset";
 import { displayProductSizes, displaySizeLabel } from "@/lib/catalogue-display";
 import { useSubmitGuard } from "@/lib/use-submit-guard";
 import { cn } from "@/lib/utils";
@@ -264,6 +265,8 @@ function DetailContent({
                       {/* eslint-disable-next-line @next/next/no-img-element -- API-provided catalogue URLs use the authenticated media proxy. */}
                       <img
                         src={primaryImage}
+                        srcSet={mediaImageSrcSet(primaryImage)}
+                        sizes="(min-width: 1024px) 50vw, 100vw"
                         alt={`${item.name} catalogue photo`}
                         className="h-full min-h-60 w-full object-cover transition duration-200 group-hover:scale-[1.01]"
                         onError={() => {
@@ -301,6 +304,8 @@ function DetailContent({
                         {/* eslint-disable-next-line @next/next/no-img-element -- API-provided catalogue URLs use the authenticated media proxy. */}
                         <img
                           src={url}
+                          srcSet={mediaImageSrcSet(url)}
+                          sizes="64px"
                           alt={`${item.name} catalogue thumbnail ${index + 1}`}
                           className="aspect-square w-full object-cover"
                           loading="lazy"

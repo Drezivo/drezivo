@@ -109,7 +109,9 @@ describe('public storefront read API', async () => {
       fitting: { enabled: false },
     });
     expect(store.featured.map((card) => card.product_id)).toEqual([ws.productId]);
-    expect(store.featured[0]?.image_url).toBe(`/api/media/public/${ws.slug}/${ws.imageFileId}`);
+    expect(store.featured[0]?.image_url).toBe(
+      `/api/media/public/${ws.slug}/${ws.imageFileId}?w=960`,
+    );
     expect(store.categories).toEqual([{ id: expect.any(String) as string, name: 'Gowns', item_count: 1 }]);
     expect(store.payment_methods).toEqual([{ id: ws.paymentMethodId, name: 'Bank transfer', rail: 'manual_transfer' }]);
 
@@ -157,8 +159,8 @@ describe('public storefront read API', async () => {
     expect(store.policy).toMatchObject({ format: 'images', rental: '', deposit: '', cancellation: '', damage: null, privacy_notice: rules.privacy_notice });
     expect(store.policy.image_urls).toHaveLength(2);
     expect(store.policy.image_urls).toEqual([
-      `/api/media/public/${ws.slug}/${pageTwo}`,
-      `/api/media/public/${ws.slug}/${pageOne}`,
+      `/api/media/public/${ws.slug}/${pageTwo}?w=960`,
+      `/api/media/public/${ws.slug}/${pageOne}?w=960`,
     ]);
   });
 

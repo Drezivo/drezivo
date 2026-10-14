@@ -25,6 +25,7 @@ import { createDrezivoApiClient, DrezivoApiError } from "@/lib/drezivo-api";
 import { useDebouncedValue } from "@/lib/use-debounced-value";
 import { useSubmitGuard } from "@/lib/use-submit-guard";
 import { cn } from "@/lib/utils";
+import { mediaImageSrcSet } from "@/lib/media-image-srcset";
 
 import { fittingGarmentModeLabel, formatFittingMoney } from "./fittings-presentation";
 
@@ -1018,6 +1019,8 @@ function StepGarments({
                       // eslint-disable-next-line @next/next/no-img-element -- catalogue media uses an authenticated same-origin API route.
                       <img
                         src={product.primary_image_url}
+                        srcSet={mediaImageSrcSet(product.primary_image_url)}
+                        sizes="64px"
                         alt={`${product.name} catalogue photo`}
                         loading="lazy"
                         decoding="async"

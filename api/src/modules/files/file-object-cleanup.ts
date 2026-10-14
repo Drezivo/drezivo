@@ -6,6 +6,7 @@ import { objectStorage } from '../../integrations/storage/s3-compatible-object-s
 import type { ObjectStorage } from '../../integrations/storage/object-storage.js';
 import { DeferredOutboxError, PermanentOutboxError, type EventHandler } from '../../worker/runner.js';
 import { markFileObjectDeleted, prepareFileObjectCleanup } from './file-object-cleanup.repository.js';
+import { imageVariantStorageKeysFromSource } from './files.storage-keys.js';
 
 export const FILE_OBJECT_CLEANUP_EVENT_TYPE = 'file.object_cleanup.requested';
 
@@ -37,6 +38,9 @@ export function createFileObjectCleanupHandler(
 
     try {
       await deleteObject(prepared.storageKey);
+      for (const variantKey of imageVariantStorageKeysFromSource(prepared.storageKey)) {
+        await deleteObject(variantKey);
+      }
     } catch {
       // Adapter errors can contain provider details. Keep the outbox diagnostic safe and stable.
       throw new Error('Object storage deletion failed.');

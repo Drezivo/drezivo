@@ -6,6 +6,7 @@ import { useEffect, useId, useRef, useState } from "react";
 
 import type { FileObjectId } from "@drezivo/contracts";
 
+import { mediaImageSrcSet } from "@/lib/media-image-srcset";
 import { storefrontImageProblem, uploadStorefrontImage, type ImageUploadPurpose, type UploadIntent } from "@/lib/storefront-assets";
 import { cn } from "@/lib/utils";
 
@@ -83,7 +84,7 @@ export function ImageField({
       <div className={cn("relative mt-1.5 overflow-hidden rounded-lg border border-dashed border-dashboard-border bg-dashboard-canvas", aspect)}>
         {preview ? (
           // eslint-disable-next-line @next/next/no-img-element -- local upload preview or app-owned media route
-          <img src={preview} alt="" className={cn("absolute inset-0 h-full w-full", fit === "contain" ? "object-contain" : "object-cover")} />
+          <img src={preview} srcSet={mediaImageSrcSet(preview)} sizes="(min-width: 640px) 180px, 100vw" alt="" className={cn("absolute inset-0 h-full w-full", fit === "contain" ? "object-contain" : "object-cover")} />
         ) : (
           <label htmlFor={inputId} className="absolute inset-0 flex cursor-pointer flex-col items-center justify-center gap-2 text-sm text-dashboard-muted hover:bg-dashboard-active/50">
             <ImagePlus className="h-5 w-5" />

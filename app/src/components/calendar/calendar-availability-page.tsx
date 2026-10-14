@@ -45,6 +45,7 @@ import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/
 import { createDrezivoApiClient, DrezivoApiError } from "@/lib/drezivo-api";
 import { useDebouncedValue } from "@/lib/use-debounced-value";
 import { cn } from "@/lib/utils";
+import { mediaImageSrcSet } from "@/lib/media-image-srcset";
 
 import {
   AVAILABILITY_WINDOW_DAYS,
@@ -1312,6 +1313,8 @@ function ClothingThumbnail({
         // eslint-disable-next-line @next/next/no-img-element -- catalogue media uses an authenticated same-origin API route.
         <img
           src={item.product.primary_image_url}
+          srcSet={mediaImageSrcSet(item.product.primary_image_url)}
+          sizes="64px"
           alt={`${item.product.name} catalogue photo`}
           loading="lazy"
           decoding="async"

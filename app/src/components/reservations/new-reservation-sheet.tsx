@@ -78,6 +78,7 @@ import {
   type AdditionalGarment,
 } from "./additional-garments";
 import { cn } from "@/lib/utils";
+import { mediaImageSrcSet } from "@/lib/media-image-srcset";
 import { recoveryAvailabilityHint } from "./recovery-availability-hint";
 
 const PRODUCT_LIMIT = 5;
@@ -1809,6 +1810,8 @@ export function NewReservationSheet({
                                 // eslint-disable-next-line @next/next/no-img-element -- signed catalogue URLs are dynamic and are not configured as stable next/image remote patterns.
                                 <img
                                   src={product.primary_image_url}
+                                  srcSet={mediaImageSrcSet(product.primary_image_url)}
+                                  sizes="64px"
                                   alt={`${product.name} catalogue photo`}
                                   loading="lazy"
                                   decoding="async"

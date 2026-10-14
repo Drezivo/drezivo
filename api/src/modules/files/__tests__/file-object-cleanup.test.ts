@@ -10,7 +10,10 @@ import { createFileObjectCleanupHandler } from '../file-object-cleanup.js';
 
 const tenantId = '00000000-0000-4000-8000-000000000002';
 const fileId = '00000000-0000-4000-8000-000000000001';
-const storageKey = 'private/tenant/file/object';
+const storageKey = `tenant-files/${tenantId}/catalogue-images/${fileId}/source`;
+const variantKeys = [320, 960, 1600].map(
+  (width) => `tenant-files/${tenantId}/catalogue-images/${fileId}/variants/v1/${width}.webp`,
+);
 
 function row(payload: Record<string, unknown> = { file_id: fileId }): OutboxRow {
   return {
@@ -56,12 +59,12 @@ describe('file object cleanup handler', () => {
       transactionCalls += 1;
       return callback(client);
     };
-    const deleteObject = vi.fn().mockResolvedValue(undefined);
+    const deleteObject = vi.fn((key: string) => Promise.resolve(key).then(() => undefined));
     const handle = createFileObjectCleanupHandler({ deleteObject }, transaction);
 
     await handle(row());
 
-    expect(deleteObject).toHaveBeenCalledWith(storageKey);
+    expect(deleteObject.mock.calls.map(([key]) => key)).toEqual([storageKey, ...variantKeys]);
     expect(transactionCalls).toBe(2);
     expect(query.mock.calls[0]?.[0]).toContain('FOR UPDATE');
     expect(query.mock.calls[2]?.[0]).toContain("lifecycle_status = 'deletion_pending'");
@@ -139,12 +142,14 @@ describe('file object cleanup handler', () => {
 
     await handle(row());
     expect(lifecycleStatus).toBe('deleted');
-    expect(deleteObject).toHaveBeenCalledTimes(2);
+    expect(deleteObject).toHaveBeenCalledTimes(8);
     expect(deleteObject).toHaveBeenNthCalledWith(1, storageKey);
-    expect(deleteObject).toHaveBeenNthCalledWith(2, storageKey);
+    expect(deleteObject).toHaveBeenNthCalledWith(2, variantKeys[0]);
+    expect(deleteObject).toHaveBeenNthCalledWith(5, storageKey);
+    expect(deleteObject).toHaveBeenNthCalledWith(6, variantKeys[0]);
 
     await handle(row());
-    expect(deleteObject).toHaveBeenCalledTimes(2);
+    expect(deleteObject).toHaveBeenCalledTimes(8);
   });
 
   it('rejects malformed event payloads before database or storage access', async () => {

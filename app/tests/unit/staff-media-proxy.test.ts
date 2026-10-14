@@ -18,19 +18,34 @@ afterEach(() => {
 describe("staff media proxy", () => {
   it("forwards the authenticated branch context and streams only safe response headers", async () => {
     vi.stubEnv("NEXT_PUBLIC_API_ORIGIN", "https://api.example.test");
+    vi.stubEnv("MEDIA_READ_GRANT_SECRET", "x".repeat(48));
     authMock.mockResolvedValue({ getToken: async () => "session-token" });
-    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response("image bytes", {
+    const readUrl =
+      "https://bucket.r2.cloudflarestorage.com/tenant-files/tenant/catalogue-images/file/source?X-Amz-Signature=secret";
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        Response.json({
+          success: true,
+          data: {
+            read_url: readUrl,
+            content_type: "image/png",
+            byte_size: 11,
+            expires_at: "2026-10-14T00:01:00.000Z",
+            tenant_id: "0194f6a2-9dd6-7a4c-8e9f-142f1d310003",
+          },
+        })
+      )
+      .mockResolvedValueOnce(
+        new Response("image bytes", {
         status: 200,
         headers: {
           "Content-Type": "image/png; charset=binary",
           "Content-Length": "11",
-          "Content-Disposition": "inline",
-          "Cache-Control": "public, max-age=3600",
-          Location: "https://bucket.r2.cloudflarestorage.com/private/key?X-Amz-Signature=secret",
+          ETag: '"image-etag"',
         },
-      })
-    );
+        })
+      );
 
     const response = await GET(
       new Request(`https://app.example.test/api/media/staff/${fileId}?branch_id=${branchId}`),
@@ -39,19 +54,28 @@ describe("staff media proxy", () => {
       }
     );
 
-    expect(fetchMock).toHaveBeenCalledWith(
-      `https://api.example.test/api/v1/media/staff/${fileId}`,
-      {
-        method: "GET",
-        headers: {
-          Authorization: "Bearer session-token",
-          Accept: "image/avif,image/webp,image/png,image/jpeg,application/pdf",
-          "X-Drezivo-Branch-Id": branchId,
-        },
-        cache: "no-store",
-        redirect: "manual",
-      }
+    const [grantUrl, grantRequest] = fetchMock.mock.calls[0] ?? [];
+    expect(String(grantUrl)).toBe(
+      `https://api.example.test/internal/media/v1/staff/files/${fileId}/grant?w=960`
     );
+    expect(grantRequest).toMatchObject({
+      method: "POST",
+      cache: "no-store",
+      redirect: "manual",
+      signal: expect.any(AbortSignal),
+    });
+    const grantHeaders = new Headers(grantRequest?.headers);
+    expect(grantHeaders.get("Authorization")).toBe("Bearer session-token");
+    expect(grantHeaders.get("Accept")).toBe("application/json");
+    expect(grantHeaders.get("X-Drezivo-Media-Grant")).toBe("x".repeat(48));
+    expect(grantHeaders.get("X-Drezivo-Branch-Id")).toBe(branchId);
+    expect(fetchMock).toHaveBeenNthCalledWith(2, new URL(readUrl), {
+      method: "GET",
+      cache: "no-store",
+      redirect: "manual",
+      signal: expect.any(AbortSignal),
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toBe("image/png");
     expect(response.headers.get("content-length")).toBe("11");
@@ -59,6 +83,7 @@ describe("staff media proxy", () => {
     expect(response.headers.get("cache-control")).toBe("private, no-store");
     expect(response.headers.get("x-content-type-options")).toBe("nosniff");
     expect(response.headers.get("location")).toBeNull();
+    expect(response.headers.get("etag")).toBe('"image-etag"');
 
     const body = await response.text();
     expect(body).toBe("image bytes");

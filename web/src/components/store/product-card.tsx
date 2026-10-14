@@ -2,6 +2,7 @@ import Link from 'next/link';
 
 import type { CatalogueCard } from '@drezivo/contracts';
 
+import { mediaImageSrcSet } from '@/lib/media-image-srcset';
 import { durationLabel, formatMinor } from '@/lib/storefront-format';
 
 export function ProductCard({ slug, item, priority = false }: { slug: string; item: CatalogueCard; priority?: boolean }) {
@@ -12,6 +13,8 @@ export function ProductCard({ slug, item, priority = false }: { slug: string; it
           // eslint-disable-next-line @next/next/no-img-element -- app-owned media route is intentionally rendered without a remote image optimizer.
           <img
             src={item.image_url}
+            srcSet={mediaImageSrcSet(item.image_url)}
+            sizes="(min-width: 1024px) 25vw, (min-width: 768px) 33vw, 50vw"
             alt={item.name}
             loading={priority ? 'eager' : 'lazy'}
             decoding="async"

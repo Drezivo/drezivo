@@ -22,11 +22,14 @@ import {
 } from '@drezivo/contracts';
 
 import { boundStoredObjectBody } from '../../integrations/storage/object-storage.js';
+import type { ObjectStorage } from '../../integrations/storage/object-storage.js';
 import { objectStorage } from '../../integrations/storage/s3-compatible-object-storage.js';
 import { DependencyUnavailableError, NotFoundError, StateConflictError } from '../../shared/errors.js';
 import { toDocument } from '../storefront-cms/storefront-cms.service.js';
 import { closedReason, readShopClosures } from './shop-closures.js';
 import { storefrontMediaUrlMapper, type StorefrontMediaUrlMapper } from './storefront-media.js';
+import { createMediaReadGrant, type MediaReadGrant } from '../files/file-read-grant.js';
+import type { ImageVariantWidth } from '../files/files.storage-keys.js';
 import { fromPolicyColumns } from './storefront-policy.js';
 import {
   computeAvailability,
@@ -95,7 +98,7 @@ export class PublicStorefrontService {
         ...featured.map((row) => row.image_file_id),
         ...newRows.map((row) => row.image_file_id),
         ...(imageTerms ? rules.image_file_ids : []),
-      ], { kind: 'public', slug: core.slug });
+      ], { kind: 'public', slug: core.slug, preview: preview !== null });
       const urlOf = (id: string | null): string | null => (id ? (urls.get(id) ?? null) : null);
       const policyImageUrls = imageTerms ? rules.image_file_ids.flatMap((id) => urlOf(id) ?? []) : [];
       const fittingOpen = fitting !== null && fitting.enabled && document.checkout.fitting_requests;
@@ -171,7 +174,7 @@ export class PublicStorefrontService {
       const rows = await readCatalogueCards(client, store.tenantId, filter);
       const sizes = await readPublicSizes(client, store.tenantId);
       const subcategories = await readPublicSubcategories(client, store.tenantId);
-      const urls = await this.media.map(client, store.tenantId, rows.map((row) => row.image_file_id), { kind: 'public', slug });
+      const urls = await this.media.map(client, store.tenantId, rows.map((row) => row.image_file_id), { kind: 'public', slug, preview: preview !== null });
       return catalogueResponse.parse({
         items: rows.map((row) => toCard(row, (id) => (id ? (urls.get(id) ?? null) : null))),
         total: Number(rows[0]?.total ?? 0),
@@ -192,7 +195,7 @@ export class PublicStorefrontService {
       const urls = await this.media.map(client, store.tenantId, [
         ...found.item.image_file_ids,
         ...found.variants.map((variant) => variant.guide_file_id),
-      ], { kind: 'public', slug });
+      ], { kind: 'public', slug, preview: preview !== null });
       return itemDetail.parse({
         product_id: found.item.product_id,
         name: found.item.name,
@@ -298,6 +301,36 @@ export class PublicStorefrontService {
       throw new DependencyUnavailableError('The published storefront image is temporarily unavailable.');
     }
     return { body: boundStoredObjectBody(stored.body, row.byte_size), mimeType: row.mime_type, byteSize: row.byte_size };
+  }
+
+  async authorizeMediaRead(
+    slug: string,
+    fileId: string,
+    width: ImageVariantWidth | null,
+    preview: PreviewGrant | null = null,
+    storage: ObjectStorage = objectStorage,
+  ): Promise<MediaReadGrant | null> {
+    const result = await withPublishedStore(slug, async (client, store) => {
+      const row = await readPublicStoreMedia(client, {
+        tenantId: store.tenantId,
+        storefrontId: store.id,
+        fileId,
+        preview: preview !== null,
+      });
+      return row ? { tenantId: store.tenantId, row } : null;
+    }, preview);
+    if (!result) return null;
+    const { row } = result;
+    return createMediaReadGrant({
+      tenantId: result.tenantId,
+      fileId: row.id,
+      purpose: row.purpose,
+      storageKey: row.storage_key,
+      versionId: row.version_id,
+      mimeType: row.mime_type,
+      byteSize: row.byte_size,
+      width,
+    }, storage);
   }
 
   private async requireCore(client: PoolClient, store: PublishedStore): Promise<StoreCoreRow> {

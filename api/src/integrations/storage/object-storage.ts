@@ -25,6 +25,11 @@ export interface StoredObjectRead {
   contentLength: number | null;
 }
 
+export interface StoredObjectMetadata {
+  contentType: string | null;
+  contentLength: number | null;
+}
+
 export interface ObjectStorage {
   authorizeUpload(input: {
     storageKey: string;
@@ -40,6 +45,8 @@ export interface ObjectStorage {
     storageKey: string;
     versionId?: string | null;
   }): Promise<StoredObjectRead | null>;
+  headObject?(storageKey: string): Promise<StoredObjectMetadata | null>;
+  putObject?(input: { storageKey: string; contentType: string; body: Uint8Array }): Promise<void>;
   inspectUploadedObject(
     storageKey: string,
     maxByteSize: number,
