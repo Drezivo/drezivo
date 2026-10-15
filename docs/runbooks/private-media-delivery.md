@@ -1,8 +1,11 @@
 # Private media delivery
 
-The source bucket remains private. Uploads still use a short-lived, single-object presigned PUT;
-downloads use application routes so browser clients never receive an R2 hostname, object key, or
-signed GET URL.
+The source bucket is intended to remain private. Uploads use a short-lived, single-object presigned
+PUT. The main public storefront and staff media routes use application URLs and keep R2 signed GET
+URLs out of browser responses. One current exception returns five-minute signed URLs for shared and
+legacy renter-payment-step images; those are payment instructions, not receipt or verification
+evidence. See the [object storage and image delivery architecture guide](../architecture/object-storage-image-delivery-evolution.md)
+for the complete design and exception details.
 
 ## Request flow
 
@@ -22,8 +25,11 @@ signed GET URL.
   selected branch to the API, which checks tenant membership, branch, purpose, permissions, and the
   live business-record reference before issuing a grant. Staff responses are always `private,
   no-store`.
-- R2 signed URLs exist only between trusted servers. Their 60-second expiration does not expire a
-  public application URL, and clients do not need to refresh a page because the grant changed.
+- On these main routes, R2 signed URLs exist only between trusted servers. Their 60-second
+  expiration does not expire a public application URL, and clients do not need to refresh a page
+  because the grant changed. The renter-payment-step exception returns a five-minute R2 signed URL
+  to the browser, so that exact link stops working when its grant expires. An image already loaded
+  in the page remains displayed.
 
 ## Environment configuration
 
@@ -56,8 +62,10 @@ environment. File cleanup removes source and variant keys before marking the dat
   against production from a developer workstation.
 - Deploy API and worker, then `web` and `app` to the matching environment. Confirm the worker has
   processed derivative and invalidation outbox events.
-- In browser network tools, confirm image requests use the application origin, a public image has a
-  Vercel cache lifetime no longer than 45 seconds, and preview/staff responses say `private,
-  no-store`. Confirm response headers and bodies contain no R2 URL, key, or signature.
+- In browser network tools, confirm main public and staff image requests use the application origin,
+  a public image has a Vercel cache lifetime no longer than 45 seconds, and preview/staff image
+  responses say `private, no-store`. Those image responses should not contain R2 URLs, keys, or
+  signatures. The shared and legacy renter-payment-step API responses are a documented exception:
+  they currently contain a five-minute signed R2 URL.
 - Use only a confirmed test bucket for anonymous-read-denial checks. Do not run a live-storage test
   against production as part of routine rollout.
