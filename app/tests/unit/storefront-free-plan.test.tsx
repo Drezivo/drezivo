@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { defaultStorefrontDocument, type StorefrontPolicyRules, type StorefrontSettings } from "@drezivo/contracts";
@@ -76,7 +76,7 @@ function renderPage(page: React.ReactNode) {
 
 async function expectUpgradeDialog(feature: string) {
   expect(await screen.findByRole("heading", { name: "Upgrade to unlock" })).toBeVisible();
-  expect(screen.getByText(`${feature} is not included in Free. Choose a paid plan to continue.`)).toBeVisible();
+  expect(await screen.findByText(`${feature} is not included in the Free plan.`)).toBeVisible();
 }
 
 describe("Free storefront feature gates", () => {
@@ -90,7 +90,17 @@ describe("Free storefront feature gates", () => {
     api.publishStorefrontPolicy.mockResolvedValue({ data: settings(), requestId: "r" });
     api.setStorefrontPublished.mockResolvedValue({ data: settings({ status: "published" }), requestId: "r" });
     api.getPublicPlanCatalog.mockResolvedValue({ data: { plans: [] } });
-    api.getBilling.mockResolvedValue({ data: { can_start_trial: false } });
+    api.getBilling.mockResolvedValue({
+      data: {
+        plan: { code: "free", name: "Free", monthly_minor: "0", currency: "PHP", physical_assets_max: 20, frontdesk_seats_max: 0, trial_days: 0 },
+        subscription: { status: "active", trial_ends_at: null, read_only_until: null, current_period_end: null },
+        access: { level: "full", reason: "free", ends_at: null, days_left: null, pending_payment: false, storefront_online: true, storefront_offline_at: null, read_only_until: null },
+        can_pay: true,
+        can_start_trial: false,
+        payment_methods: [],
+        payments: [],
+      },
+    });
   });
 
   it("publishes without an online payment method and opens upgrade from Customer requirements", async () => {
@@ -152,8 +162,7 @@ describe("Free storefront feature gates", () => {
     const fittings = await screen.findByRole("switch", { name: /Take fitting requests online/ });
     expect(fittings).toHaveAttribute("aria-disabled", "true");
     fireEvent.click(fittings);
-    await waitFor(() => expect(screen.getByRole("heading", { name: "Upgrade to unlock" })).toBeVisible());
-    expect(screen.getByText("storefront fitting requests is not included in Free. Choose a paid plan to continue.")).toBeVisible();
+    await expectUpgradeDialog("storefront fitting requests");
   });
 
   it("keeps Delivery editable on paid plans", async () => {

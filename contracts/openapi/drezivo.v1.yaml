@@ -32742,6 +32742,19 @@ paths:
                           - storefront_offline_at
                           - read_only_until
                         additionalProperties: false
+                      usage:
+                        type: object
+                        properties:
+                          active_garments:
+                            type: integer
+                            minimum: 0
+                          frontdesk_seats_used:
+                            type: integer
+                            minimum: 0
+                        required:
+                          - active_garments
+                          - frontdesk_seats_used
+                        additionalProperties: false
                       can_pay:
                         type: boolean
                       can_start_trial:
