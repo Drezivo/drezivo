@@ -2,7 +2,7 @@
 
 import * as SheetPrimitive from "@radix-ui/react-dialog";
 import { X } from "lucide-react";
-import { forwardRef } from "react";
+import { forwardRef, useCallback, useRef, type PointerEvent as ReactPointerEvent } from "react";
 
 import { cn } from "@/lib/utils";
 
@@ -33,11 +33,22 @@ const SheetContent = forwardRef<
     side?: "top" | "right" | "bottom" | "left";
   }
 >(function SheetContent({ side = "right", className, children, ...props }, ref) {
+  const contentRef = useRef<HTMLDivElement | null>(null);
+  const closeRef = useRef<HTMLButtonElement>(null);
+  const setContentRef = useCallback(
+    (node: HTMLDivElement | null) => {
+      contentRef.current = node;
+      if (typeof ref === "function") ref(node);
+      else if (ref) ref.current = node;
+    },
+    [ref]
+  );
+
   return (
     <SheetPortal>
       <SheetOverlay />
       <SheetPrimitive.Content
-        ref={ref}
+        ref={setContentRef}
         className={cn(
           "dashboard-sheet-content fixed z-50 flex flex-col gap-4 bg-dashboard-surface shadow-xl outline-none",
           side === "left" &&
@@ -53,8 +64,9 @@ const SheetContent = forwardRef<
         data-side={side}
         {...props}
       >
+        <SheetGrabber sheet={contentRef} onDismiss={() => closeRef.current?.click()} />
         {children}
-        <SheetPrimitive.Close className="absolute right-4 top-4 rounded-md p-2 text-dashboard-muted opacity-80 transition-opacity hover:bg-dashboard-active hover:text-dashboard-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dashboard-accent/30 disabled:pointer-events-none">
+        <SheetPrimitive.Close ref={closeRef} className="absolute right-4 top-4 rounded-md p-2 text-dashboard-muted opacity-80 transition-opacity hover:bg-dashboard-active hover:text-dashboard-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dashboard-accent/30 disabled:pointer-events-none">
           <X className="h-4 w-4" />
           <span className="sr-only">Close</span>
         </SheetPrimitive.Close>
@@ -62,6 +74,75 @@ const SheetContent = forwardRef<
     </SheetPortal>
   );
 });
+
+/** Below this many pixels a released drag springs back; past it (or on a quick flick) the sheet closes. */
+const DISMISS_DISTANCE_PX = 110;
+const DISMISS_VELOCITY_PX_PER_MS = 0.6;
+const IOS_EASE = "cubic-bezier(0.32, 0.72, 0, 1)";
+
+/**
+ * Phones only: the grab handle of the bottom sheet. Dragging it moves the whole sheet with the
+ * finger (upward drags resist), and releasing far or fast enough closes it, as on iOS. It uses the
+ * CSS `translate` property because the sheet's open animation owns `transform`; the two compose,
+ * so a close started mid-drag continues from where the finger let go. Only the handle area takes
+ * the gesture, so content inside the sheet keeps its normal scrolling.
+ */
+function SheetGrabber({
+  sheet,
+  onDismiss,
+}: {
+  sheet: React.RefObject<HTMLDivElement | null>;
+  onDismiss: () => void;
+}) {
+  const drag = useRef<{ startY: number; lastY: number; lastT: number; velocity: number; id: number } | null>(null);
+
+  const place = (offset: number, animate: boolean) => {
+    const node = sheet.current;
+    if (!node) return;
+    node.style.transition = animate ? `translate 320ms ${IOS_EASE}` : "none";
+    node.style.translate = offset ? `0 ${offset}px` : "";
+  };
+
+  return (
+    <div
+      aria-hidden="true"
+      className="flex h-7 w-full shrink-0 touch-none cursor-grab items-center justify-center sm:hidden"
+      onPointerDown={(event: ReactPointerEvent<HTMLDivElement>) => {
+        event.currentTarget.setPointerCapture(event.pointerId);
+        drag.current = { startY: event.clientY, lastY: event.clientY, lastT: event.timeStamp, velocity: 0, id: event.pointerId };
+        place(0, false);
+      }}
+      onPointerMove={(event) => {
+        const state = drag.current;
+        if (!state || state.id !== event.pointerId) return;
+        const dy = event.clientY - state.startY;
+        const dt = Math.max(1, event.timeStamp - state.lastT);
+        state.velocity = (event.clientY - state.lastY) / dt;
+        state.lastY = event.clientY;
+        state.lastT = event.timeStamp;
+        // Downward follows the finger; upward resists (rubber band) since the sheet is already open.
+        place(dy > 0 ? dy : dy / 4, false);
+      }}
+      onPointerUp={(event) => {
+        const state = drag.current;
+        drag.current = null;
+        if (!state) return;
+        const dy = event.clientY - state.startY;
+        if (dy > DISMISS_DISTANCE_PX || state.velocity > DISMISS_VELOCITY_PX_PER_MS) {
+          onDismiss();
+          return;
+        }
+        place(0, true);
+      }}
+      onPointerCancel={() => {
+        drag.current = null;
+        place(0, true);
+      }}
+    >
+      <span className="h-1 w-10 rounded-full bg-dashboard-border" />
+    </div>
+  );
+}
 
 const SheetTitle = forwardRef<
   React.ElementRef<typeof SheetPrimitive.Title>,

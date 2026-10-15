@@ -696,6 +696,47 @@ html[data-dashboard-theme="dark"] .availability-state-unavailable {
   to { transform: translateY(100%); }
 }
 
+/* Phones: every sheet rises from the bottom like an iOS sheet, whatever side it uses on larger
+   screens. Full width, capped below the status area, rounded top, clear of the home indicator.
+   Opening and closing use iOS's own curve so the motion matches the platform. */
+@media (max-width: 639.98px) {
+  .dashboard-sheet-content[data-side] {
+    inset: auto 0 0 0;
+    width: 100%;
+    max-width: none;
+    height: auto;
+    max-height: 92svh;
+    border-width: 1px 0 0;
+    border-radius: 1rem 1rem 0 0;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}
+
+/* Motion only for people who have not asked to reduce it (the reduced-motion rule below is less
+   specific, so these must not apply to them at all). */
+@media (max-width: 639.98px) and (prefers-reduced-motion: no-preference) {
+  .dashboard-sheet-content[data-side][data-state="open"] {
+    animation-name: dashboard-sheet-in-bottom;
+    animation-duration: 440ms;
+    animation-timing-function: cubic-bezier(0.32, 0.72, 0, 1);
+  }
+
+  .dashboard-sheet-content[data-side][data-state="closed"] {
+    animation-name: dashboard-sheet-out-bottom;
+    animation-duration: 300ms;
+    animation-timing-function: cubic-bezier(0.32, 0.72, 0, 1);
+  }
+
+  .dashboard-sheet-overlay[data-state="open"] {
+    animation-duration: 440ms;
+    animation-timing-function: cubic-bezier(0.32, 0.72, 0, 1);
+  }
+
+  .dashboard-sheet-overlay[data-state="closed"] {
+    animation-duration: 300ms;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .dashboard-sheet-overlay,
   .dashboard-sheet-content {
