@@ -1,18 +1,19 @@
 import type { Metadata } from "next";
 import { ClerkProvider } from "@clerk/nextjs";
-import { Bodoni_Moda, Jost } from "next/font/google";
+import { Jost, Playfair_Display } from "next/font/google";
 
 import { THEME_BOOT_SCRIPT } from "@/lib/theme-boot";
 import { clerkFrontendApiOrigin } from "@/lib/clerk-origin";
 
 import "./globals.css";
 
-// The landing page's type pair (web/src/app/(marketing)/layout.tsx): Bodoni Moda for display,
-// Jost for interface text. globals.css maps them to --font-display and --font-sans.
-const display = Bodoni_Moda({
+// The landing page's type pair (web/src/app/(marketing)/layout.tsx): Playfair Display for display,
+// Jost for interface text. globals.css maps them to --font-display and --font-sans. Playfair keeps the
+// Didone contrast with sturdier hairlines than Bodoni Moda, whose hairlines vanished at title sizes.
+const display = Playfair_Display({
   subsets: ["latin"],
-  axes: ["opsz"],
-  variable: "--font-bodoni",
+  style: ["normal", "italic"],
+  variable: "--font-playfair",
   display: "swap",
 });
 const body = Jost({
