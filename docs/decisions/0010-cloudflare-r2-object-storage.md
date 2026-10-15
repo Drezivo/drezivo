@@ -55,8 +55,9 @@ run against production.
   from the case where the first PUT succeeded but its response was lost; the API still rejects the
   object unless the stored bytes exactly match the expected metadata and SHA-256.
 - R2 bucket CORS is an infrastructure requirement for browser direct uploads and is not an
-  authorization boundary. Private objects remain private and are read through short-lived presigned
-  GET URLs.
+  authorization boundary. Private objects remain private. Server-only 60-second presigned GET
+  grants are fetched by the web/app server, then proxied to stable application URLs; only approved
+  public storefront images are briefly cached at the CDN. See the private-media-delivery runbook.
 - Existing AWS-backed objects, if any, require inventory and byte-for-byte reconciliation before a
   production endpoint cutover. The old provider must not be deleted until rollback is no longer
   required.
@@ -69,4 +70,5 @@ run against production.
 - [Cloudflare R2 presigned URLs](https://developers.cloudflare.com/r2/api/s3/presigned-urls/)
 - [Cloudflare R2 AWS SDK JavaScript example](https://developers.cloudflare.com/r2/examples/aws/aws-sdk-js-v3/)
 - [Object-storage migration runbook](../runbooks/object-storage-migration.md)
+- [Private media delivery runbook](../runbooks/private-media-delivery.md)
 - [Technical Requirements Document](../architecture/Drezivo-TRD.md)

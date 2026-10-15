@@ -7,6 +7,7 @@
 import { z } from 'zod';
 
 import { paymentMethodId } from '../common/ids';
+import { mediaUrl } from '../common/media';
 import { currencyCode, moneyString } from '../common/money';
 import { ianaTimezone } from '../common/time';
 import { branchOperatingHours } from '../tenancy/business-hours';
@@ -30,7 +31,7 @@ export const publicStorefrontPolicy = z
     version: z.number().int().positive(),
     /** `images`: the rental terms are the pictures in `image_urls`, in page order. */
     format: z.enum(['text', 'images']).default('text'),
-    image_urls: z.array(z.string().url()).default([]),
+    image_urls: z.array(mediaUrl).default([]),
     rental: z.string(),
     deposit: z.string(),
     cancellation: z.string(),
@@ -58,8 +59,8 @@ export const publicStorefront = z
     tagline: z.string().nullable(),
     description: z.string().nullable(),
     theme: storefrontTheme,
-    logo_url: z.string().url().nullable(),
-    cover_url: z.string().url().nullable(),
+    logo_url: mediaUrl.nullable(),
+    cover_url: mediaUrl.nullable(),
     currency: currencyCode,
     timezone: ianaTimezone,
     contact: publicStorefrontContact,
@@ -70,14 +71,14 @@ export const publicStorefront = z
           .object({
             heading: z.string(),
             body: z.string().nullable(),
-            image_url: z.string().url().nullable(),
+            image_url: mediaUrl.nullable(),
           })
           .strict(),
         about: z
           .object({
             heading: z.string().nullable(),
             body: z.string().nullable(),
-            image_url: z.string().url().nullable(),
+            image_url: mediaUrl.nullable(),
           })
           .strict(),
         sections: storefrontSections,

@@ -5,6 +5,7 @@ import { useState } from 'react';
 
 import { normalizeVariantFitRange, type ItemDetail, type PublicStorefront } from '@drezivo/contracts';
 
+import { mediaImageSrcSet } from '@/lib/media-image-srcset';
 import { durationLabel, formatMinor } from '@/lib/storefront-format';
 
 import { BookingDrawer } from './booking/booking-drawer';
@@ -39,8 +40,8 @@ export function ItemView({ store, item }: { store: PublicStorefront; item: ItemD
               {item.image_urls.map((url, index) => (
                 <li key={url} className="shrink-0">
                   <button type="button" aria-label={`Photo ${index + 1}`} aria-pressed={index === imageIndex} onClick={() => setImageIndex(index)} className={`block w-16 border sm:w-full ${index === imageIndex ? 'border-sf-ink' : 'border-transparent opacity-70 hover:opacity-100'}`}>
-                    {/* eslint-disable-next-line @next/next/no-img-element -- short-lived signed URL */}
-                    <img src={url} alt="" className="aspect-[3/4] w-full object-cover" />
+                    {/* eslint-disable-next-line @next/next/no-img-element -- app-owned public media route */}
+                    <img src={url} srcSet={mediaImageSrcSet(url)} sizes="64px" alt="" className="aspect-[3/4] w-full object-cover" />
                   </button>
                 </li>
               ))}
@@ -50,8 +51,8 @@ export function ItemView({ store, item }: { store: PublicStorefront; item: ItemD
           <div className={`order-1 aspect-[3/4] overflow-hidden bg-sf-line sm:order-2 ${item.image_urls.length > 1 ? '' : 'sm:col-span-2'}`}>
             {image ? (
               // Keyed by URL so choosing another photo crossfades it in.
-              // eslint-disable-next-line @next/next/no-img-element -- short-lived signed URL
-              <img key={image} src={image} alt={item.name} className="h-full w-full object-cover motion-safe:animate-[sf-photo-in_500ms_ease-out]" fetchPriority="high" />
+              // eslint-disable-next-line @next/next/no-img-element -- app-owned public media route
+              <img key={image} src={image} srcSet={mediaImageSrcSet(image)} sizes="(min-width: 1024px) 55vw, (min-width: 640px) 65vw, 100vw" alt={item.name} className="h-full w-full object-cover motion-safe:animate-[sf-photo-in_500ms_ease-out]" fetchPriority="high" />
             ) : null}
           </div>
         </div>
@@ -186,8 +187,8 @@ function Measurements({ item, variantId }: { item: ItemDetail; variantId: string
       <>
         {fitRange}
         {measurement.guide_image_url ? (
-          // eslint-disable-next-line @next/next/no-img-element -- short-lived signed URL
-          <img src={measurement.guide_image_url} alt="Size guide" className="w-full border border-sf-line" loading="lazy" />
+          // eslint-disable-next-line @next/next/no-img-element -- app-owned public media route
+          <img src={measurement.guide_image_url} srcSet={mediaImageSrcSet(measurement.guide_image_url)} sizes="(min-width: 768px) 50vw, 100vw" alt="Size guide" className="w-full border border-sf-line" loading="lazy" />
         ) : (
           <p className="text-sf-muted">This piece follows the shop&apos;s standard size guide.</p>
         )}

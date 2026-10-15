@@ -60,7 +60,8 @@ import {
   submitReservationForReview,
 } from '../reservations/reservations.review.repository.js';
 import { toDocument } from '../storefront-cms/storefront-cms.service.js';
-import { storefrontMediaSigner } from '../storefront/storefront-media.js';
+import { signPaymentRenterStepsImages } from '../files/payment-renter-steps-media.js';
+import { storefrontMediaUrlMapper } from '../storefront/storefront-media.js';
 import {
   isVisibleVariant,
   readVisibleVariantIds,
@@ -75,6 +76,7 @@ import {
   appendGuestAudit,
   findOrCreateGuestCustomer,
   insertGuestAccessToken,
+  readSharedRenterStepsSnapshot,
   readGuestReservation,
   readGuestTokenScopes,
   readReceiptFile,
@@ -155,6 +157,7 @@ export class GuestBookingService {
               deliveryHandling: 'shop_arranged',
             });
             const customer = await findOrCreateGuestCustomer(client, store.tenantId, request.email, request.customer);
+            const renterStepsSnapshot = await readSharedRenterStepsSnapshot(client, store.tenantId);
             const { graph } = await createHeldReservation(client, {
               tenantId: store.tenantId,
               branchId: store.branchId,
@@ -165,6 +168,11 @@ export class GuestBookingService {
               quote,
               assetId,
               customer,
+              renterStepsSnapshot: {
+                text: renterStepsSnapshot.text,
+                fileId: renterStepsSnapshot.file_id,
+                version: renterStepsSnapshot.version,
+              },
             });
             const expiresAt = guestAccessExpiresAt(quote.due_at);
             await insertGuestAccessToken(client, {
@@ -424,9 +432,24 @@ export class GuestBookingService {
     if (!row) throw new NotFoundError(GUEST_NOT_FOUND);
     const payable = row.status === 'held' || row.status === 'pending_confirmation';
     const showMaterial = payable && row.presentation === 'material' && row.material_file_id !== null && isPaymentMaterialContentType(row.material_mime ?? '');
-    const signed = payable ? await storefrontMediaSigner.sign(client, tenantId, [row.rail === 'manual_qr' ? row.qr_file_id : null, showMaterial ? row.material_file_id : null]) : new Map<string, string>();
-    const qrUrl = row.qr_file_id ? (signed.get(row.qr_file_id) ?? null) : null;
-    const materialUrl = showMaterial && row.material_file_id ? (signed.get(row.material_file_id) ?? null) : null;
+    const showRenterStepsImage = payable && row.renter_steps_file_id_snapshot !== null && row.renter_steps_image_mime !== null;
+    const methodMedia = payable
+      ? await storefrontMediaUrlMapper.map(
+          client,
+          tenantId,
+          [row.rail === 'manual_qr' ? row.qr_file_id : null, showMaterial ? row.material_file_id : null],
+          { kind: 'public', slug: row.storefront_slug },
+        )
+      : new Map<string, string>();
+    const stepMedia = showRenterStepsImage
+      ? await signPaymentRenterStepsImages(client, tenantId, [row.renter_steps_file_id_snapshot], this.storage)
+      : new Map<string, string>();
+    const qrUrl = row.qr_file_id ? (methodMedia.get(row.qr_file_id) ?? null) : null;
+    const materialUrl = showMaterial && row.material_file_id ? (methodMedia.get(row.material_file_id) ?? null) : null;
+    const renterStepsImageUrl = showRenterStepsImage && row.renter_steps_file_id_snapshot
+      ? (stepMedia.get(row.renter_steps_file_id_snapshot) ?? null)
+      : null;
+    const hasRenterSteps = Boolean(row.renter_steps_text_snapshot || renterStepsImageUrl);
     const money = (key: string): string => {
       const value = row.price_snapshot[key];
       return typeof value === 'string' && /^\d+$/.test(value) ? value : '0';
@@ -456,6 +479,16 @@ export class GuestBookingService {
             ...(paymentNote(row.destination_snapshot) ? { destination_note: paymentNote(row.destination_snapshot) } : {}),
             ...(materialUrl && row.material_mime && isPaymentMaterialContentType(row.material_mime)
               ? { material_url: materialUrl, material_content_type: row.material_mime }
+              : {}),
+            ...(hasRenterSteps
+              ? {
+                  renter_steps: {
+                    text: row.renter_steps_text_snapshot,
+                    ...(renterStepsImageUrl && row.renter_steps_image_mime
+                      ? { image_url: renterStepsImageUrl, image_content_type: row.renter_steps_image_mime }
+                      : {}),
+                  },
+                }
               : {}),
           }
         : null,
@@ -499,7 +532,6 @@ function paymentNote(destination: Record<string, unknown>): string | undefined {
   const lines = [
     text('account_name') ? `Account name: ${text('account_name')}` : null,
     text('account_number') ? `Account number: ${text('account_number')}` : null,
-    text('instructions'),
   ].filter((line): line is string => line !== null);
   return lines.length > 0 ? lines.join('\n').slice(0, 2_000) : undefined;
 }

@@ -13,6 +13,12 @@ import { WorkerRunner, type EventHandler } from './worker/runner.js';
 import { createEmailDeliveryHandler } from './worker/handlers/email-delivery.js';
 import { createSubscriptionPaymentReviewedHandler, PAYMENT_REVIEWED_EVENT_TYPE } from './worker/handlers/subscription-payment-reviewed.js';
 import { FILE_OBJECT_CLEANUP_EVENT_TYPE, handleFileObjectCleanup } from './modules/files/file-object-cleanup.js';
+import { FILE_IMAGE_VARIANTS_EVENT_TYPE } from './modules/files/file-image-variants.js';
+import { handleFileImageVariants } from './worker/handlers/file-image-variants.js';
+import {
+  handleMediaCacheInvalidation,
+  MEDIA_CACHE_INVALIDATION_EVENT_TYPE,
+} from './worker/handlers/media-cache-invalidation.js';
 import { EMAIL_EVENT_TYPE } from './modules/notifications/email-notifications.js';
 import { logger } from './shared/logger.js';
 import { SUBSCRIPTION_LIFECYCLE_SWEEP_ENABLED } from './modules/billing/billing.constants.js';
@@ -37,6 +43,8 @@ const handlers: Record<string, EventHandler> = {
   [EMAIL_EVENT_TYPE]: createEmailDeliveryHandler(),
   [PAYMENT_REVIEWED_EVENT_TYPE]: createSubscriptionPaymentReviewedHandler(),
   [FILE_OBJECT_CLEANUP_EVENT_TYPE]: handleFileObjectCleanup,
+  [FILE_IMAGE_VARIANTS_EVENT_TYPE]: handleFileImageVariants,
+  [MEDIA_CACHE_INVALIDATION_EVENT_TYPE]: handleMediaCacheInvalidation,
   'clerk.invitation.dispatch_requested': handleMembershipInvitationDispatch,
   'clerk.invitation.revoke_requested': handleMembershipInvitationDispatch,
   [MEMBER_REMOVAL_EVENT_TYPE]: handleMemberRemovalDispatch,

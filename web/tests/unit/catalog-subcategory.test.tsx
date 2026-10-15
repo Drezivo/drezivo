@@ -192,11 +192,33 @@ describe('storefront product subcategories', () => {
     expect(name.nextElementSibling?.textContent?.trim().startsWith('₱300')).toBe(true);
   });
 
+  it('shows the published subcategory filter beside Size and Sort with inset chevrons', () => {
+    render(<CatalogControls categories={[]} sizes={['M']} subcategories={['LONG', 'MINI']} />);
+
+    expect(screen.getByRole('combobox', { name: 'Subcategory' })).toBeTruthy();
+    expect(screen.getByRole('option', { name: 'All subcategories' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Filter' })).toBeNull();
+    expect(document.querySelectorAll('svg[aria-hidden="true"]')).toHaveLength(3);
+
+    for (const name of ['Size', 'Sort', 'Subcategory']) {
+      const select = screen.getByRole('combobox', { name });
+      expect(select.classList.contains('appearance-none')).toBe(true);
+      expect(select.classList.contains('pr-10')).toBe(true);
+    }
+  });
+
+  it('omits the subcategory filter when the store has no published options', () => {
+    render(<CatalogControls categories={[]} sizes={['M']} subcategories={[]} />);
+
+    expect(screen.queryByRole('combobox', { name: 'Subcategory' })).toBeNull();
+    expect(screen.getAllByRole('combobox')).toHaveLength(2);
+    expect(document.querySelectorAll('svg[aria-hidden="true"]')).toHaveLength(2);
+  });
+
   it('filters by the published subcategory options and preserves other URL filters', () => {
     navigation.search = 'search=lace&category=00000000-0000-4000-8000-000000000009&size=M&page=3';
     render(<CatalogControls categories={[]} sizes={['M']} subcategories={['LONG', 'MINI']} />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Filter' }));
     fireEvent.change(screen.getByRole('combobox', { name: 'Subcategory' }), { target: { value: 'MINI' } });
 
     const [href] = navigation.push.mock.calls[0] as [string];
@@ -209,15 +231,16 @@ describe('storefront product subcategories', () => {
   });
 
   it('clears only the subcategory filter and preserves the other filters', () => {
-    navigation.search = 'subcategory=MINI&sort=newest&size=S';
+    navigation.search = 'subcategory=MINI&sort=newest&size=S&search=satin&page=4';
     render(<CatalogControls categories={[]} sizes={['S']} subcategories={['MINI']} />);
-    fireEvent.click(screen.getByRole('button', { name: 'Filter · MINI' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Clear subcategory filter' }));
+    fireEvent.change(screen.getByRole('combobox', { name: 'Subcategory' }), { target: { value: '' } });
 
     const [href] = navigation.push.mock.calls[0] as [string];
     const params = new URLSearchParams(href.split('?')[1]);
     expect(params.has('subcategory')).toBe(false);
     expect(params.get('sort')).toBe('newest');
     expect(params.get('size')).toBe('S');
+    expect(params.get('search')).toBe('satin');
+    expect(params.has('page')).toBe(false);
   });
 });

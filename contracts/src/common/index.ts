@@ -6,3 +6,4 @@ export * from './pagination';
 export * from './errors';
 export * from './idempotency';
 export * from './envelope';
+export * from './media';

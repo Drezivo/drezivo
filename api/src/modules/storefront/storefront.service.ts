@@ -21,10 +21,15 @@ import {
   type StorefrontDocument,
 } from '@drezivo/contracts';
 
-import { NotFoundError, StateConflictError } from '../../shared/errors.js';
+import { boundStoredObjectBody } from '../../integrations/storage/object-storage.js';
+import type { ObjectStorage } from '../../integrations/storage/object-storage.js';
+import { objectStorage } from '../../integrations/storage/s3-compatible-object-storage.js';
+import { DependencyUnavailableError, NotFoundError, StateConflictError } from '../../shared/errors.js';
 import { toDocument } from '../storefront-cms/storefront-cms.service.js';
 import { closedReason, readShopClosures } from './shop-closures.js';
-import { storefrontMediaSigner, type StorefrontMediaSigner } from './storefront-media.js';
+import { storefrontMediaUrlMapper, type StorefrontMediaUrlMapper } from './storefront-media.js';
+import { createMediaReadGrant, type MediaReadGrant } from '../files/file-read-grant.js';
+import type { ImageVariantWidth } from '../files/files.storage-keys.js';
 import { fromPolicyColumns } from './storefront-policy.js';
 import {
   computeAvailability,
@@ -34,6 +39,7 @@ import {
   readFittingConfig,
   readOpenFittingSlots,
   readPublicCategories,
+  readPublicStoreMedia,
   readPublicItem,
   readPublicSizes,
   readPublicSubcategories,
@@ -44,6 +50,7 @@ import {
   type CatalogueFilter,
   type ItemVariantRow,
   type PublishedStore,
+  type PublicMediaFileRow,
   type StoreCoreRow,
 } from './storefront.repository.js';
 import type { PreviewGrant } from './storefront-preview.js';
@@ -56,7 +63,7 @@ const DAY_MS = 86_400_000;
  * Unknown slugs, drafts, hidden products, and foreign sizes are all the same 404.
  */
 export class PublicStorefrontService {
-  constructor(private readonly media: StorefrontMediaSigner = storefrontMediaSigner) {}
+  constructor(private readonly media: StorefrontMediaUrlMapper = storefrontMediaUrlMapper) {}
 
   async getStorefront(slug: string, preview: PreviewGrant | null = null): Promise<PublicStorefront> {
     const result = await withPublishedStore(slug, async (client, store) => {
@@ -83,7 +90,7 @@ export class PublicStorefrontService {
       const featuredOrder = new Map<string, number>(document.content.featured_product_ids.map((id, index) => [id, index]));
       const featured = [...featuredRows].sort((a, b) => (featuredOrder.get(a.product_id) ?? 0) - (featuredOrder.get(b.product_id) ?? 0));
 
-      const urls = await this.media.sign(client, store.tenantId, [
+      const urls = await this.media.map(client, store.tenantId, [
         document.branding.logo_file_id,
         document.branding.cover_file_id,
         document.content.hero.image_file_id,
@@ -91,7 +98,7 @@ export class PublicStorefrontService {
         ...featured.map((row) => row.image_file_id),
         ...newRows.map((row) => row.image_file_id),
         ...(imageTerms ? rules.image_file_ids : []),
-      ]);
+      ], { kind: 'public', slug: core.slug, preview: preview !== null });
       const urlOf = (id: string | null): string | null => (id ? (urls.get(id) ?? null) : null);
       const policyImageUrls = imageTerms ? rules.image_file_ids.flatMap((id) => urlOf(id) ?? []) : [];
       const fittingOpen = fitting !== null && fitting.enabled && document.checkout.fitting_requests;
@@ -167,7 +174,7 @@ export class PublicStorefrontService {
       const rows = await readCatalogueCards(client, store.tenantId, filter);
       const sizes = await readPublicSizes(client, store.tenantId);
       const subcategories = await readPublicSubcategories(client, store.tenantId);
-      const urls = await this.media.sign(client, store.tenantId, rows.map((row) => row.image_file_id));
+      const urls = await this.media.map(client, store.tenantId, rows.map((row) => row.image_file_id), { kind: 'public', slug, preview: preview !== null });
       return catalogueResponse.parse({
         items: rows.map((row) => toCard(row, (id) => (id ? (urls.get(id) ?? null) : null))),
         total: Number(rows[0]?.total ?? 0),
@@ -185,10 +192,10 @@ export class PublicStorefrontService {
     const result = await withPublishedStore(slug, async (client, store) => {
       const found = await readPublicItem(client, store.tenantId, productId);
       if (!found || found.variants.length === 0) return null;
-      const urls = await this.media.sign(client, store.tenantId, [
+      const urls = await this.media.map(client, store.tenantId, [
         ...found.item.image_file_ids,
         ...found.variants.map((variant) => variant.guide_file_id),
-      ]);
+      ], { kind: 'public', slug, preview: preview !== null });
       return itemDetail.parse({
         product_id: found.item.product_id,
         name: found.item.name,
@@ -275,6 +282,55 @@ export class PublicStorefrontService {
     }, preview);
     if (!result) throw new NotFoundError(NOT_FOUND);
     return result;
+  }
+
+  async readMedia(
+    slug: string,
+    fileId: string,
+    preview: PreviewGrant | null = null,
+  ): Promise<{ body: AsyncIterable<Uint8Array>; mimeType: PublicMediaFileRow['mime_type']; byteSize: number } | null> {
+    const row = await withPublishedStore(slug, (client, store) => readPublicStoreMedia(client, {
+      tenantId: store.tenantId,
+      storefrontId: store.id,
+      fileId,
+      preview: preview !== null,
+    }), preview);
+    if (!row) return null;
+    const stored = await objectStorage.readObject({ storageKey: row.storage_key, versionId: row.version_id });
+    if (!stored || (stored.contentLength !== null && stored.contentLength !== row.byte_size)) {
+      throw new DependencyUnavailableError('The published storefront image is temporarily unavailable.');
+    }
+    return { body: boundStoredObjectBody(stored.body, row.byte_size), mimeType: row.mime_type, byteSize: row.byte_size };
+  }
+
+  async authorizeMediaRead(
+    slug: string,
+    fileId: string,
+    width: ImageVariantWidth | null,
+    preview: PreviewGrant | null = null,
+    storage: ObjectStorage = objectStorage,
+  ): Promise<MediaReadGrant | null> {
+    const result = await withPublishedStore(slug, async (client, store) => {
+      const row = await readPublicStoreMedia(client, {
+        tenantId: store.tenantId,
+        storefrontId: store.id,
+        fileId,
+        preview: preview !== null,
+      });
+      return row ? { tenantId: store.tenantId, row } : null;
+    }, preview);
+    if (!result) return null;
+    const { row } = result;
+    return createMediaReadGrant({
+      tenantId: result.tenantId,
+      fileId: row.id,
+      purpose: row.purpose,
+      storageKey: row.storage_key,
+      versionId: row.version_id,
+      mimeType: row.mime_type,
+      byteSize: row.byte_size,
+      width,
+    }, storage);
   }
 
   private async requireCore(client: PoolClient, store: PublishedStore): Promise<StoreCoreRow> {

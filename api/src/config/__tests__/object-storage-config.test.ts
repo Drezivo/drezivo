@@ -9,6 +9,8 @@ const baseEnvironment: NodeJS.ProcessEnv = {
   CLERK_PUBLISHABLE_KEY: 'test-public',
   CLERK_WEBHOOK_SIGNING_SECRET: 'test-webhook',
   STAFF_APP_URL: 'https://staff.example.test',
+  STOREFRONT_WEB_URL: 'https://store.example.test',
+  MEDIA_READ_GRANT_SECRET: 'x'.repeat(48),
   CORS_ALLOWED_ORIGINS: 'https://staff.example.test',
   INVITATION_EMAIL_ENCRYPTION_KEY: Buffer.alloc(32, 1).toString('base64url'),
   INVITATION_EMAIL_DIGEST_KEY: Buffer.alloc(32, 2).toString('base64url'),
@@ -219,6 +221,26 @@ describe('staff application URL configuration', () => {
       }),
     ).toThrow(
       'STAFF_APP_URL must be an HTTPS origin or a loopback HTTP origin without a path or credentials.',
+    );
+  });
+});
+
+describe('media delivery configuration', () => {
+  it('requires a private grant secret and storefront origin in deployed environments', () => {
+    expect(() => parseConfig({ ...baseEnvironment, MEDIA_READ_GRANT_SECRET: undefined })).toThrow(
+      'Staging and production require MEDIA_READ_GRANT_SECRET for private media delivery.',
+    );
+    expect(() => parseConfig({ ...baseEnvironment, STOREFRONT_WEB_URL: undefined })).toThrow(
+      'Staging and production require STOREFRONT_WEB_URL for media cache invalidation.',
+    );
+  });
+
+  it('accepts only an HTTPS origin for the deployed storefront', () => {
+    expect(() => parseConfig({ ...baseEnvironment, STOREFRONT_WEB_URL: 'http://store.example.test' })).toThrow(
+      'STOREFRONT_WEB_URL must be an HTTPS origin, or a loopback HTTP origin in development.',
+    );
+    expect(() => parseConfig({ ...baseEnvironment, STOREFRONT_WEB_URL: 'https://store.example.test/path' })).toThrow(
+      'STOREFRONT_WEB_URL must be an HTTPS origin, or a loopback HTTP origin in development.',
     );
   });
 });

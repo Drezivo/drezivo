@@ -93,6 +93,7 @@ export const dashboardOverviewResponse = z
     metrics: z
       .object({
         active_rentals: dashboardCount,
+        confirmed_rental_items_current_month: dashboardCount,
         pickups_today: dashboardCount,
         returns_today: dashboardCount,
         fittings_today: dashboardCount,
@@ -163,6 +164,15 @@ export const dashboardOverviewResponse = z
             previous_minor: nonNegativeMoneyString.nullable(),
           })
           .strict(),
+        projected_sales_current_month: z
+          .object({
+            current_minor: nonNegativeMoneyString,
+            reservations: dashboardCount,
+          })
+          .strict()
+          .describe(
+            'Current branch-local month completed rental fees plus fees from confirmed reservations with pickup_at at or after as_of within the same month. Excludes deposits and non-completed/non-confirmed statuses.',
+          ),
         new_customers: z.object({ current: dashboardCount, previous: dashboardCount }).strict(),
         /**
          * Cumulative projected rental fees: all completed rental fees to date plus the rental fees
@@ -174,7 +184,7 @@ export const dashboardOverviewResponse = z
           .object({ current_minor: nonNegativeMoneyString, reservations: dashboardCount })
           .strict()
           .describe(
-            'Lifetime completed rental fees plus fees from confirmed reservations with pickup_at at or after the query database as_of timestamp. Excludes deposits; reservations counts upcoming confirmed bookings.'
+            'Lifetime completed rental fees plus fees from confirmed reservations with pickup_at at or after the query database as_of timestamp. Excludes deposits; reservations counts upcoming confirmed bookings.',
           )
           .optional(),
       })

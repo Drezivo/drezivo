@@ -27,6 +27,7 @@ import type {
 } from "@drezivo/contracts";
 
 import { ArchiveClothingDialog, archiveSuccessMessage } from "@/components/inventory/archive-clothing-dialog";
+import { InventoryLoadingState, InventorySummaryLoadingState } from "@/components/inventory/inventory-loading-state";
 import { RestoreClothingDialog, restoreSuccessMessage } from "@/components/inventory/restore-clothing-dialog";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -46,6 +47,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { createDrezivoApiClient, DrezivoApiError } from "@/lib/drezivo-api";
+import { mediaImageSrcSet } from "@/lib/media-image-srcset";
 import { useDebouncedValue } from "@/lib/use-debounced-value";
 import { displayProductSizeCount, displayProductSizes } from "@/lib/catalogue-display";
 import { cn } from "@/lib/utils";
@@ -119,11 +121,13 @@ export function ClothingPage() {
   const [error, setError] = useState<DrezivoApiError | null>(null);
   const [reloadVersion, setReloadVersion] = useState(0);
   const [notice, setNotice] = useState<string | null>(null);
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
 
   const selectedCategory = categories.find((category) => category.id === categoryId) ?? null;
   const currentCursor = pageCursors[pageIndex] ?? null;
   const productStatus = status === "All Statuses" ? null : (status.toLowerCase() as ClothingProductLifecycle);
   const permissionRestricted = error?.status === 403 || error?.code === "FORBIDDEN";
+  const isInitialLoading = isLoading && !hasLoadedOnce;
 
   useEffect(() => {
     const savedNotice = sessionStorage.getItem("drezivo:inventory-notice");
@@ -197,6 +201,7 @@ export function ClothingPage() {
         setRows(result.data.items);
         setPageMeta(result.data.page_meta);
         setSummary(result.data.summary ?? EMPTY_SUMMARY);
+        setHasLoadedOnce(true);
       })
       .catch((caughtError) => {
         if (cancelled) return;
@@ -206,7 +211,9 @@ export function ClothingPage() {
         setError(toDrezivoApiError(caughtError));
       })
       .finally(() => {
-        if (!cancelled) setIsLoading(false);
+        if (!cancelled) {
+          setIsLoading(false);
+        }
       });
 
     return () => {
@@ -386,17 +393,21 @@ export function ClothingPage() {
         </Card>
 
         {/* On phones the counts come after the list, so the clothing itself is what shows first. */}
-        <div className="grid grid-cols-2 gap-2 max-sm:order-last xl:grid-cols-4">
-          <MetricCard label="Total Clothing" value={summary.total_products} icon={Shirt} tone="blue" />
-          <MetricCard label="Active Rental Items" value={summary.active_rental_items} icon={Boxes} tone="mint" />
-          <MetricCard label="Categories" value={summary.active_categories} icon={Tags} tone="purple" />
-          <MetricCard label="Archived Clothing" value={summary.archived_products} icon={Archive} tone="neutral" />
-        </div>
+        {isInitialLoading ? (
+          <InventorySummaryLoadingState />
+        ) : (
+          <div className="grid grid-cols-2 gap-2 max-sm:order-last xl:grid-cols-4">
+            <MetricCard label="Total Clothing" value={summary.total_products} icon={Shirt} tone="blue" />
+            <MetricCard label="Active Rental Items" value={summary.active_rental_items} icon={Boxes} tone="mint" />
+            <MetricCard label="Categories" value={summary.active_categories} icon={Tags} tone="purple" />
+            <MetricCard label="Archived Clothing" value={summary.archived_products} icon={Archive} tone="neutral" />
+          </div>
+        )}
 
-        <Card className="gap-0 overflow-hidden py-0">
+        <Card className="gap-0 overflow-hidden py-0" aria-busy={isLoading || undefined}>
           <CardContent className="p-0">
-            {isLoading ? (
-              <CatalogueListState title="Loading clothing…" message="Fetching the latest catalogue for this workspace." />
+            {isInitialLoading ? (
+              <InventoryLoadingState />
             ) : error ? (
               permissionRestricted ? (
                 <CatalogueListState
@@ -525,6 +536,8 @@ function ClothingRow({
             // eslint-disable-next-line @next/next/no-img-element -- signed catalogue URLs are dynamic and are not configured as stable next/image remote patterns.
             <img
               src={item.primary_image_url}
+              srcSet={mediaImageSrcSet(item.primary_image_url)}
+              sizes="40px"
               alt={`${item.name} catalogue photo`}
               loading="lazy"
               decoding="async"

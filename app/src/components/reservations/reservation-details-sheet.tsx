@@ -27,6 +27,7 @@ import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/
 import type { DrezivoApiError } from "@/lib/drezivo-api";
 import { displaySizeLabel } from "@/lib/catalogue-display";
 import { isPastBooking } from "@/lib/past-booking";
+import { mediaImageSrcSet } from "@/lib/media-image-srcset";
 import { cn } from "@/lib/utils";
 
 import type { ReservationRebookSource } from "./new-reservation-sheet";
@@ -284,6 +285,8 @@ function ReservationDetails({
                       // eslint-disable-next-line @next/next/no-img-element -- API-provided signed URLs are short-lived and dynamic.
                       <img
                         src={line.variant.image_url}
+                        srcSet={mediaImageSrcSet(line.variant.image_url)}
+                        sizes="64px"
                         alt={`${line.name_snapshot} cover image`}
                         className="h-full w-full object-cover"
                         onError={() =>

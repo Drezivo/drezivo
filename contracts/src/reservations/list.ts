@@ -10,6 +10,7 @@ import {
   reservationLineId,
 } from '../common/ids';
 import { currencyCode, moneyString } from '../common/money';
+import { mediaUrl } from '../common/media';
 import { paginatedResponse, paginationRequest } from '../common/pagination';
 import { isoInstant } from '../common/time';
 import { paymentEvidenceStatus, paymentRail, paymentStatus } from '../finance/payment-status';
@@ -92,7 +93,7 @@ export const reservationLineSummary = z
     id: reservationLineId,
     variant_id: productVariantId,
     name_snapshot: z.string().trim().min(1).max(300),
-    image_url: z.string().url().nullable().default(null),
+    image_url: mediaUrl.nullable().default(null),
     rental_minor: moneyString,
     deposit_minor: moneyString,
     currency: currencyCode,

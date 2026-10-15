@@ -16,7 +16,7 @@ import {
   Tags,
 } from "lucide-react";
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type {
   ClothingDetail,
@@ -27,6 +27,7 @@ import type {
 import { normalizeVariantFitRange } from "@drezivo/contracts";
 
 import { ArchiveClothingDialog, archiveSuccessMessage } from "@/components/inventory/archive-clothing-dialog";
+import { ClothingDetailsLoadingState } from "@/components/inventory/clothing-details-loading-state";
 import {
   ManagePhysicalAssetDialog,
   physicalAssetUpdateSuccessMessage,
@@ -45,6 +46,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { createDrezivoApiClient, DrezivoApiError } from "@/lib/drezivo-api";
+import { mediaImageSrcSet } from "@/lib/media-image-srcset";
 import { displayProductSizes, displaySizeLabel } from "@/lib/catalogue-display";
 import { useSubmitGuard } from "@/lib/use-submit-guard";
 import { cn } from "@/lib/utils";
@@ -57,18 +59,24 @@ type LoadState =
 export function ClothingDetailsPage({ productId }: { productId: string }) {
   const { getToken, isLoaded, isSignedIn } = useAuth();
   const [state, setState] = useState<LoadState>({ kind: "loading" });
+  const hasLoadedOnceRef = useRef(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [publishError, setPublishError] = useState<string | null>(null);
   const { isSubmitting: isPublishing, resetIntent: resetPublishIntent, submit: submitPublish } = useSubmitGuard();
 
   const loadDetail = useCallback(async () => {
     if (!isLoaded || !isSignedIn) return;
-    setState({ kind: "loading" });
+    if (hasLoadedOnceRef.current) setIsRefreshing(true);
+    else setState({ kind: "loading" });
     try {
       const result = await createDrezivoApiClient(getToken).getCatalogueClothingDetail(productId);
+      hasLoadedOnceRef.current = true;
       setState({ kind: "ready", item: result.data });
     } catch (error) {
       setState({ kind: "error", error: toDrezivoApiError(error) });
+    } finally {
+      setIsRefreshing(false);
     }
   }, [getToken, isLoaded, isSignedIn, productId]);
 
@@ -84,7 +92,7 @@ export function ClothingDetailsPage({ productId }: { productId: string }) {
   }, []);
 
   if (!isLoaded || !isSignedIn || state.kind === "loading") {
-    return <DetailLoadingState />;
+    return <ClothingDetailsLoadingState />;
   }
 
   if (state.kind === "error") {
@@ -117,6 +125,7 @@ export function ClothingDetailsPage({ productId }: { productId: string }) {
       notice={notice}
       publishError={publishError}
       isPublishing={isPublishing}
+      isRefreshing={isRefreshing}
       onPublish={() => void handlePublish(state.item)}
       onDismissNotice={() => setNotice(null)}
       onArchived={(message) => {
@@ -140,6 +149,7 @@ function DetailContent({
   notice,
   publishError,
   isPublishing,
+  isRefreshing,
   onPublish,
   onArchived,
   onRestored,
@@ -150,6 +160,7 @@ function DetailContent({
   notice: string | null;
   publishError: string | null;
   isPublishing: boolean;
+  isRefreshing: boolean;
   onPublish: () => void;
   onArchived: (message: string) => void;
   onRestored: (message: string) => void;
@@ -207,7 +218,7 @@ function DetailContent({
   };
 
   return (
-    <div className="min-h-full bg-dashboard-canvas px-ws-gutter py-6">
+    <div className="min-h-full bg-dashboard-canvas px-ws-gutter py-6" aria-busy={isRefreshing || undefined}>
       <div className="mx-auto w-full max-w-screen-2xl space-y-4">
         <div className="flex flex-wrap items-center gap-2 text-sm">
           <Link href="/inventory" className="text-dashboard-muted transition-colors hover:text-dashboard-navy">
@@ -251,9 +262,11 @@ function DetailContent({
                       aria-label={`Open ${item.name} image preview`}
                       className="group relative h-full min-h-60 w-full cursor-zoom-in overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-dashboard-accent/50"
                     >
-                      {/* eslint-disable-next-line @next/next/no-img-element -- API-provided catalogue URLs are short-lived signed URLs. */}
+                      {/* eslint-disable-next-line @next/next/no-img-element -- API-provided catalogue URLs use the authenticated media proxy. */}
                       <img
                         src={primaryImage}
+                        srcSet={mediaImageSrcSet(primaryImage)}
+                        sizes="(min-width: 1024px) 50vw, 100vw"
                         alt={`${item.name} catalogue photo`}
                         className="h-full min-h-60 w-full object-cover transition duration-200 group-hover:scale-[1.01]"
                         onError={() => {
@@ -288,9 +301,11 @@ function DetailContent({
                           primaryImage === url ? "border-dashboard-accent" : "border-dashboard-border"
                         )}
                       >
-                        {/* eslint-disable-next-line @next/next/no-img-element -- API-provided catalogue URLs are short-lived signed URLs. */}
+                        {/* eslint-disable-next-line @next/next/no-img-element -- API-provided catalogue URLs use the authenticated media proxy. */}
                         <img
                           src={url}
+                          srcSet={mediaImageSrcSet(url)}
+                          sizes="64px"
                           alt={`${item.name} catalogue thumbnail ${index + 1}`}
                           className="aspect-square w-full object-cover"
                           loading="lazy"
@@ -608,16 +623,6 @@ function DetailContent({
           setSelectedImageUrl(usableImageUrls[index] ?? null);
         }}
       />
-    </div>
-  );
-}
-
-function DetailLoadingState() {
-  return (
-    <div className="min-h-full bg-dashboard-canvas px-ws-gutter py-6">
-      <div className="mx-auto flex min-h-80 w-full max-w-screen-2xl items-center justify-center rounded-xl border border-dashboard-border bg-dashboard-surface text-sm text-dashboard-muted">
-        Loading clothing details…
-      </div>
     </div>
   );
 }

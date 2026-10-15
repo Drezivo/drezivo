@@ -35,6 +35,7 @@ import {
 import { logger } from './shared/logger.js';
 import { sendError } from './shared/response.js';
 import { ValidationError } from './shared/errors.js';
+import { internalMediaRouter } from './modules/internal-media/internal-media.routes.js';
 
 const pinoHttp = pinoHttpExport as unknown as (
   options: Record<string, unknown>,
@@ -143,6 +144,7 @@ export function createApp(options: AppOptions = {}): Express {
   // The operator boundary is always present, but remains fail-closed until the host injects
   // service authentication, server-side authorization, and tenant-safe command handlers.
   app.use('/internal/operator/v1', createInternalOperatorRouter(options.internalOperator));
+  app.use(internalMediaRouter);
 
   // Both routers declare their OWN full paths (e.g. `/public/stores/:slug/holds` lives in
   // reservations.routes.ts, not storefront.routes.ts, even though it is nested under

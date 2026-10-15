@@ -10,6 +10,16 @@ const workflow = readFileSync(
   "utf8",
 );
 
+function migrationJob(name) {
+  const start = workflow.indexOf(`  ${name}:`);
+  assert.notEqual(start, -1, `missing workflow job ${name}`);
+  const nextJob = workflow.slice(start + 1).search(/\n  [a-z][a-z-]+:\n/);
+  return workflow.slice(
+    start,
+    nextJob === -1 ? undefined : start + 1 + nextJob,
+  );
+}
+
 test("automatic migration pushes continue to apply pending files", () => {
   assert.equal(shouldApplyMigrations("push", ""), true);
 });
@@ -36,15 +46,60 @@ test("workflow defaults manual dispatch to status and gates every apply step", (
     /workflow_dispatch:[\s\S]*?default: status[\s\S]*?options:[\s\S]*?- status[\s\S]*?- apply/,
   );
   assert.match(
-    workflow,
-    /- name: Apply staging migrations\r?\n\s+if: needs\.staging-migration-scope\.outputs\.apply == 'true'\r?\n\s+run: npm run db:migrate/,
+    migrationJob("production-migrations"),
+    /if: needs\.migration-scope\.outputs\.run == 'true' && needs\.migration-scope\.outputs\.apply == 'true'/,
   );
   assert.match(
-    workflow,
-    /- name: Apply preview migrations\r?\n\s+if: needs\.migration-scope\.outputs\.apply == 'true'\r?\n\s+run: npm run db:migrate/,
+    migrationJob("production-migrations"),
+    /needs: \[backend, container, secrets, migration-scope, preview-migrations\]/,
   );
-  assert.match(
-    workflow,
-    /production-migrations:[\s\S]*?if: needs\.migration-scope\.outputs\.run == 'true' && needs\.migration-scope\.outputs\.apply == 'true'/,
+});
+
+test("migration jobs run when migration runner/history code changes", () => {
+  assert.equal(
+    (workflow.match(/grep -E '\^api\/scripts\/\(migrate/g) ?? []).length,
+    2,
   );
+  assert.equal((workflow.match(/runner_files="\$\(printf/g) ?? []).length, 2);
+});
+
+test("each migration job reports the exact gap and applies it before the normal migration run", () => {
+  const stages = [
+    ["staging-migrations", "staging"],
+    ["preview-migrations", "preview"],
+    ["production-migrations", "production"],
+  ];
+  const targetedStatus =
+    "npm run db:migrate:status --workspace @drezivo/api -- --through 0080_file_image_variants_backfill.sql";
+
+  for (const [jobName, environment] of stages) {
+    const job = migrationJob(jobName);
+    const statusIndex = job.indexOf(targetedStatus);
+    const targetedApplyIndex = job.indexOf(
+      "npm run db:migrate --workspace @drezivo/api -- --through 0080_file_image_variants_backfill.sql",
+    );
+    const fullApplyIndex = job.indexOf(
+      "npm run db:migrate --workspace @drezivo/api\n",
+    );
+
+    assert.notEqual(
+      statusIndex,
+      -1,
+      `${environment} must report the targeted status`,
+    );
+    assert.ok(
+      targetedApplyIndex > statusIndex,
+      `${environment} must report before applying`,
+    );
+    assert.ok(
+      fullApplyIndex > targetedApplyIndex,
+      `${environment} must apply the target first`,
+    );
+    assert.match(
+      job,
+      new RegExp(
+        `Verify ${environment} migration status[\\s\\S]*?run: npm run db:migrate:status --workspace @drezivo/api`,
+      ),
+    );
+  }
 });

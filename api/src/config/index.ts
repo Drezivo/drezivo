@@ -21,6 +21,7 @@ export const envSchema = z
     CLERK_PUBLISHABLE_KEY: z.string().min(1, 'CLERK_PUBLISHABLE_KEY is required'),
     CLERK_WEBHOOK_SIGNING_SECRET: z.string().min(1, 'CLERK_WEBHOOK_SIGNING_SECRET is required'),
     STAFF_APP_URL: z.string().url('STAFF_APP_URL must be an absolute URL').optional(),
+    STOREFRONT_WEB_URL: z.string().url('STOREFRONT_WEB_URL must be an absolute URL').optional(),
 
     CORS_ALLOWED_ORIGINS: z
       .string()
@@ -108,8 +109,50 @@ export const envSchema = z
       .min(32, 'OPERATOR_PROOF_LINK_SECRET must be at least 32 characters')
       .max(200)
       .optional(),
+    // Shared only by the API and trusted Next.js media routes. Grants are server-to-server and
+    // short-lived; browsers never receive this value or the signed R2 read URL.
+    MEDIA_READ_GRANT_SECRET: z
+      .string()
+      .min(32, 'MEDIA_READ_GRANT_SECRET must be at least 32 characters')
+      .max(200)
+      .optional(),
   })
   .superRefine((env, ctx) => {
+    const deployed = env.NODE_ENV === 'staging' || env.NODE_ENV === 'production';
+    if (deployed && !env.MEDIA_READ_GRANT_SECRET) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['MEDIA_READ_GRANT_SECRET'],
+        message: 'Staging and production require MEDIA_READ_GRANT_SECRET for private media delivery.',
+      });
+    }
+    if (deployed && !env.STOREFRONT_WEB_URL) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['STOREFRONT_WEB_URL'],
+        message: 'Staging and production require STOREFRONT_WEB_URL for media cache invalidation.',
+      });
+    }
+    if (env.STOREFRONT_WEB_URL) {
+      const storefrontUrl = new URL(env.STOREFRONT_WEB_URL);
+      const loopback = ['localhost', '127.0.0.1', '[::1]'].includes(storefrontUrl.hostname);
+      if (
+        (deployed ? storefrontUrl.protocol !== 'https:' :
+          storefrontUrl.protocol !== 'https:' && !(storefrontUrl.protocol === 'http:' && loopback)) ||
+        storefrontUrl.pathname !== '/' ||
+        storefrontUrl.search ||
+        storefrontUrl.hash ||
+        storefrontUrl.username ||
+        storefrontUrl.password
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['STOREFRONT_WEB_URL'],
+          message: 'STOREFRONT_WEB_URL must be an HTTPS origin, or a loopback HTTP origin in development.',
+        });
+      }
+    }
+
     if (env.NODE_ENV === 'staging' || env.NODE_ENV === 'production') {
       if (!env.STAFF_APP_URL) {
         ctx.addIssue({
@@ -240,6 +283,7 @@ export const envSchema = z
   .transform((env) => ({
     ...env,
     STAFF_APP_URL: env.STAFF_APP_URL ?? 'http://localhost:3000',
+    STOREFRONT_WEB_URL: env.STOREFRONT_WEB_URL,
     FILE_OBJECT_CLEANUP_ENABLED:
       env.FILE_OBJECT_CLEANUP_ENABLED ?? !['staging', 'production'].includes(env.NODE_ENV),
     OBJECT_STORAGE_UPLOADS_ENABLED:

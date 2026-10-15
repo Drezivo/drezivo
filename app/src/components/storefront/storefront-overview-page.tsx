@@ -26,6 +26,7 @@ import type { StorefrontSettings } from "@drezivo/contracts";
 import { ErrorState, LoadingState, PageHeader, Section } from "@/components/forms/form-kit";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { mediaImageSrcSet } from "@/lib/media-image-srcset";
 
 import { SocialLinks, StatusPill, StorefrontMiniPreview, storefrontUrl } from "./storefront-bits";
 import { useStorefrontEditor } from "./storefront-editor";
@@ -110,8 +111,8 @@ function OverviewCard({ settings }: { settings: StorefrontSettings }) {
     <Card className="gap-0 overflow-hidden py-0">
       <div className="relative h-40 bg-dashboard-neutral-soft sm:h-48">
         {settings.media.cover_url ? (
-          // eslint-disable-next-line @next/next/no-img-element -- short-lived signed URL
-          <img src={settings.media.cover_url} alt="" className="h-full w-full object-cover" />
+          // eslint-disable-next-line @next/next/no-img-element -- app-owned storefront media route
+          <img src={settings.media.cover_url} srcSet={mediaImageSrcSet(settings.media.cover_url)} sizes="(min-width: 640px) 50vw, 100vw" alt="" className="h-full w-full object-cover" />
         ) : (
           <div className="flex h-full items-center justify-center text-sm text-dashboard-muted">
             <Store className="mr-2 h-4 w-4" /> Add a cover photo in Edit details
@@ -119,8 +120,8 @@ function OverviewCard({ settings }: { settings: StorefrontSettings }) {
         )}
         <div className="absolute -bottom-9 left-5 flex h-20 w-20 items-center justify-center overflow-hidden rounded-full border-4 border-dashboard-surface bg-dashboard-surface shadow-sm">
           {settings.media.logo_url ? (
-            // eslint-disable-next-line @next/next/no-img-element -- short-lived signed URL
-            <img src={settings.media.logo_url} alt={`${branding.display_name} logo`} className="h-full w-full object-cover" />
+            // eslint-disable-next-line @next/next/no-img-element -- app-owned storefront media route
+            <img src={settings.media.logo_url} srcSet={mediaImageSrcSet(settings.media.logo_url)} sizes="80px" alt={`${branding.display_name} logo`} className="h-full w-full object-cover" />
           ) : (
             <span className="font-display text-2xl text-dashboard-navy">{branding.display_name.slice(0, 1)}</span>
           )}

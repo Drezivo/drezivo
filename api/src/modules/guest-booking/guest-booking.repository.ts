@@ -62,6 +62,7 @@ export async function readGuestTokenScopes(client: PoolClient, tenantId: string,
 
 export interface GuestReservationRow {
   id: string;
+  storefront_slug: string;
   branch_id: string;
   reference_code: string;
   status: 'held' | 'pending_confirmation' | 'confirmed' | 'picked_up' | 'returned' | 'completed' | 'cancelled' | 'rejected' | 'expired';
@@ -79,16 +80,56 @@ export interface GuestReservationRow {
   presentation: 'details' | 'material';
   material_file_id: string | null;
   material_mime: string | null;
+  renter_steps_text_snapshot: string | null;
+  renter_steps_file_id_snapshot: string | null;
+  renter_steps_version_snapshot: number | null;
+  renter_steps_image_mime: string | null;
   receipt_submitted: boolean;
+}
+
+export interface SharedRenterStepsSnapshot {
+  text: string | null;
+  file_id: string | null;
+  version: number;
+}
+
+/** Locks the current tenant guide so a concurrent settings edit cannot split a reservation snapshot. */
+export async function readSharedRenterStepsSnapshot(client: PoolClient, tenantId: string): Promise<SharedRenterStepsSnapshot> {
+  await client.query('INSERT INTO tenant_settings (tenant_id) VALUES ($1) ON CONFLICT (tenant_id) DO NOTHING', [tenantId]);
+  const result = await client.query<SharedRenterStepsSnapshot>(
+    `SELECT ts.renter_steps_text AS text,
+            CASE WHEN fo.lifecycle_status = 'accepted'
+                       AND fo.purpose = 'payment_method_material'
+                       AND fo.mime_type IN ('image/jpeg', 'image/png', 'image/webp')
+                       AND fo.byte_size BETWEEN 1 AND 10485760
+                 THEN ts.renter_steps_file_id ELSE NULL END AS file_id,
+            ts.renter_steps_version AS version
+       FROM tenant_settings ts
+       LEFT JOIN file_object fo ON fo.tenant_id = ts.tenant_id AND fo.id = ts.renter_steps_file_id
+      WHERE ts.tenant_id = $1
+      FOR SHARE OF ts`,
+    [tenantId],
+  );
+  const row = result.rows[0];
+  if (!row) throw new Error('Tenant renter steps settings row was unavailable.');
+  return row;
 }
 
 export async function readGuestReservation(client: PoolClient, tenantId: string, reservationId: string): Promise<GuestReservationRow | null> {
   const result = await client.query<GuestReservationRow>(
-    `SELECT r.id, r.branch_id, r.reference_code, r.status, r.pickup_at, r.due_at, r.hold_expires_at,
+    `SELECT r.id, s.slug AS storefront_slug, r.branch_id, r.reference_code, r.status, r.pickup_at, r.due_at, r.hold_expires_at,
             r.price_snapshot, r.delivery_snapshot, rl.name_snapshot AS item_name, pv.size_label,
             pm.name AS method_name, pm.rail, pm.destination_snapshot, pm.qr_file_id,
             pm.presentation, pm.material_file_id,
             (SELECT fo.mime_type FROM file_object fo WHERE fo.tenant_id = pm.tenant_id AND fo.id = pm.material_file_id) AS material_mime,
+            r.renter_steps_text_snapshot,
+            r.renter_steps_file_id_snapshot,
+            r.renter_steps_version_snapshot,
+            (SELECT fo.mime_type FROM file_object fo
+              WHERE fo.tenant_id = r.tenant_id AND fo.id = r.renter_steps_file_id_snapshot
+                AND fo.lifecycle_status = 'accepted' AND fo.purpose = 'payment_method_material'
+                AND fo.mime_type IN ('image/jpeg', 'image/png', 'image/webp')
+                AND fo.byte_size BETWEEN 1 AND 10485760) AS renter_steps_image_mime,
             EXISTS (
               SELECT 1 FROM payment p
                 JOIN payment_receipt pr ON pr.tenant_id = p.tenant_id AND pr.payment_id = p.id
@@ -96,6 +137,7 @@ export async function readGuestReservation(client: PoolClient, tenantId: string,
                  AND pr.evidence_status IN ('uploaded', 'under_review', 'verified')
             ) AS receipt_submitted
        FROM reservation r
+       JOIN storefront s ON s.tenant_id = r.tenant_id AND s.id = r.storefront_id
        JOIN payment_method pm ON pm.tenant_id = r.tenant_id AND pm.id = r.payment_method_id
        LEFT JOIN reservation_line rl ON rl.tenant_id = r.tenant_id AND rl.reservation_id = r.id AND rl.line_number = 1
        LEFT JOIN product_variant pv ON pv.tenant_id = rl.tenant_id AND pv.id = rl.variant_id

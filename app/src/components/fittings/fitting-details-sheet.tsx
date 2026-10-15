@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
 import { createDrezivoApiClient, DrezivoApiError } from "@/lib/drezivo-api";
+import { mediaImageSrcSet } from "@/lib/media-image-srcset";
 import { useSubmitGuard } from "@/lib/use-submit-guard";
 
 import {
@@ -216,9 +217,11 @@ export function FittingDetailsSheet({
                       <div className="flex items-start gap-3">
                         <div className="flex h-16 w-14 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-dashboard-active text-dashboard-accent">
                           {garment.variant.primary_image_url ? (
-                            // eslint-disable-next-line @next/next/no-img-element -- fitting garment images use short-lived signed catalogue URLs.
+                            // eslint-disable-next-line @next/next/no-img-element -- fitting garment media uses an authenticated same-origin API route.
                             <img
                               src={garment.variant.primary_image_url}
+                              srcSet={mediaImageSrcSet(garment.variant.primary_image_url)}
+                              sizes="64px"
                               alt={`${garment.variant.product_name} catalogue photo`}
                               loading="lazy"
                               decoding="async"

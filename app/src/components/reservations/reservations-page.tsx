@@ -23,6 +23,7 @@ import type {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { mediaImageSrcSet } from "@/lib/media-image-srcset";
 import { DateRangePickerField } from "@/components/ui/date-range-picker-field";
 import { Input } from "@/components/ui/input";
 import {
@@ -39,6 +40,7 @@ import { useDebouncedValue } from "@/lib/use-debounced-value";
 import { cn } from "@/lib/utils";
 
 import { NewReservationSheet, type ReservationRebookSource } from "./new-reservation-sheet";
+import { ReservationsLoadingState } from "./reservations-loading-state";
 import { RESERVATIONS_CHANGED_EVENT } from "./pending-hold-guard";
 import { ReservationDetailsSheet } from "./reservation-details-sheet";
 import {
@@ -104,6 +106,7 @@ export function ReservationsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<DrezivoApiError | null>(null);
   const [reloadVersion, setReloadVersion] = useState(0);
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
 
   const currentCursor = pageCursors[pageIndex] ?? null;
   const dateRangeError = validateDateRange(dateRange);
@@ -218,6 +221,7 @@ export function ReservationsPage() {
         if (cancelled) return;
         setRows(result.data.items);
         setPageMeta(result.data.page_meta);
+        setHasLoadedOnce(true);
       })
       .catch((caughtError) => {
         if (cancelled) return;
@@ -226,7 +230,9 @@ export function ReservationsPage() {
         setError(toDrezivoApiError(caughtError));
       })
       .finally(() => {
-        if (!cancelled) setIsLoading(false);
+        if (!cancelled) {
+          setIsLoading(false);
+        }
       });
 
     return () => {
@@ -245,6 +251,8 @@ export function ReservationsPage() {
     reloadVersion,
     status,
   ]);
+
+  const isInitialLoading = isLoading && !hasLoadedOnce;
 
   const resetPagination = useCallback(() => {
     setPageIndex(0);
@@ -296,7 +304,7 @@ export function ReservationsPage() {
           onNewReservation={() => setIsNewReservationOpen(true)}
         />
 
-        <Card className="gap-0 overflow-visible py-0">
+        <Card className="gap-0 overflow-visible py-0" aria-busy={isLoading || undefined}>
           <CardContent className="p-0">
             <ReservationToolbar
               query={query}
@@ -309,11 +317,8 @@ export function ReservationsPage() {
             />
             <ReservationStatusTabs activeStatus={status} onChange={updateStatus} />
 
-            {isLoading ? (
-              <ReservationListState
-                title="Loading reservations…"
-                message="Fetching the latest reservations for this workspace."
-              />
+            {isInitialLoading ? (
+              <ReservationsLoadingState />
             ) : dateRangeError ? (
               <ReservationListState
                 title="Check the pickup date range"
@@ -695,6 +700,8 @@ function ReservationClothingThumbnail({ reservation }: { reservation: Reservatio
         // eslint-disable-next-line @next/next/no-img-element -- API-provided signed URLs are short-lived and dynamic.
         <img
           src={imageUrl}
+          srcSet={mediaImageSrcSet(imageUrl)}
+          sizes="40px"
           alt={`${reservation.line.name_snapshot} cover image`}
           className="h-full w-full object-cover"
           onError={() => setImageFailed(true)}

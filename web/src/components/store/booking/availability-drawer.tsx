@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 
 import type { CatalogueVariant, ItemDetail, PublicStorefront } from '@drezivo/contracts';
 
+import { mediaImageSrcSet } from '@/lib/media-image-srcset';
 import { dateIn, formatDay, formatTime, minimumRentalDays, rentalDays } from '@/lib/storefront-format';
 
 import { lockPageScroll } from '../motion/scroll';
@@ -64,8 +65,8 @@ export function AvailabilityDrawer({
       >
         <div className="flex items-start gap-4 border-b border-sf-line p-5">
           {item.image_urls[0] ? (
-            // eslint-disable-next-line @next/next/no-img-element -- short-lived signed URL
-            <img src={item.image_urls[0]} alt="" className="h-20 w-16 shrink-0 object-cover" />
+            // eslint-disable-next-line @next/next/no-img-element -- app-owned public media route
+            <img src={item.image_urls[0]} srcSet={mediaImageSrcSet(item.image_urls[0])} sizes="64px" alt="" className="h-20 w-16 shrink-0 object-cover" />
           ) : null}
           <div className="min-w-0 flex-1">
             <h2 id="availability-title" className="truncate font-sf-display text-2xl">

@@ -18,6 +18,7 @@ function validOverview() {
     },
     metrics: {
       active_rentals: 2,
+      confirmed_rental_items_current_month: 4,
       pickups_today: 1,
       returns_today: 1,
       fittings_today: 1,
@@ -86,6 +87,7 @@ function validOverview() {
       completed_rental_value: { current_minor: '30000', previous_minor: '20000' },
       completed_rentals: { current: 3, previous: 2 },
       average_rental_value: { current_minor: '10000', previous_minor: '10000' },
+      projected_sales_current_month: { current_minor: '42000', reservations: 2 },
       new_customers: { current: 2, previous: 1 },
     },
   };
@@ -124,6 +126,16 @@ describe('dashboardOverviewResponse', () => {
       },
     };
     expect(() => dashboardOverviewResponse.parse(contactProjection)).toThrow();
+  });
+
+  it('requires the monthly confirmed rental item count to be a non-negative integer', () => {
+    const missingMetric = validOverview();
+    Reflect.deleteProperty(missingMetric.metrics, 'confirmed_rental_items_current_month');
+    expect(() => dashboardOverviewResponse.parse(missingMetric)).toThrow();
+
+    const invalidMetric = validOverview();
+    invalidMetric.metrics.confirmed_rental_items_current_month = -1;
+    expect(() => dashboardOverviewResponse.parse(invalidMetric)).toThrow();
   });
 
   it('requires phone and rental details only for their matching event source', () => {

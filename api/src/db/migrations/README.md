@@ -66,14 +66,25 @@ For an isolated additive hotfix that must not advance later pending migrations, 
 `npm run db:migrate -- --through <exact-filename.sql>` from `api/`. This applies every
 unapplied migration whose filename sorts up to and including the named file, and rejects
 unknown filenames. Remote migrations reject Supavisor transaction-pooler URLs. Inspect the
-target's `schema_migrations` ledger first. A migration added earlier than files already applied
-in a different environment must be independent of them; the `0070_webhook_invitation_resolution.sql`
-migration is additive and independent of the 0071+ changes. For that migration only, an exact
-`--through 0070_webhook_invitation_resolution.sql` target may close a single ledger gap when every
-earlier migration is recorded and no other gap would remain. Ordinary full runs and status checks
-still reject gaps. The runner also refuses to apply it if its resolver function already exists;
-inspect the function, its grants, and the ledger before any manual reconciliation. Never insert a
-ledger row without successfully applying its SQL.
+target's `schema_migrations` ledger first. Any migration added earlier than files already applied
+in a different environment must be independent of them. The runner permits an out-of-order target
+only for these reviewed, additive migrations when an environment has already recorded later files:
+
+- `--through 0070_webhook_invitation_resolution.sql` may close its one ledger gap when every
+  earlier migration is recorded and simulating the target leaves no other gap. The runner also
+  refuses to apply it if its resolver function already exists; inspect the function, its grants,
+  and the ledger before any manual reconciliation.
+- `--through 0080_file_image_variants_backfill.sql` may close its one ledger gap when every earlier
+  migration is recorded and simulating the target leaves no other gap. The migration only queues
+  deduplicated image-variant outbox jobs, so it is safe after the separately named shared renter
+  steps migration that some ledgers already record as applied.
+
+For the second exception, CI first reports status with the exact target, applies through that
+target only when the migration workflow is authorized to apply, and then runs the normal full
+migration and status checks. `npm run db:migrate:status -- --through <exact-filename.sql>` is
+read-only; without `--through`, status checks continue to reject any ledger gap. The exception
+does not rename migrations, edit ledger rows, or authorize skipping any other migration. Never
+insert a ledger row without successfully applying its SQL.
 
 ## Supabase grants and RLS
 

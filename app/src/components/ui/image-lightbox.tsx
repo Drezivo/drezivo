@@ -79,7 +79,7 @@ export function ImageLightbox({
 
           <div className="relative flex max-h-[90vh] max-w-[92vw] items-center justify-center overflow-hidden rounded-2xl border border-white/10 bg-black/25 shadow-2xl">
             {activeImage ? (
-              // eslint-disable-next-line @next/next/no-img-element -- caller can provide short-lived signed image URLs.
+              // eslint-disable-next-line @next/next/no-img-element -- caller can provide API-proxied or public storefront media paths.
               <img
                 src={activeImage.src}
                 alt={activeImage.alt}

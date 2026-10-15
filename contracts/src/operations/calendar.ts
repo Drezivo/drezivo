@@ -10,6 +10,7 @@ import {
   fittingId,
 } from '../common/ids';
 import { currencyCode, nonNegativeMoneyString } from '../common/money';
+import { mediaUrl } from '../common/media';
 import { pageMeta } from '../common/pagination';
 import { ianaTimezone, instantInterval, isoDate, isoInstant } from '../common/time';
 import { physicalAssetReadiness } from '../catalogue/staff';
@@ -221,7 +222,7 @@ export const clothingAvailabilityTimelineRow = z
       .object({
         id: productId,
         name: z.string().trim().min(1).max(200),
-        primary_image_url: z.string().url().nullable(),
+        primary_image_url: mediaUrl.nullable(),
       })
       .strict(),
     variant: z

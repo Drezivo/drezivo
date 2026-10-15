@@ -1858,8 +1858,195 @@ components:
               - material
             additionalProperties: false
           maxItems: 20
+        renter_steps:
+          type: object
+          properties:
+            version:
+              type: integer
+              exclusiveMinimum: 0
+            text:
+              type:
+                - string
+                - "null"
+              maxLength: 2000
+            image:
+              type:
+                - object
+                - "null"
+              properties:
+                file_id:
+                  type: string
+                  format: uuid
+                content_type:
+                  type: string
+                  enum: &renterStepsImageContentTypes
+                    - image/jpeg
+                    - image/png
+                    - image/webp
+                image_url:
+                  type:
+                    - string
+                    - "null"
+                  format: uri
+              required:
+                - file_id
+                - content_type
+              additionalProperties: false
+            legacy_conflicts:
+              type: array
+              items:
+                type: object
+                properties:
+                  payment_method_id:
+                    type: string
+                    format: uuid
+                  payment_method_name:
+                    type: string
+                    minLength: 1
+                    maxLength: 200
+                  text:
+                    type:
+                      - string
+                      - "null"
+                    maxLength: 2000
+                  image:
+                    type:
+                      - object
+                      - "null"
+                    properties:
+                      file_id:
+                        type: string
+                        format: uuid
+                      content_type:
+                        type: string
+                        enum: *renterStepsImageContentTypes
+                      image_url:
+                        type:
+                          - string
+                          - "null"
+                        format: uri
+                    required:
+                      - file_id
+                      - content_type
+                    additionalProperties: false
+                required:
+                  - payment_method_id
+                  - payment_method_name
+                  - text
+                  - image
+                additionalProperties: false
+              maxItems: 20
+          required:
+            - version
+            - text
+            - image
+            - legacy_conflicts
+          additionalProperties: false
       required:
         - items
+        - renter_steps
+      additionalProperties: false
+    PaymentRenterStepsSetting:
+      type: object
+      properties:
+        version:
+          type: integer
+          exclusiveMinimum: 0
+        text:
+          type:
+            - string
+            - "null"
+          maxLength: 2000
+        image:
+          type:
+            - object
+            - "null"
+          properties:
+            file_id:
+              type: string
+              format: uuid
+            content_type:
+              type: string
+              enum: *renterStepsImageContentTypes
+            image_url:
+              type:
+                - string
+                - "null"
+              format: uri
+          required:
+            - file_id
+            - content_type
+          additionalProperties: false
+        legacy_conflicts:
+          type: array
+          items:
+            type: object
+            properties:
+              payment_method_id:
+                type: string
+                format: uuid
+              payment_method_name:
+                type: string
+                minLength: 1
+                maxLength: 200
+              text:
+                type:
+                  - string
+                  - "null"
+                maxLength: 2000
+              image:
+                type:
+                  - object
+                  - "null"
+                properties:
+                  file_id:
+                    type: string
+                    format: uuid
+                  content_type:
+                    type: string
+                    enum: *renterStepsImageContentTypes
+                  image_url:
+                    type:
+                      - string
+                      - "null"
+                    format: uri
+                required:
+                  - file_id
+                  - content_type
+                additionalProperties: false
+            required:
+              - payment_method_id
+              - payment_method_name
+              - text
+              - image
+            additionalProperties: false
+          maxItems: 20
+      required:
+        - version
+        - text
+        - image
+        - legacy_conflicts
+      additionalProperties: false
+    UpdatePaymentRenterStepsRequest:
+      type: object
+      properties:
+        version:
+          type: integer
+          exclusiveMinimum: 0
+        text:
+          type:
+            - string
+            - "null"
+          maxLength: 2000
+        image_file_id:
+          type:
+            - string
+            - "null"
+          format: uuid
+      required:
+        - version
+        - text
+        - image_file_id
       additionalProperties: false
     UpdatePaymentMethodSettingsRequest:
       type: object
@@ -7372,8 +7559,90 @@ paths:
                             - material
                           additionalProperties: false
                         maxItems: 20
+                      renter_steps:
+                        type: object
+                        properties:
+                          version:
+                            type: integer
+                            exclusiveMinimum: 0
+                          text:
+                            type:
+                              - string
+                              - "null"
+                            maxLength: 2000
+                          image:
+                            type:
+                              - object
+                              - "null"
+                            properties:
+                              file_id:
+                                type: string
+                                format: uuid
+                              content_type:
+                                type: string
+                                enum: *renterStepsImageContentTypes
+                              image_url:
+                                type:
+                                  - string
+                                  - "null"
+                                format: uri
+                            required:
+                              - file_id
+                              - content_type
+                            additionalProperties: false
+                          legacy_conflicts:
+                            type: array
+                            items:
+                              type: object
+                              properties:
+                                payment_method_id:
+                                  type: string
+                                  format: uuid
+                                payment_method_name:
+                                  type: string
+                                  minLength: 1
+                                  maxLength: 200
+                                text:
+                                  type:
+                                    - string
+                                    - "null"
+                                  maxLength: 2000
+                                image:
+                                  type:
+                                    - object
+                                    - "null"
+                                  properties:
+                                    file_id:
+                                      type: string
+                                      format: uuid
+                                    content_type:
+                                      type: string
+                                      enum: *renterStepsImageContentTypes
+                                    image_url:
+                                      type:
+                                        - string
+                                        - "null"
+                                      format: uri
+                                  required:
+                                    - file_id
+                                    - content_type
+                                  additionalProperties: false
+                              required:
+                                - payment_method_id
+                                - payment_method_name
+                                - text
+                                - image
+                              additionalProperties: false
+                            maxItems: 20
+                        required:
+                          - version
+                          - text
+                          - image
+                          - legacy_conflicts
+                        additionalProperties: false
                     required:
                       - items
+                      - renter_steps
                     additionalProperties: false
                   request_id:
                     type: string
@@ -7700,6 +7969,275 @@ paths:
                   - request_id
         "422":
           description: The payment method is invalid.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        enum: *a26
+                      message:
+                        type: string
+                        minLength: 1
+                      fields:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            field:
+                              type: string
+                              minLength: 1
+                            message:
+                              type: string
+                              minLength: 1
+                          required:
+                            - field
+                            - message
+                    required:
+                      - code
+                      - message
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - error
+                  - request_id
+  /payment-methods/renter-steps:
+    put:
+      tags:
+        - payments
+      summary: Update the tenant-wide renter payment guide.
+      parameters:
+        - schema:
+            type: string
+            minLength: 8
+            maxLength: 255
+          required: true
+          name: Idempotency-Key
+          in: header
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                version:
+                  type: integer
+                  exclusiveMinimum: 0
+                text:
+                  type:
+                    - string
+                    - "null"
+                  maxLength: 2000
+                image_file_id:
+                  type:
+                    - string
+                    - "null"
+                  format: uuid
+              required:
+                - version
+                - text
+                - image_file_id
+              additionalProperties: false
+      responses:
+        "200":
+          description: Shared renter steps updated or replayed.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      version:
+                        type: integer
+                        exclusiveMinimum: 0
+                      text:
+                        type:
+                          - string
+                          - "null"
+                        maxLength: 2000
+                      image:
+                        type:
+                          - object
+                          - "null"
+                        properties:
+                          file_id:
+                            type: string
+                            format: uuid
+                          content_type:
+                            type: string
+                            enum: *renterStepsImageContentTypes
+                          image_url:
+                            type:
+                              - string
+                              - "null"
+                            format: uri
+                        required:
+                          - file_id
+                          - content_type
+                        additionalProperties: false
+                      legacy_conflicts:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            payment_method_id:
+                              type: string
+                              format: uuid
+                            payment_method_name:
+                              type: string
+                              minLength: 1
+                              maxLength: 200
+                            text:
+                              type:
+                                - string
+                                - "null"
+                              maxLength: 2000
+                            image:
+                              type:
+                                - object
+                                - "null"
+                              properties:
+                                file_id:
+                                  type: string
+                                  format: uuid
+                                content_type:
+                                  type: string
+                                  enum: *renterStepsImageContentTypes
+                                image_url:
+                                  type:
+                                    - string
+                                    - "null"
+                                  format: uri
+                              required:
+                                - file_id
+                                - content_type
+                              additionalProperties: false
+                          required:
+                            - payment_method_id
+                            - payment_method_name
+                            - text
+                            - image
+                          additionalProperties: false
+                        maxItems: 20
+                    required:
+                      - version
+                      - text
+                      - image
+                      - legacy_conflicts
+                    additionalProperties: false
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - data
+                  - request_id
+        "403":
+          description: Payment management permission is required.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        enum: *a26
+                      message:
+                        type: string
+                        minLength: 1
+                      fields:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            field:
+                              type: string
+                              minLength: 1
+                            message:
+                              type: string
+                              minLength: 1
+                          required:
+                            - field
+                            - message
+                    required:
+                      - code
+                      - message
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - error
+                  - request_id
+        "409":
+          description: The renter steps changed or an identical request is in progress.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        enum: *a26
+                      message:
+                        type: string
+                        minLength: 1
+                      fields:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            field:
+                              type: string
+                              minLength: 1
+                            message:
+                              type: string
+                              minLength: 1
+                          required:
+                            - field
+                            - message
+                    required:
+                      - code
+                      - message
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - error
+                  - request_id
+        "422":
+          description: The renter steps must be text or an accepted same-tenant image.
           content:
             application/json:
               schema:
@@ -9322,6 +9860,23 @@ paths:
                                   - image/jpeg
                                   - image/png
                                   - image/webp
+                              renter_steps:
+                                type: object
+                                properties:
+                                  text:
+                                    type:
+                                      - string
+                                      - "null"
+                                    maxLength: 2000
+                                  image_url:
+                                    type: string
+                                    format: uri
+                                  image_content_type:
+                                    type: string
+                                    enum: *renterStepsImageContentTypes
+                                required:
+                                  - text
+                                additionalProperties: false
                             required:
                               - method_name
                               - rail
@@ -10420,6 +10975,23 @@ paths:
                           material_content_type:
                             type: string
                             enum: *a38
+                          renter_steps:
+                            type: object
+                            properties:
+                              text:
+                                type:
+                                  - string
+                                  - "null"
+                                maxLength: 2000
+                              image_url:
+                                type: string
+                                format: uri
+                              image_content_type:
+                                type: string
+                                enum: *renterStepsImageContentTypes
+                            required:
+                              - text
+                            additionalProperties: false
                         required:
                           - method_name
                           - rail
@@ -16453,6 +17025,10 @@ paths:
                             type: integer
                             minimum: -9007199254740991
                             maximum: 9007199254740991
+                          confirmed_rental_items_current_month:
+                            type: integer
+                            minimum: -9007199254740991
+                            maximum: 9007199254740991
                           pickups_today:
                             type: integer
                             minimum: -9007199254740991
@@ -16471,6 +17047,7 @@ paths:
                             maximum: 9007199254740991
                         required:
                           - active_rentals
+                          - confirmed_rental_items_current_month
                           - pickups_today
                           - returns_today
                           - fittings_today
@@ -16886,6 +17463,24 @@ paths:
                               - current_minor
                               - previous_minor
                             additionalProperties: false
+                          projected_sales_current_month:
+                            type: object
+                            properties:
+                              current_minor:
+                                type: string
+                                pattern: ^-?(0|[1-9]\d*)$
+                              reservations:
+                                type: integer
+                                minimum: -9007199254740991
+                                maximum: 9007199254740991
+                            required:
+                              - current_minor
+                              - reservations
+                            additionalProperties: false
+                            description: Current branch-local month completed rental fees plus fees from
+                              confirmed reservations with pickup_at at or after
+                              as_of within the same month. Excludes deposits and
+                              non-completed/non-confirmed statuses.
                           new_customers:
                             type: object
                             properties:
@@ -16924,6 +17519,7 @@ paths:
                           - completed_rental_value
                           - completed_rentals
                           - average_rental_value
+                          - projected_sales_current_month
                           - new_customers
                         additionalProperties: false
                     required:
@@ -24201,6 +24797,23 @@ paths:
                           material_content_type:
                             type: string
                             enum: *a38
+                          renter_steps:
+                            type: object
+                            properties:
+                              text:
+                                type:
+                                  - string
+                                  - "null"
+                                maxLength: 2000
+                              image_url:
+                                type: string
+                                format: uri
+                              image_content_type:
+                                type: string
+                                enum: *renterStepsImageContentTypes
+                            required:
+                              - text
+                            additionalProperties: false
                         required:
                           - method_name
                           - rail
@@ -24655,6 +25268,23 @@ paths:
                           material_content_type:
                             type: string
                             enum: *a38
+                          renter_steps:
+                            type: object
+                            properties:
+                              text:
+                                type:
+                                  - string
+                                  - "null"
+                                maxLength: 2000
+                              image_url:
+                                type: string
+                                format: uri
+                              image_content_type:
+                                type: string
+                                enum: *renterStepsImageContentTypes
+                            required:
+                              - text
+                            additionalProperties: false
                         required:
                           - method_name
                           - rail
@@ -32456,6 +33086,23 @@ paths:
                           material_content_type:
                             type: string
                             enum: *a38
+                          renter_steps:
+                            type: object
+                            properties:
+                              text:
+                                type:
+                                  - string
+                                  - "null"
+                                maxLength: 2000
+                              image_url:
+                                type: string
+                                format: uri
+                              image_content_type:
+                                type: string
+                                enum: *renterStepsImageContentTypes
+                            required:
+                              - text
+                            additionalProperties: false
                         required:
                           - method_name
                           - rail

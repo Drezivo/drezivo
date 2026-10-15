@@ -19,7 +19,7 @@ export function CatalogControls({ categories, sizes, subcategories }: { categori
   const params = useSearchParams();
   const [pending, startTransition] = useTransition();
   const [search, setSearch] = useState(params.get('search') ?? '');
-  const [subcategoryFilterOpen, setSubcategoryFilterOpen] = useState(false);
+  const hasSubcategories = subcategories.length > 0;
 
   useEffect(() => setSearch(params.get('search') ?? ''), [params]);
 
@@ -57,9 +57,16 @@ export function CatalogControls({ categories, sizes, subcategories }: { categori
         </ul>
       </nav>
 
-      <div className="mt-6 grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
+      <div
+        className={`mt-6 grid min-w-0 gap-3 sm:grid-cols-2 ${
+          hasSubcategories
+            ? 'lg:grid-cols-[minmax(0,1fr)_9.5rem_12.5rem_18.5rem]'
+            : 'lg:grid-cols-[minmax(0,1fr)_9.5rem_12.5rem]'
+        }`}
+      >
         <form
           role="search"
+          className="min-w-0 sm:col-span-2 lg:col-span-1"
           onSubmit={(event) => {
             event.preventDefault();
             apply({ search: search.trim() || null });
@@ -78,45 +85,50 @@ export function CatalogControls({ categories, sizes, subcategories }: { categori
             onChange={(event) => setSearch(event.target.value)}
           />
         </form>
-        <label className="flex items-center gap-2 text-sm">
+        <label className="flex min-w-0 flex-col gap-1 text-sm lg:flex-row lg:items-center lg:gap-2">
           <span className="text-sf-muted">Size</span>
-          <select className="sf-input w-auto min-w-28" value={params.get('size') ?? ''} onChange={(event) => apply({ size: event.target.value || null })}>
-            <option value="">Any</option>
-            {sizes.map((size) => (
-              <option key={size} value={size}>
-                {size}
-              </option>
-            ))}
-          </select>
+          <span className="relative block min-w-0 w-full lg:w-28">
+            <select
+              aria-label="Size"
+              className="sf-input w-full appearance-none pr-10"
+              value={params.get('size') ?? ''}
+              onChange={(event) => apply({ size: event.target.value || null })}
+            >
+              <option value="">Any</option>
+              {sizes.map((size) => (
+                <option key={size} value={size}>
+                  {size}
+                </option>
+              ))}
+            </select>
+            <Chevron />
+          </span>
         </label>
-        <label className="flex items-center gap-2 text-sm">
+        <label className="flex min-w-0 flex-col gap-1 text-sm lg:flex-row lg:items-center lg:gap-2">
           <span className="text-sf-muted">Sort</span>
-          <select className="sf-input w-auto" value={params.get('sort') ?? 'featured'} onChange={(event) => apply({ sort: event.target.value === 'featured' ? null : event.target.value })}>
-            {SORTS.map((sort) => (
-              <option key={sort.value} value={sort.value}>
-                {sort.label}
-              </option>
-            ))}
-          </select>
+          <span className="relative block min-w-0 w-full lg:w-40">
+            <select
+              aria-label="Sort"
+              className="sf-input w-full appearance-none pr-10"
+              value={params.get('sort') ?? 'featured'}
+              onChange={(event) => apply({ sort: event.target.value === 'featured' ? null : event.target.value })}
+            >
+              {SORTS.map((sort) => (
+                <option key={sort.value} value={sort.value}>
+                  {sort.label}
+                </option>
+              ))}
+            </select>
+            <Chevron />
+          </span>
         </label>
-      </div>
-      <div className="mt-4">
-        <button
-          type="button"
-          aria-expanded={subcategoryFilterOpen}
-          aria-controls="catalog-subcategory-filter"
-          onClick={() => setSubcategoryFilterOpen((open) => !open)}
-          className="sf-button min-h-10 px-4 text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sf-accent"
-        >
-          {params.get('subcategory') ? `Filter · ${params.get('subcategory')}` : 'Filter'}
-        </button>
-        {subcategoryFilterOpen ? (
-          <div id="catalog-subcategory-filter" className="mt-3 max-w-sm border border-sf-line p-4">
-            <label htmlFor="catalog-subcategory" className="flex flex-col gap-2 text-sm">
-              <span className="text-sf-muted">Subcategory</span>
+        {hasSubcategories ? (
+          <label className="flex min-w-0 flex-col gap-1 text-sm lg:flex-row lg:items-center lg:gap-2">
+            <span className="shrink-0 text-sf-muted">Subcategory</span>
+            <span className="relative block min-w-0 w-full lg:w-48">
               <select
-                id="catalog-subcategory"
-                className="sf-input"
+                aria-label="Subcategory"
+                className="sf-input w-full appearance-none pr-10"
                 value={params.get('subcategory') ?? ''}
                 onChange={(event) => apply({ subcategory: event.target.value || null })}
               >
@@ -127,15 +139,24 @@ export function CatalogControls({ categories, sizes, subcategories }: { categori
                   </option>
                 ))}
               </select>
-            </label>
-            {params.get('subcategory') ? (
-              <button type="button" className="mt-3 text-sm underline underline-offset-4" onClick={() => apply({ subcategory: null })}>
-                Clear subcategory filter
-              </button>
-            ) : null}
-          </div>
+              <Chevron />
+            </span>
+          </label>
         ) : null}
       </div>
     </div>
+  );
+}
+
+function Chevron() {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 20 20"
+      fill="none"
+      className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-sf-muted"
+    >
+      <path d="m5 7.5 5 5 5-5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
   );
 }

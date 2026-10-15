@@ -1,6 +1,8 @@
 import pg from 'pg';
 import request from 'supertest';
+import { randomUUID } from 'node:crypto';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { Readable } from 'node:stream';
 
 /**
  * Public storefront reads against a real PostgreSQL with RLS: publish gating, projection allowlist,
@@ -27,6 +29,7 @@ const dataOf = <T>(response: { body: unknown }): T => (response.body as { data: 
 const adminUrl = requireTestDatabaseUrl();
 process.env.NODE_ENV = 'test';
 process.env.DATABASE_URL = buildAppRoleDatabaseUrl(adminUrl);
+process.env.INVITATION_EMAIL_DIGEST_KEY ??= Buffer.alloc(32, 2).toString('base64url');
 
 describe('public storefront read API', async () => {
   const { createApp } = await import('../../src/app.js');
@@ -36,6 +39,8 @@ describe('public storefront read API', async () => {
   const { weekdayOf } = await import('../../src/modules/storefront/shop-closures.js');
   const { createStorefrontAsset, createStorefrontWorkspace } = await import('./helpers/storefront-fixture.js');
   const { defaultStorefrontDocument, fileObjectId, productId } = await import('@drezivo/contracts');
+  const { objectStorage } = await import('../../src/integrations/storage/s3-compatible-object-storage.js');
+  const { issuePreviewToken } = await import('../../src/modules/storefront/storefront-preview.js');
   const admin = new pg.Pool({ connectionString: adminUrl, max: 2 });
 
   const rules = {
@@ -54,6 +59,7 @@ describe('public storefront read API', async () => {
     await ensureAppRoleLogin(adminUrl);
   });
   afterEach(async () => {
+    vi.restoreAllMocks();
     await resetTestDatabase(adminUrl);
   });
   afterAll(async () => {
@@ -103,15 +109,15 @@ describe('public storefront read API', async () => {
       fitting: { enabled: false },
     });
     expect(store.featured.map((card) => card.product_id)).toEqual([ws.productId]);
-    expect(store.featured[0]?.image_url).toMatch(/^https?:\/\//);
+    expect(store.featured[0]?.image_url).toBe(
+      `/api/media/public/${ws.slug}/${ws.imageFileId}?w=960`,
+    );
     expect(store.categories).toEqual([{ id: expect.any(String) as string, name: 'Gowns', item_count: 1 }]);
     expect(store.payment_methods).toEqual([{ id: ws.paymentMethodId, name: 'Bank transfer', rail: 'manual_transfer' }]);
 
-    // Signed image URLs carry the files module's object key (which includes the tenant id) and a
-    // short-lived signature; nothing else in the projection may reveal internal identifiers.
-    const withoutSignedUrls = JSON.stringify(store, (key, value: unknown) => (key.endsWith('_url') && typeof value === 'string' && value.startsWith('http') ? '[signed]' : value));
-    for (const secret of [ws.tenantId, ws.branchId, ws.storefrontId, '001234567890', 'tenant-files/']) {
-      expect(withoutSignedUrls).not.toContain(secret);
+    const publicProjection = JSON.stringify(store);
+    for (const secret of [ws.tenantId, ws.branchId, ws.storefrontId, '001234567890', 'tenant-files/', 'cloudflarestorage.com', 'X-Amz-Signature']) {
+      expect(publicProjection).not.toContain(secret);
     }
 
     // Taking the store offline makes every public route a 404 again.
@@ -152,8 +158,68 @@ describe('public storefront read API', async () => {
     const store = dataOf<PublicStorefront>(await request(createApp()).get(`/api/v1/public/stores/${ws.slug}`));
     expect(store.policy).toMatchObject({ format: 'images', rental: '', deposit: '', cancellation: '', damage: null, privacy_notice: rules.privacy_notice });
     expect(store.policy.image_urls).toHaveLength(2);
-    expect(store.policy.image_urls[0]).toContain('policy-page-two');
-    expect(store.policy.image_urls[1]).toContain('policy-page-one');
+    expect(store.policy.image_urls).toEqual([
+      `/api/media/public/${ws.slug}/${pageTwo}?w=960`,
+      `/api/media/public/${ws.slug}/${pageOne}?w=960`,
+    ]);
+  });
+
+  it('streams only referenced public media, with uncached owner previews and no R2 details', async () => {
+    const draft = await createStorefrontWorkspace('media-draft');
+    const png = Buffer.alloc(512, 7);
+    png.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    const read = vi.spyOn(objectStorage, 'readObject').mockImplementation(() =>
+      Promise.resolve({ body: Readable.from([png]), contentLength: png.byteLength }),
+    );
+    const previewToken = issuePreviewToken({ tenantId: draft.tenantId, storefrontId: draft.storefrontId }).token;
+    const app = createApp();
+
+    expect((await request(app).get(`/api/v1/public/stores/${draft.slug}/media/${draft.imageFileId}`)).status).toBe(404);
+    const preview = await request(app)
+      .get(`/api/v1/public/stores/${draft.slug}/media/${draft.imageFileId}`)
+      .set('X-Storefront-Preview', previewToken);
+    expect(preview.status).toBe(200);
+    expect(preview.headers['cache-control']).toBe('private, no-store');
+    expect(preview.headers['x-content-type-options']).toBe('nosniff');
+    expect(preview.body).toEqual(png);
+
+    const ws = await publishedWorkspace('media-live');
+    const publicMedia = await request(app).get(`/api/v1/public/stores/${ws.slug}/media/${ws.imageFileId}`);
+    expect(publicMedia.status).toBe(200);
+    expect(publicMedia.headers['cache-control']).toMatch(/^public/);
+    expect(publicMedia.headers['x-content-type-options']).toBe('nosniff');
+    expect(publicMedia.body).toEqual(png);
+    expect(publicMedia.headers.location).toBeUndefined();
+    expect(publicMedia.headers['x-amz-signature']).toBeUndefined();
+    expect(Buffer.from(publicMedia.body as Uint8Array).toString('utf8')).not.toContain('cloudflarestorage.com');
+    expect(read.mock.calls.map(([input]) => input.storageKey)).toEqual([
+      `tenant-files/${draft.tenantId}/gown/source`,
+      `tenant-files/${ws.tenantId}/gown/source`,
+    ]);
+
+    const other = await createStorefrontWorkspace('media-foreign');
+    expect((await request(app).get(`/api/v1/public/stores/${ws.slug}/media/${other.imageFileId}`)).status).toBe(404);
+    expect((await request(app).get(`/api/v1/public/stores/${ws.slug}/media/${randomUUID()}`)).status).toBe(404);
+
+    const evidence = await admin.query<{ id: string }>(
+      `INSERT INTO file_object (tenant_id, purpose, storage_key, version_id, mime_type, byte_size, lifecycle_status,
+         is_private, upload_expires_at, frozen_at)
+       VALUES ($1, 'verification_document', $2, 'private-evidence-v1', 'image/png', $3, 'accepted', true, now(), now())
+       RETURNING id`,
+      [ws.tenantId, `tenant-files/${ws.tenantId}/private-evidence/source`, png.byteLength],
+    );
+    const evidenceId = evidence.rows[0]?.id;
+    if (!evidenceId) throw new Error('expected private evidence file');
+    expect((await request(app).get(`/api/v1/public/stores/${ws.slug}/media/${evidenceId}`)).status).toBe(404);
+
+    await admin.query(`UPDATE file_object SET lifecycle_status = 'rejected' WHERE id = $1`, [ws.imageFileId]);
+    expect((await request(app).get(`/api/v1/public/stores/${ws.slug}/media/${ws.imageFileId}`)).status).toBe(404);
+    await admin.query(`UPDATE file_object SET lifecycle_status = 'deleted' WHERE id = $1`, [ws.imageFileId]);
+    expect((await request(app).get(`/api/v1/public/stores/${ws.slug}/media/${ws.imageFileId}`)).status).toBe(404);
+    await admin.query(`UPDATE file_object SET lifecycle_status = 'accepted', frozen_at = now() WHERE id = $1`, [ws.imageFileId]);
+    await admin.query(`UPDATE product SET status = 'archived' WHERE tenant_id = $1 AND id = $2`, [ws.tenantId, ws.productId]);
+    expect((await request(app).get(`/api/v1/public/stores/${ws.slug}/media/${ws.imageFileId}`)).status).toBe(404);
+    expect(read).toHaveBeenCalledTimes(2);
   });
 
   it('filters, searches, and pages the catalogue without treating input as SQL wildcards', async () => {

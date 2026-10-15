@@ -6,6 +6,7 @@ import { useEffect, useId, useRef, useState } from "react";
 
 import { STOREFRONT_POLICY_IMAGE_LIMIT, type FileObjectId } from "@drezivo/contracts";
 
+import { mediaImageSrcSet } from "@/lib/media-image-srcset";
 import { storefrontImageProblem, uploadStorefrontImage, type UploadIntent } from "@/lib/storefront-assets";
 
 /**
@@ -90,8 +91,8 @@ export function PolicyImagesField({
               <li key={id} className="overflow-hidden rounded-lg border border-dashboard-border bg-dashboard-canvas">
                 <div className="relative aspect-[3/4] bg-white">
                   {url ? (
-                    // eslint-disable-next-line @next/next/no-img-element -- local object URL or short-lived signed URL
-                    <img src={url} alt={`Policy page ${index + 1}`} className="absolute inset-0 h-full w-full object-contain" />
+                    // eslint-disable-next-line @next/next/no-img-element -- local upload preview or app-owned media route
+                    <img src={url} srcSet={mediaImageSrcSet(url)} sizes="(min-width: 640px) 50vw, 100vw" alt={`Policy page ${index + 1}`} className="absolute inset-0 h-full w-full object-contain" />
                   ) : (
                     <p className="absolute inset-0 flex items-center justify-center text-xs text-dashboard-muted">Preview unavailable</p>
                   )}

@@ -1,3 +1,5 @@
+import { mediaImageSrcSet } from '@/lib/media-image-srcset';
+
 /**
  * A shop's rental terms published as pictures of its own policy. Each page is shown at the full
  * reading width so printed text stays legible, never cropped, and opens at full resolution for
@@ -13,8 +15,8 @@ export function PolicyImages({ urls, shopName }: { urls: readonly string[]; shop
             <figure>
               {/* Edge to edge on phones (the page gutter is 20px) and the whole page opens full size, so small print can be zoomed. */}
               <a href={url} target="_blank" rel="noopener noreferrer" className="-mx-5 block sm:mx-0">
-                {/* eslint-disable-next-line @next/next/no-img-element -- short-lived signed URL from the shop's asset host */}
-                <img src={url} alt={label} loading={index === 0 ? 'eager' : 'lazy'} className="h-auto w-full border-y border-sf-line bg-white object-contain sm:border" />
+                {/* eslint-disable-next-line @next/next/no-img-element -- app-owned public media route */}
+                <img src={url} srcSet={mediaImageSrcSet(url)} sizes="100vw" alt={label} loading={index === 0 ? 'eager' : 'lazy'} className="h-auto w-full border-y border-sf-line bg-white object-contain sm:border" />
               </a>
               <figcaption className="mt-3 flex flex-wrap items-center justify-between gap-2 text-sm text-sf-muted">
                 <span>

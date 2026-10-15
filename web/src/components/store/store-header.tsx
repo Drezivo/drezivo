@@ -6,6 +6,8 @@ import { useEffect, useRef, useState } from 'react';
 
 import type { PublicStorefront } from '@drezivo/contracts';
 
+import { mediaImageSrcSet } from '@/lib/media-image-srcset';
+
 import { lockPageScroll } from './motion/scroll';
 import { storeNav } from './store-nav';
 
@@ -43,8 +45,8 @@ export function StoreHeader({ store }: { store: PublicStorefront }) {
         <div className="mx-auto flex h-[var(--storefront-header-height)] max-w-7xl items-center justify-between gap-6 px-5 sm:px-8">
           <Link href={home} className="flex min-w-0 items-center gap-3" aria-label={`${store.name} home`}>
             {store.logo_url ? (
-              // eslint-disable-next-line @next/next/no-img-element -- short-lived signed URL from the API
-              <img src={store.logo_url} alt="" className="h-9 w-9 shrink-0 rounded-full object-cover" />
+              // eslint-disable-next-line @next/next/no-img-element -- app-owned storefront media route
+              <img src={store.logo_url} srcSet={mediaImageSrcSet(store.logo_url)} sizes="36px" alt="" className="h-9 w-9 shrink-0 rounded-full object-cover" />
             ) : null}
             <span className="truncate font-sf-display text-xl font-normal tracking-tight sm:text-2xl">{store.name}</span>
           </Link>

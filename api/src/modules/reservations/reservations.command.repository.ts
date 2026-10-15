@@ -400,6 +400,9 @@ export async function createReservationGraph(
     customerSnapshot: Record<string, unknown> | null;
     deliverySnapshot: Record<string, unknown>;
     priceSnapshot: Record<string, unknown>;
+    renterStepsTextSnapshot?: string | null;
+    renterStepsFileIdSnapshot?: string | null;
+    renterStepsVersionSnapshot?: number | null;
     rentalTotalMinor: number;
     securityRequiredMinor: number;
     dueNowMinor: number;
@@ -417,11 +420,13 @@ export async function createReservationGraph(
         payment_method_id, reference_code, status, event_date, pickup_at, due_at,
         timezone_snapshot, customer_snapshot, delivery_snapshot, price_snapshot, currency,
         rental_total_minor, security_required_minor, due_now_minor, hold_acquired_at,
-        hold_expires_at, version)
+        hold_expires_at, version, renter_steps_text_snapshot, renter_steps_file_id_snapshot,
+        renter_steps_version_snapshot)
      VALUES
        ($1, $2, $3, $4, $5, $6, $7, $8, 'held', $9::date, $10::timestamptz,
         $11::timestamptz, $12, $13::jsonb, $14::jsonb, $15::jsonb, 'PHP',
-        $16, $17, $18, statement_timestamp(), statement_timestamp() + interval '15 minutes', 1)
+        $16, $17, $18, statement_timestamp(), statement_timestamp() + interval '15 minutes', 1,
+        $19, $20, $21)
      RETURNING id, hold_expires_at, version, created_at`,
     [
       input.reservationId,
@@ -442,6 +447,9 @@ export async function createReservationGraph(
       input.rentalTotalMinor,
       input.securityRequiredMinor,
       input.dueNowMinor,
+      input.renterStepsTextSnapshot ?? null,
+      input.renterStepsFileIdSnapshot ?? null,
+      input.renterStepsVersionSnapshot ?? null,
     ],
   );
 

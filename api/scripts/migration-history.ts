@@ -13,6 +13,45 @@ export class MigrationHistoryError extends Error {
 }
 
 export const OUT_OF_ORDER_SAFE_MIGRATION = '0070_webhook_invitation_resolution.sql';
+export const OUT_OF_ORDER_SAFE_IMAGE_VARIANTS_MIGRATION = '0080_file_image_variants_backfill.sql';
+
+const OUT_OF_ORDER_SAFE_MIGRATIONS = new Set([
+  OUT_OF_ORDER_SAFE_MIGRATION,
+  OUT_OF_ORDER_SAFE_IMAGE_VARIANTS_MIGRATION,
+]);
+
+export interface MigrationArguments {
+  statusOnly: boolean;
+  throughFile: string | null;
+}
+
+const MIGRATION_ARGUMENTS_USAGE =
+  'Usage: npm run db:migrate -- [--status] [--through <migration-filename.sql>]';
+
+export function parseMigrationArguments(args: readonly string[]): MigrationArguments {
+  let statusOnly = false;
+  let throughFile: string | null = null;
+
+  for (let index = 0; index < args.length; index += 1) {
+    const argument = args[index];
+    if (argument === '--status' && !statusOnly) {
+      statusOnly = true;
+      continue;
+    }
+    if (argument === '--through' && throughFile === null) {
+      const target = args[index + 1];
+      if (!target || target.startsWith('--')) {
+        throw new Error(MIGRATION_ARGUMENTS_USAGE);
+      }
+      throughFile = target;
+      index += 1;
+      continue;
+    }
+    throw new Error(MIGRATION_ARGUMENTS_USAGE);
+  }
+
+  return { statusOnly, throughFile };
+}
 
 /**
  * Confirms that applied migrations are a contiguous prefix of the checked-in, filename-ordered
@@ -51,10 +90,13 @@ export function inspectMigrationHistory(
       : orderedFiles.slice(firstPendingIndex).filter((file) => appliedSet.has(file));
   if (laterAppliedFiles.length > 0) {
     const pendingFile = orderedFiles[firstPendingIndex];
-    if (throughFile === OUT_OF_ORDER_SAFE_MIGRATION && pendingFile === throughFile) {
-      // The invitation resolver is additive and independent of later migrations. Simulate its
-      // application and require that it closes the only gap before allowing the runner to act.
-      // This keeps the exception tied to an exact, explicit --through target.
+    if (
+      throughFile !== null &&
+      OUT_OF_ORDER_SAFE_MIGRATIONS.has(throughFile) &&
+      pendingFile === throughFile
+    ) {
+      // Explicitly targeted additive migrations may close their one known ledger gap. Simulating
+      // the ledger after applying the target proves that no additional gap is hidden.
       inspectMigrationHistory(orderedFiles, [...appliedSet, throughFile]);
       return {
         appliedFiles: orderedFiles.filter((file) => appliedSet.has(file)),

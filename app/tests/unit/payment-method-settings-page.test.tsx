@@ -9,6 +9,7 @@ const clerk = vi.hoisted(() => ({ getToken: vi.fn(), useAuth: vi.fn() }));
 const api = vi.hoisted(() => ({
   getPaymentMethodSettings: vi.fn(),
   updatePaymentMethodSettings: vi.fn(),
+  updatePaymentRenterSteps: vi.fn(),
   archivePaymentMethod: vi.fn(),
   authorizeUpload: vi.fn(),
   finalizeUpload: vi.fn(),
@@ -19,9 +20,15 @@ vi.mock("@/lib/drezivo-api", () => ({
   DrezivoApiError: class DrezivoApiError extends Error {},
   createDrezivoApiClient: () => api,
 }));
+vi.mock("@/lib/storefront-assets", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/storefront-assets")>();
+  return { ...actual, detectImageType: vi.fn().mockResolvedValue("image/png"), uploadStorefrontImage: vi.fn().mockResolvedValue("33333333-3333-4333-8333-333333333333") };
+});
 
 const cashId = "11111111-1111-4111-8111-111111111111";
 const gcashId = "22222222-2222-4222-8222-222222222222";
+const stepImageId = "33333333-3333-4333-8333-333333333333";
+const sharedSteps = { version: 1, text: null, image: null, legacy_conflicts: [] } as const;
 const methods = [
   {
     id: cashId,
@@ -56,7 +63,7 @@ describe("PaymentMethodSettingsPage", () => {
     vi.clearAllMocks();
     clerk.getToken.mockResolvedValue("token");
     clerk.useAuth.mockReturnValue({ getToken: clerk.getToken });
-    api.getPaymentMethodSettings.mockResolvedValue({ data: { items: methods }, requestId: "req-list" });
+    api.getPaymentMethodSettings.mockResolvedValue({ data: { items: methods, renter_steps: sharedSteps }, requestId: "req-list" });
   });
 
   it("shows the tenant defaults and keeps Cash storefront-only control disabled", async () => {
@@ -68,6 +75,97 @@ describe("PaymentMethodSettingsPage", () => {
     expect(checkboxes).toHaveLength(4);
     expect(checkboxes[1]).toBeDisabled();
     expect(screen.getByText(/Cash cannot secure an online storefront reservation/i)).toBeVisible();
+  });
+
+  it("shows one shared renter steps editor, defaulting to a multiline text field", async () => {
+    render(<PaymentMethodSettingsPage />);
+    await screen.findByText("GCash");
+
+    expect(screen.getByRole("heading", { name: "Steps for renters" })).toBeVisible();
+    expect(screen.getByRole("radio", { name: /Enter steps for renters/ })).toBeChecked();
+    expect(screen.getByRole("radio", { name: /Upload steps for renters/ })).not.toBeChecked();
+    expect(screen.getByLabelText("Text steps for renters").tagName).toBe("TEXTAREA");
+    expect(screen.queryByLabelText("Steps for renters")).not.toBeInTheDocument();
+  });
+
+  it("saves shared renter text through the tenant-level API", async () => {
+    api.updatePaymentRenterSteps.mockResolvedValue({ data: { ...sharedSteps, version: 2, text: "Send the deposit, then share your receipt." } });
+    render(<PaymentMethodSettingsPage />);
+    await screen.findByText("GCash");
+    fireEvent.change(screen.getByLabelText("Text steps for renters"), { target: { value: "Send the deposit, then share your receipt." } });
+    fireEvent.click(screen.getByRole("button", { name: "Save renter steps" }));
+
+    await waitFor(() => expect(api.updatePaymentRenterSteps).toHaveBeenCalledWith(
+      { version: 1, text: "Send the deposit, then share your receipt.", image_file_id: null },
+      expect.any(String),
+    ));
+  });
+
+  it("shows conflicting legacy values read-only for consolidation", async () => {
+    api.getPaymentMethodSettings.mockResolvedValue({
+      data: {
+        items: methods,
+        renter_steps: {
+          version: 1,
+          text: null,
+          image: null,
+          legacy_conflicts: [{ payment_method_id: gcashId, payment_method_name: "GCash", text: "Transfer the deposit.", image: null }],
+        },
+      },
+    });
+    render(<PaymentMethodSettingsPage />);
+
+    expect(await screen.findByText("Review existing method-specific steps")).toBeVisible();
+    expect(screen.getByText("Transfer the deposit.")).toBeVisible();
+    expect(screen.getByText(/none were chosen automatically/)).toBeVisible();
+  });
+
+  it("uploads the shared image and sends no text in image mode", async () => {
+    const createObjectURL = vi.fn(() => "blob:shared-steps");
+    Object.assign(URL, { createObjectURL, revokeObjectURL: vi.fn() });
+    api.updatePaymentRenterSteps.mockResolvedValue({
+      data: { version: 2, text: null, image: { file_id: stepImageId, content_type: "image/png" }, legacy_conflicts: [] },
+    });
+    render(<PaymentMethodSettingsPage />);
+    await screen.findByText("GCash");
+    fireEvent.click(screen.getByRole("radio", { name: /Upload steps for renters/ }));
+    const file = new File([new Uint8Array([137, 80, 78, 71])], "steps.png", { type: "image/png" });
+    fireEvent.change(screen.getByLabelText("Steps image"), { target: { files: [file] } });
+    expect(await screen.findByRole("img", { name: "Renter steps image" })).toHaveAttribute("src", "blob:shared-steps");
+    fireEvent.click(screen.getByRole("button", { name: "Save renter steps" }));
+
+    await waitFor(() => expect(api.updatePaymentRenterSteps).toHaveBeenCalledWith(
+      { version: 1, text: null, image_file_id: stepImageId },
+      expect.any(String),
+    ));
+  });
+
+  it("switches a saved shared image back to text and clears the image on save", async () => {
+    api.getPaymentMethodSettings.mockResolvedValue({
+      data: {
+        items: methods,
+        renter_steps: {
+          version: 3,
+          text: null,
+          image: { file_id: stepImageId, content_type: "image/png", image_url: "https://files.example.test/shared.png" },
+          legacy_conflicts: [],
+        },
+      },
+    });
+    api.updatePaymentRenterSteps.mockResolvedValue({
+      data: { version: 4, text: "Pay, then send the receipt.", image: null, legacy_conflicts: [] },
+    });
+    render(<PaymentMethodSettingsPage />);
+    await screen.findByText("GCash");
+
+    fireEvent.click(screen.getByRole("radio", { name: /Enter steps for renters/ }));
+    fireEvent.change(screen.getByLabelText("Text steps for renters"), { target: { value: "Pay, then send the receipt." } });
+    fireEvent.click(screen.getByRole("button", { name: "Save renter steps" }));
+
+    await waitFor(() => expect(api.updatePaymentRenterSteps).toHaveBeenCalledWith(
+      { version: 3, text: "Pay, then send the receipt.", image_file_id: null },
+      expect.any(String),
+    ));
   });
 
   it("limits GCash numbers to 11 numeric digits", async () => {
@@ -123,6 +221,7 @@ describe("PaymentMethodSettingsPage", () => {
           methods[0],
           { ...methods[1], qr_file_id: gcashId, qr_image_url: "https://files.example.test/gcash-qr.png" },
         ],
+        renter_steps: sharedSteps,
       },
     });
     render(<PaymentMethodSettingsPage />);
@@ -215,6 +314,7 @@ describe("PaymentMethodSettingsPage", () => {
             material_url: "https://files.example.test/steps.pdf",
           },
         ],
+        renter_steps: sharedSteps,
       },
     });
     render(<PaymentMethodSettingsPage />);
@@ -233,7 +333,7 @@ describe("PaymentMethodSettingsPage", () => {
       name: `Bank ${index}`,
       rail: "manual_transfer" as const,
     }));
-    api.getPaymentMethodSettings.mockResolvedValue({ data: { items: [methods[0], ...online] }, requestId: "req-list" });
+    api.getPaymentMethodSettings.mockResolvedValue({ data: { items: [methods[0], ...online], renter_steps: sharedSteps }, requestId: "req-list" });
     render(<PaymentMethodSettingsPage />);
     await screen.findByText("Bank 4");
 

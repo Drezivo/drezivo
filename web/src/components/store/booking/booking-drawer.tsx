@@ -6,6 +6,7 @@ import { useEffect, useReducer, useRef, useState } from 'react';
 
 import type { CatalogueVariant, FulfillmentMethod, GuestReservationRequest, GuestReservationView, ItemDetail, PublicStorefront } from '@drezivo/contracts';
 
+import { mediaImageSrcSet } from '@/lib/media-image-srcset';
 import { createReservation, StorefrontApiError } from '@/lib/storefront-api';
 import { dateIn, formatDay, formatMinor, formatTime, minimumRentalDays, pickupTimeOptions, rentalDays, zonedInstant } from '@/lib/storefront-format';
 
@@ -270,8 +271,8 @@ export function BookingDrawer({ store, item, variant, onClose }: { store: Public
       <div ref={panel} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="booking-title" className="relative flex h-full w-full max-w-lg flex-col bg-sf-bg shadow-2xl outline-none motion-safe:animate-[sf-drawer-in_220ms_ease-out]">
         <div className="flex items-start gap-4 border-b border-sf-line p-5">
           {item.image_urls[0] ? (
-            // eslint-disable-next-line @next/next/no-img-element -- short-lived signed URL
-            <img src={item.image_urls[0]} alt="" className="h-20 w-16 shrink-0 object-cover" />
+            // eslint-disable-next-line @next/next/no-img-element -- app-owned public media route
+            <img src={item.image_urls[0]} srcSet={mediaImageSrcSet(item.image_urls[0])} sizes="64px" alt="" className="h-20 w-16 shrink-0 object-cover" />
           ) : null}
           <div className="min-w-0 flex-1">
             <h2 id="booking-title" className="truncate font-sf-display text-2xl">

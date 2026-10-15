@@ -25,6 +25,7 @@ import { createDrezivoApiClient, DrezivoApiError } from "@/lib/drezivo-api";
 import { useDebouncedValue } from "@/lib/use-debounced-value";
 import { useSubmitGuard } from "@/lib/use-submit-guard";
 import { cn } from "@/lib/utils";
+import { mediaImageSrcSet } from "@/lib/media-image-srcset";
 
 import { fittingGarmentModeLabel, formatFittingMoney } from "./fittings-presentation";
 
@@ -1015,9 +1016,11 @@ function StepGarments({
                 <span className="flex items-start gap-3">
                   <span className="flex h-12 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-dashboard-active text-dashboard-accent">
                     {product.primary_image_url ? (
-                      // eslint-disable-next-line @next/next/no-img-element -- catalogue images use short-lived signed URLs.
+                      // eslint-disable-next-line @next/next/no-img-element -- catalogue media uses an authenticated same-origin API route.
                       <img
                         src={product.primary_image_url}
+                        srcSet={mediaImageSrcSet(product.primary_image_url)}
+                        sizes="64px"
                         alt={`${product.name} catalogue photo`}
                         loading="lazy"
                         decoding="async"

@@ -39,6 +39,7 @@ import { ListPagination } from "@/components/ui/list-pagination";
 import { createDrezivoApiClient, DrezivoApiError } from "@/lib/drezivo-api";
 import { useDebouncedValue } from "@/lib/use-debounced-value";
 import { cn } from "@/lib/utils";
+import { mediaImageSrcSet } from "@/lib/media-image-srcset";
 
 import {
   FITTING_PAYMENT_CLASSES,
@@ -609,9 +610,11 @@ function AppointmentList({
                     <div className="flex min-w-0 items-start gap-2">
                       <span className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-dashboard-active text-dashboard-accent">
                         {firstGarment.variant.primary_image_url ? (
-                          // eslint-disable-next-line @next/next/no-img-element -- fitting garment images use short-lived signed catalogue URLs.
+                          // eslint-disable-next-line @next/next/no-img-element -- fitting garment media uses an authenticated same-origin API route.
                           <img
                             src={firstGarment.variant.primary_image_url}
+                            srcSet={mediaImageSrcSet(firstGarment.variant.primary_image_url)}
+                            sizes="64px"
                             alt={`${firstGarment.variant.product_name} catalogue photo`}
                             loading="lazy"
                             decoding="async"
