@@ -8,12 +8,13 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import type { SubscriptionAccess } from "@drezivo/contracts";
 
 import { SubscribeDialog } from "@/components/billing/subscribe-dialog";
+import { PlanUpgradeProvider } from "@/components/billing/plan-upgrade-dialog";
 import { Button } from "@/components/ui/button";
 
 /**
- * Pilot subscription UI for Starter and Standard. Every "Pay" action opens the Subscribe dialog.
- * After a trial or paid month ends the workspace is view-only for 30 days (the storefront stays
- * up, taking no bookings, for the first 3), then it locks until the owner pays.
+ * Billing status UI for perpetual Free and paid Starter/Standard plans. Every "Pay" action opens
+ * the Subscribe dialog. After a paid trial or month ends the workspace is view-only for 30 days
+ * (the storefront stays up, taking no bookings, for the first 3), then it locks until the owner pays.
  */
 
 /** Fired by the API client when the server refuses an action because of the subscription. */
@@ -49,6 +50,12 @@ export function accessMessage(access: SubscriptionAccess): {
     ? ` View-only access ends ${inDays(daysUntil(access.read_only_until))}.`
     : "";
   switch (access.reason) {
+    case "free":
+      return {
+        tone: "info",
+        title: "Free plan",
+        body: `Your workspace is active with the Free plan. Upgrade any time to unlock more features.${pending}`,
+      };
     case "trial":
       return {
         tone: "info",
@@ -127,7 +134,7 @@ export function SubscriptionProvider({
   const openSubscribe = useCallback(() => setSubscribeOpen(true), []);
   return (
     <SubscribeContext.Provider value={openSubscribe}>
-      {children}
+      <PlanUpgradeProvider onChanged={onChanged}>{children}</PlanUpgradeProvider>
       <SubscriptionPrompt access={access} onPay={openSubscribe} />
       <SubscribeDialog
         open={subscribeOpen}

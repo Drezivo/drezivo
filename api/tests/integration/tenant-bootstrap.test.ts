@@ -1,5 +1,6 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { createHash } from 'node:crypto';
+import { Client } from 'pg';
 
 import { CURRENT_TERMS_VERSION, storefrontSlug } from '@drezivo/contracts';
 
@@ -34,6 +35,7 @@ describe('TBF-030 tenant bootstrap', async () => {
     await import('../../src/modules/onboarding/onboarding.repository.js');
   const { runTenantBootstrap } =
     await import('../../src/modules/onboarding/tenant-bootstrap.persistence.js');
+  const { changeTrialPlan } = await import('../../src/modules/billing/billing.service.js');
   const { canonicalRequestHash } = await import('../../src/shared/idempotency.js');
 
   async function acceptCurrentTermsForTest(principalId: string) {
@@ -272,8 +274,15 @@ describe('TBF-030 tenant bootstrap', async () => {
         ),
     );
     expect(entitlements.rows).toEqual([
+      { capability: 'fittings.enabled', limit_value: 1 },
       { capability: 'frontdesk_seats.max', limit_value: 0 },
       { capability: 'physical_assets.max', limit_value: 125 },
+      { capability: 'storefront_payments.enabled', limit_value: 1 },
+      { capability: 'storefront_reservations.enabled', limit_value: 1 },
+      { capability: 'storefront_theme.blush', limit_value: 1 },
+      { capability: 'storefront_theme.ivory', limit_value: 1 },
+      { capability: 'storefront_theme.noir', limit_value: 1 },
+      { capability: 'storefront_theme.sage', limit_value: 1 },
     ]);
   });
 
@@ -316,6 +325,236 @@ describe('TBF-030 tenant bootstrap', async () => {
       return { tenants: tenants.rows[0]?.count ?? -1, trialConsumedAt: accountState.rows[0]?.trial_consumed_at };
     });
     expect(effects).toEqual({ tenants: 0, trialConsumedAt: null });
+  });
+
+  it('creates perpetual Free for an owner whose lifetime trial was already used', async () => {
+    const principalId = 'user_tbf030_free_after_trial';
+    const account = await ensureAccount(principalId);
+    const trialUsedAt = new Date('2026-10-01T12:00:00.000Z');
+    await withGlobalTransaction(principalId, async (client) => {
+      await client.query(
+        'UPDATE account SET trial_consumed_at = $2, updated_at = $2 WHERE id = $1',
+        [account.id, trialUsedAt],
+      );
+    });
+    const onboarding = await createOrResumeOnboarding(
+      account.id,
+      'org_tbf030_free_after_trial',
+      principalId,
+      { organizationName: 'Luna Gowns Free' },
+    );
+    if (onboarding.kind !== 'created') throw new Error('expected onboarding creation');
+    const selected = await chooseOnboardingPlan(onboarding.onboarding.id, 'free', principalId);
+    if (selected.kind !== 'updated') throw new Error('expected Free plan selection');
+    expect(selected.onboarding.status).toBe('incomplete');
+
+    const result = await runAcceptedTenantBootstrap({
+      principalId,
+      clerkOrgId: 'org_tbf030_free_after_trial',
+      onboardingId: onboarding.onboarding.id,
+      idempotencyKey: 'bootstrap-free-after-trial-001',
+      payloadHash: canonicalRequestHash({ onboarding_id: onboarding.onboarding.id, body: {} }),
+      requestId: 'req-tbf030-free-after-trial',
+    });
+
+    expect(result.kind, JSON.stringify(result)).toBe('success');
+    if (result.kind !== 'success') throw new Error('expected Free bootstrap success');
+    expect(result.body.data.subscription).toMatchObject({ plan_code: 'free', status: 'active', trial_ends_at: null });
+    const accountState = await withGlobalTransaction(principalId, async (client) => {
+      const state = await client.query<{ trial_consumed_at: Date | null; current_owned_tenant_id: string | null }>(
+        'SELECT trial_consumed_at, current_owned_tenant_id FROM account WHERE id = $1',
+        [account.id],
+      );
+      return state.rows[0];
+    });
+    expect(accountState?.trial_consumed_at?.toISOString()).toBe(trialUsedAt.toISOString());
+    expect(accountState?.current_owned_tenant_id).toBe(result.body.data.tenant.id);
+
+    const freeSubscription = await withTenantTransaction(result.body.data.tenant.id, principalId, async (client) => {
+      const subscription = await client.query<{ trial_ends_at: Date | null; current_period_end: Date | null; event_type: string }>(
+        `SELECT s.trial_ends_at, s.current_period_end, e.event_type
+           FROM subscription s
+           JOIN subscription_event e ON e.tenant_id = s.tenant_id AND e.subscription_id = s.id
+          WHERE s.tenant_id = $1`,
+        [result.body.data.tenant.id],
+      );
+      return subscription.rows[0];
+    });
+    expect(freeSubscription).toEqual({ trial_ends_at: null, current_period_end: null, event_type: 'free_started' });
+    const freeEntitlements = await withTenantTransaction(result.body.data.tenant.id, principalId, async (client) => {
+      const state = await client.query<{ capability: string; limit_value: number }>(
+        `SELECT e.capability, e.limit_value
+           FROM subscription s
+           JOIN plan_entitlement e ON e.plan_id = s.plan_id
+          WHERE s.tenant_id = $1
+          ORDER BY e.capability`,
+        [result.body.data.tenant.id],
+      );
+      return state.rows;
+    });
+    expect(freeEntitlements).toEqual([
+      { capability: 'fittings.enabled', limit_value: 0 },
+      { capability: 'frontdesk_seats.max', limit_value: 0 },
+      { capability: 'physical_assets.max', limit_value: 20 },
+      { capability: 'storefront_payments.enabled', limit_value: 0 },
+      { capability: 'storefront_reservations.enabled', limit_value: 0 },
+      { capability: 'storefront_theme.blush', limit_value: 0 },
+      { capability: 'storefront_theme.ivory', limit_value: 1 },
+      { capability: 'storefront_theme.noir', limit_value: 0 },
+      { capability: 'storefront_theme.sage', limit_value: 1 },
+    ]);
+  });
+
+  it('preserves the original bootstrap SQL error and rolls back the partial tenant graph', async () => {
+    const principalId = 'user_tbf030_free_bootstrap_failure';
+    const account = await ensureAccount(principalId);
+    const onboarding = await createOrResumeOnboarding(
+      account.id,
+      'org_tbf030_free_bootstrap_failure',
+      principalId,
+      { organizationName: 'Free Failure Studio' },
+    );
+    if (onboarding.kind !== 'created') throw new Error('expected onboarding creation');
+    const selected = await chooseOnboardingPlan(onboarding.onboarding.id, 'free', principalId);
+    if (selected.kind !== 'updated') throw new Error('expected Free plan selection');
+
+    const admin = new Client({ connectionString: adminUrl });
+    await admin.connect();
+    try {
+      await admin.query(`
+        CREATE OR REPLACE FUNCTION public.test_fail_free_bootstrap_event()
+        RETURNS trigger
+        LANGUAGE plpgsql
+        AS $$
+        BEGIN
+          IF NEW.event_type = 'free_started' THEN
+            RAISE EXCEPTION 'forced free bootstrap event failure' USING ERRCODE = 'P0001';
+          END IF;
+          RETURN NEW;
+        END;
+        $$;
+      `);
+      await admin.query(`
+        CREATE TRIGGER test_fail_free_bootstrap_event
+        BEFORE INSERT ON subscription_event
+        FOR EACH ROW EXECUTE FUNCTION public.test_fail_free_bootstrap_event();
+      `);
+
+      await expect(
+        runAcceptedTenantBootstrap({
+          principalId,
+          clerkOrgId: 'org_tbf030_free_bootstrap_failure',
+          onboardingId: onboarding.onboarding.id,
+          idempotencyKey: 'bootstrap-free-failure-001',
+          payloadHash: canonicalRequestHash({ onboarding_id: onboarding.onboarding.id, body: {} }),
+          requestId: 'req-tbf030-free-bootstrap-failure',
+        }),
+      ).rejects.toMatchObject({
+        code: 'P0001',
+        message: 'forced free bootstrap event failure',
+      });
+    } finally {
+      await admin.query('DROP TRIGGER IF EXISTS test_fail_free_bootstrap_event ON subscription_event');
+      await admin.query('DROP FUNCTION IF EXISTS public.test_fail_free_bootstrap_event()');
+      await admin.end();
+    }
+
+    const effects = await withGlobalTransaction(principalId, async (client) => {
+      const tenants = await client.query<{ count: number }>(
+        'SELECT count(*)::int AS count FROM tenant WHERE clerk_org_id = $1',
+        ['org_tbf030_free_bootstrap_failure'],
+      );
+      const accountState = await client.query<{ current_owned_tenant_id: string | null }>(
+        'SELECT current_owned_tenant_id FROM account WHERE id = $1',
+        [account.id],
+      );
+      const onboardingState = await client.query<{ status: string }>(
+        'SELECT status FROM organization_onboarding WHERE id = $1',
+        [onboarding.onboarding.id],
+      );
+      return {
+        tenantCount: tenants.rows[0]?.count ?? -1,
+        currentOwnedTenantId: accountState.rows[0]?.current_owned_tenant_id ?? null,
+        onboardingStatus: onboardingState.rows[0]?.status,
+      };
+    });
+    expect(effects).toEqual({
+      tenantCount: 0,
+      currentOwnedTenantId: null,
+      onboardingStatus: 'incomplete',
+    });
+  });
+
+  it('starts the paid trial from Free once and consumes eligibility in the same tenant-safe transaction', async () => {
+    const principalId = 'user_tbf030_free_upgrade_trial';
+    const account = await ensureAccount(principalId);
+    const onboarding = await createOrResumeOnboarding(account.id, 'org_tbf030_free_upgrade_trial', principalId, {
+      organizationName: 'Luna Gowns Upgrade',
+    });
+    if (onboarding.kind !== 'created') throw new Error('expected onboarding creation');
+    const selected = await chooseOnboardingPlan(onboarding.onboarding.id, 'free', principalId);
+    if (selected.kind !== 'updated') throw new Error('expected Free plan selection');
+    const bootstrapped = await runAcceptedTenantBootstrap({
+      principalId,
+      clerkOrgId: 'org_tbf030_free_upgrade_trial',
+      onboardingId: onboarding.onboarding.id,
+      idempotencyKey: 'bootstrap-free-upgrade-001',
+      payloadHash: canonicalRequestHash({ onboarding_id: onboarding.onboarding.id, body: {} }),
+      requestId: 'req-tbf030-free-upgrade',
+    });
+    if (bootstrapped.kind !== 'success') throw new Error('expected Free bootstrap success');
+
+    const input = {
+      tenantId: bootstrapped.body.data.tenant.id,
+      membershipId: bootstrapped.body.data.membership.id,
+      principalId,
+      requestId: 'req-tbf030-free-upgrade-trial',
+      idempotencyKey: 'free-upgrade-trial-once',
+      request: { plan_code: 'starter' as const },
+    };
+    const first = await changeTrialPlan(input);
+    const replay = await changeTrialPlan(input);
+    expect(first.status, JSON.stringify(first.body)).toBe(200);
+    expect(replay).toEqual(first);
+
+    const accountState = await withGlobalTransaction(principalId, async (client) => {
+      const state = await client.query<{ trial_consumed_at: Date | null }>(
+        'SELECT trial_consumed_at FROM account WHERE id = $1',
+        [account.id],
+      );
+      return state.rows[0];
+    });
+    expect(accountState?.trial_consumed_at).toBeInstanceOf(Date);
+    const paidSubscription = await withTenantTransaction(input.tenantId, principalId, async (client) => {
+      const state = await client.query<{
+        plan_code: string;
+        status: string;
+        trial_ends_at: Date | null;
+        current_period_start: Date;
+        current_period_end: Date | null;
+        change_count: number;
+      }>(
+        `SELECT p.code AS plan_code, s.status, s.trial_ends_at, s.current_period_start,
+                s.current_period_end,
+                (SELECT count(*)::int FROM subscription_event e
+                  WHERE e.tenant_id = s.tenant_id AND e.event_type = 'plan_changed') AS change_count
+           FROM subscription s
+           JOIN plan p ON p.id = s.plan_id
+          WHERE s.tenant_id = $1`,
+        [input.tenantId],
+      );
+      return state.rows[0];
+    });
+    expect(paidSubscription?.plan_code).toBe('starter');
+    expect(paidSubscription?.status).toBe('trialing');
+    expect(paidSubscription?.change_count).toBe(1);
+    if (!paidSubscription?.trial_ends_at || !paidSubscription.current_period_end) {
+      throw new Error('Expected the paid upgrade to create a bounded trial period.');
+    }
+    expect(paidSubscription.trial_ends_at.getTime()).toBe(paidSubscription.current_period_end.getTime());
+    expect(paidSubscription.current_period_end.getTime() - paidSubscription.current_period_start.getTime()).toBe(
+      14 * 24 * 60 * 60 * 1000,
+    );
   });
 
   it('replays one committed graph for concurrent same-key requests', async () => {

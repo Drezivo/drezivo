@@ -5,6 +5,7 @@ import {
   storefrontSlug,
   type PermissionCode,
   type PlanCode,
+  type SubscriptionStatus,
 } from '@drezivo/contracts';
 import type { PoolClient } from 'pg';
 
@@ -67,8 +68,8 @@ interface MembershipRow {
 interface SubscriptionRow {
   id: string;
   plan_code: PlanCode;
-  status: 'trialing';
-  trial_ends_at: Date;
+  status: SubscriptionStatus;
+  trial_ends_at: Date | null;
   grace_ends_at: null;
 }
 
@@ -96,8 +97,8 @@ export interface TenantBootstrapResponse {
   subscription: {
     id: string;
     plan_code: PlanCode;
-    status: 'trialing';
-    trial_ends_at: string;
+    status: SubscriptionStatus;
+    trial_ends_at: string | null;
     grace_ends_at: null;
   };
 }
@@ -201,7 +202,8 @@ export async function createTenantBootstrapGraph(
   const subscriptionEventId = randomUUID();
   const outboxId = randomUUID();
   const auditId = randomUUID();
-  const trialEndsAt = new Date(now.getTime() + TRIAL_DURATION_DAYS * 24 * 60 * 60 * 1000);
+  const isFreePlan = plan.code === 'free';
+  const trialEndsAt = isFreePlan ? null : new Date(now.getTime() + TRIAL_DURATION_DAYS * 24 * 60 * 60 * 1000);
 
   const tenant = await client.query<TenantRow>(
     `INSERT INTO tenant (id, clerk_org_id, name, slug, status, currency, timezone)
@@ -214,10 +216,11 @@ export async function createTenantBootstrapGraph(
 
   const accountUpdated = await client.query(
     `UPDATE account
-     SET trial_consumed_at = $2, current_owned_tenant_id = $3, updated_at = $2
+     SET trial_consumed_at = CASE WHEN $5::boolean THEN trial_consumed_at ELSE $2 END,
+         current_owned_tenant_id = $3, updated_at = $2
      WHERE id = $1 AND clerk_user_id = $4
-       AND trial_consumed_at IS NULL AND current_owned_tenant_id IS NULL`,
-    [input.accountId, now, tenantId, input.principalId],
+       AND (trial_consumed_at IS NULL OR $5::boolean) AND current_owned_tenant_id IS NULL`,
+    [input.accountId, now, tenantId, input.principalId, isFreePlan],
   );
   if (accountUpdated.rowCount !== 1) {
     throw new Error('Bootstrap account transition lost its serialized precondition');
@@ -236,6 +239,7 @@ export async function createTenantBootstrapGraph(
   }
 
   await context.setTenantContext(tenantId);
+  let graphCompleted = false;
   try {
     await client.query(
       `INSERT INTO branch
@@ -283,9 +287,15 @@ export async function createTenantBootstrapGraph(
     );
     await client.query(
       `INSERT INTO storefront
-         (id, tenant_id, branch_id, slug, status, branding, contact)
-       VALUES ($1, $2, $3, $4, 'draft', '{}'::jsonb, '{}'::jsonb)`,
-      [storefrontId, tenantId, branchId, slug],
+         (id, tenant_id, branch_id, slug, status, branding, contact, checkout)
+       VALUES ($1, $2, $3, $4, 'draft', '{}'::jsonb, '{}'::jsonb, $5::jsonb)`,
+      [
+        storefrontId,
+        tenantId,
+        branchId,
+        slug,
+        JSON.stringify(isFreePlan ? { reservation_requests: false, fitting_requests: false } : {}),
+      ],
     );
     // Reservations always retain the exact business rules that applied when they were created.
     // Seed an internal default snapshot during workspace bootstrap so staff bookings work before
@@ -301,19 +311,20 @@ export async function createTenantBootstrapGraph(
       `INSERT INTO subscription
          (id, tenant_id, plan_id, status, trial_ends_at, current_period_start,
           current_period_end, grace_ends_at, cancel_at_period_end, provider_reference)
-       VALUES ($1, $2, $3, 'trialing', $4, $5, $6, NULL, false, NULL)`,
-      [subscriptionId, tenantId, plan.id, trialEndsAt, now, trialEndsAt],
+       VALUES ($1, $2, $3, $4, $5, $6, $7, NULL, false, NULL)`,
+      [subscriptionId, tenantId, plan.id, isFreePlan ? 'active' : 'trialing', trialEndsAt, now, trialEndsAt],
     );
     await client.query(
       `INSERT INTO subscription_event
          (id, tenant_id, subscription_id, prior_plan_id, next_plan_id,
           event_type, effective_at, business_key)
-       VALUES ($1, $2, $3, NULL, $4, 'trial_started', $5, $6)`,
+       VALUES ($1, $2, $3, NULL, $4, $5, $6, $7)`,
       [
         subscriptionEventId,
         tenantId,
         subscriptionId,
         plan.id,
+        isFreePlan ? 'free_started' : 'trial_started',
         now,
         `tenant-bootstrap:${input.onboardingId}`,
       ],
@@ -352,9 +363,10 @@ export async function createTenantBootstrapGraph(
       membershipId,
       subscriptionId,
     );
+    graphCompleted = true;
     return { kind: 'created', response, tenantId };
   } finally {
-    await context.clearTenantContext();
+    if (graphCompleted) await context.clearTenantContext();
   }
 }
 
@@ -466,7 +478,7 @@ async function readBootstrapProjection(
       id: subscription.id,
       plan_code: subscription.plan_code,
       status: subscription.status,
-      trial_ends_at: subscription.trial_ends_at.toISOString(),
+      trial_ends_at: subscription.trial_ends_at?.toISOString() ?? null,
       grace_ends_at: subscription.grace_ends_at,
     },
   };

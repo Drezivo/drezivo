@@ -1,5 +1,5 @@
 import { render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import PricingPage from '@/app/(marketing)/pricing/page';
 import TermsPage from '@/app/(marketing)/terms/page';
@@ -15,11 +15,7 @@ function answerFor(question: string): string {
 }
 
 describe('marketing FAQ, pricing, and terms', () => {
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
-
-  it('renders both static offers immediately on the pricing page', () => {
+  it('shows all static offers and Free limitations in the pricing section', () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch');
     render(<PricingPage />);
 
@@ -27,6 +23,14 @@ describe('marketing FAQ, pricing, and terms', () => {
     const pricing = screen.getByRole('heading', { level: 1 }).closest('#pricing');
     expect(pricing).not.toBeNull();
     const pricingText = pricing?.textContent ?? '';
+    expect(pricingText).toContain('Free');
+    expect(pricingText).toContain('₱0');
+    expect(pricingText).toContain('Up to 20 active garments');
+    expect(pricingText).toContain('Free forever');
+    expect(pricingText).toContain('Availability-only storefront with contact links');
+    expect(pricingText).toContain('No fittings on the business app or storefront');
+    expect(pricingText).toContain('No online storefront payment methods');
+    expect(pricingText).toContain('2 storefront designs');
     expect(pricingText).toContain('₱149');
     expect(pricingText).toContain('Up to 125 active garments');
     expect(pricingText).toContain('Owner-only access (no Front Desk accounts)');
@@ -39,6 +43,7 @@ describe('marketing FAQ, pricing, and terms', () => {
     expect(fetchSpy).not.toHaveBeenCalled();
     expect(screen.queryByRole('status')).toBeNull();
     expect(screen.queryByRole('alert')).toBeNull();
+    fetchSpy.mockRestore();
   });
 
   it('renders static offers in the shared showcase used by the landing page', () => {
@@ -74,11 +79,11 @@ describe('marketing FAQ, pricing, and terms', () => {
     expect(answer).toContain('does not automatically issue a refund');
   });
 
-  it('describes both plan access levels, prices, and quotas', () => {
+  it('describes Free and paid plan access, prices, and quotas', () => {
     const answer = answerFor('Can staff access everything in my account?');
 
-    expect(answer).toContain('Starter is for the shop owner only');
-    expect(answer).toContain('does not include Front Desk accounts');
+    expect(answer).toContain('Free and Starter are for the shop owner only');
+    expect(answer).toContain('do not include Front Desk accounts');
     expect(answer).toContain('up to 3 Front Desk staff accounts');
     expect(answer).toContain('role-limited');
     const pricingAnswer = answerFor('How much does Drezivo cost?');
@@ -86,7 +91,10 @@ describe('marketing FAQ, pricing, and terms', () => {
     expect(pricingAnswer).toContain('up to 125 active garments');
     expect(pricingAnswer).toContain('Standard is ₱299 a month');
     expect(pricingAnswer).toContain('up to 300 active garments');
-    expect(pricingAnswer).toContain('same core features');
+    expect(pricingAnswer).toContain('Starter and Standard include a 14-day trial');
+    const trialAnswer = answerFor('What happens when my paid-plan trial ends? Will I lose my data?');
+    expect(trialAnswer).toContain('Free has no trial or expiry');
+    expect(trialAnswer).toContain('read-only for up to 30 days');
   });
 
   it('keeps the terms aligned with the current pilot subscription lifecycle', () => {

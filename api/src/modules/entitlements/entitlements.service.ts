@@ -1,4 +1,4 @@
-import { planCode, type PlanCode } from '@drezivo/contracts';
+import { planCode, type PlanCode, type PlanFeatures } from '@drezivo/contracts';
 import type { PoolClient } from 'pg';
 
 import { CapacityConflictError, StateConflictError, ValidationError } from '../../shared/errors.js';
@@ -20,6 +20,7 @@ export interface TenantEntitlementSnapshot {
   currency: 'PHP';
   physicalAssetsMax: number;
   frontdeskSeatsMax: number;
+  features: PlanFeatures;
 }
 
 export type QuotaResource = 'physical_assets' | 'frontdesk_seats';
@@ -40,6 +41,20 @@ export interface PlanCapacityCheckResult {
 export interface FrontdeskSeatUsage {
   used: number;
   max: number;
+}
+
+export type PlanFeatureKey = 'fittings' | 'storefront_reservations' | 'storefront_payments';
+
+/** Server-side feature gate; callers use their already tenant-scoped transaction. */
+export async function assertPlanFeatureEnabled(
+  client: PoolClient,
+  tenantId: string,
+  feature: PlanFeatureKey,
+): Promise<void> {
+  const entitlements = await resolveTenantEntitlements(client, tenantId);
+  if (!entitlements.features[feature]) {
+    throw new StateConflictError('Upgrade your plan to unlock this feature.');
+  }
 }
 
 /** Resolve a selected v1 plan without opening a transaction or hiding malformed seed data. */
@@ -175,7 +190,7 @@ function toSnapshot(plan: PlanRow, entitlements: PlanEntitlementRow[]): TenantEn
     !plan.active ||
     plan.currency !== 'PHP' ||
     !Number.isSafeInteger(plan.monthly_minor) ||
-    plan.monthly_minor <= 0
+    plan.monthly_minor < 0
   ) {
     throw new StateConflictError('Workspace entitlement state is unavailable.');
   }
@@ -189,6 +204,17 @@ function toSnapshot(plan: PlanRow, entitlements: PlanEntitlementRow[]): TenantEn
   const assets = requireNumericEntitlement(values.get('physical_assets.max'));
   // Starter is intentionally Owner-only in v1, so a zero Front Desk seat limit is valid.
   const seats = requireNumericEntitlement(values.get('frontdesk_seats.max'), { allowZero: true });
+  const themeCaps = ['ivory', 'sage', 'blush', 'noir'] as const;
+  const themes = themeCaps.filter((theme) =>
+    requireBooleanEntitlement(values.get(`storefront_theme.${theme}`)),
+  );
+  if (themes.length === 0) throw new StateConflictError('Workspace entitlement state is unavailable.');
+  const features: PlanFeatures = {
+    fittings: requireBooleanEntitlement(values.get('fittings.enabled')),
+    storefront_reservations: requireBooleanEntitlement(values.get('storefront_reservations.enabled')),
+    storefront_payments: requireBooleanEntitlement(values.get('storefront_payments.enabled')),
+    storefront_themes: themes,
+  };
 
   return {
     planId: plan.id,
@@ -198,7 +224,16 @@ function toSnapshot(plan: PlanRow, entitlements: PlanEntitlementRow[]): TenantEn
     currency: 'PHP',
     physicalAssetsMax: assets,
     frontdeskSeatsMax: seats,
+    features,
   };
+}
+
+function requireBooleanEntitlement(row: PlanEntitlementRow | undefined): boolean {
+  const value = requireNumericEntitlement(row, { allowZero: true });
+  if (value !== 0 && value !== 1) {
+    throw new StateConflictError('Workspace entitlement state is unavailable.');
+  }
+  return value === 1;
 }
 
 function requireNumericEntitlement(

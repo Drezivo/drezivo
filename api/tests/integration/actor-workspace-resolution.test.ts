@@ -161,6 +161,12 @@ describe('TBF-031 actor and workspace resolution', async () => {
     expect(context.context.entitlements).toEqual({
       physical_assets_max: STANDARD_PLAN.physicalAssetsMax,
       frontdesk_seats_max: STANDARD_PLAN.frontdeskSeatsMax,
+      features: {
+        fittings: true,
+        storefront_reservations: true,
+        storefront_payments: true,
+        storefront_themes: ['ivory', 'sage', 'blush', 'noir'],
+      },
     });
   });
 

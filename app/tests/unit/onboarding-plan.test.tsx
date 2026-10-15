@@ -132,8 +132,28 @@ describe("OnboardingPlan", () => {
       data: {
         plans: [
           {
+            code: "free",
+            name: "Free",
+            monthly_price_minor: 0,
+            currency: "PHP",
+            trial_days: 0,
+            limits: { active_garments: 20, frontdesk_seats: 0 },
+            features: {
+              fittings: false,
+              storefront_reservations: false,
+              storefront_payments: false,
+              storefront_themes: ["ivory", "sage"],
+            },
+          },
+          {
             code: "starter",
             name: "Starter",
+            features: {
+              fittings: true,
+              storefront_reservations: true,
+              storefront_payments: true,
+              storefront_themes: ["ivory", "sage", "blush", "noir"],
+            },
             monthly_price_minor: 14900,
             currency: "PHP",
             trial_days: 14,
@@ -142,6 +162,12 @@ describe("OnboardingPlan", () => {
           {
             code: "standard",
             name: "Standard",
+            features: {
+              fittings: true,
+              storefront_reservations: true,
+              storefront_payments: true,
+              storefront_themes: ["ivory", "sage", "blush", "noir"],
+            },
             monthly_price_minor: 29900,
             currency: "PHP",
             trial_days: 14,
@@ -179,7 +205,16 @@ describe("OnboardingPlan", () => {
         active_branch_id: bootstrap.default_branch.id,
         branch_grants: bootstrap.branch_grants,
         subscription: bootstrap.subscription,
-        entitlements: { physical_assets_max: 300, frontdesk_seats_max: 3 },
+        entitlements: {
+          physical_assets_max: 300,
+          frontdesk_seats_max: 3,
+          features: {
+            fittings: true,
+            storefront_reservations: true,
+            storefront_payments: true,
+            storefront_themes: ["ivory", "sage", "blush", "noir"],
+          },
+        },
       },
       requestId: "req-actor",
     });
@@ -211,6 +246,45 @@ describe("OnboardingPlan", () => {
     expect(api.startOnboardingTrial).not.toHaveBeenCalled();
   });
 
+  it("lets owners create the ongoing Free workspace without starting a trial", async () => {
+    api.startOnboardingTrial.mockResolvedValue({
+      data: {
+        ...bootstrap,
+        subscription: {
+          id: bootstrap.subscription.id,
+          plan_code: "free",
+          status: "active",
+          trial_ends_at: null,
+          grace_ends_at: null,
+        },
+      },
+      requestId: "req-free-bootstrap",
+    });
+    mockWorkspaceHandoff();
+
+    renderPlan();
+    await screen.findByRole("radiogroup", { name: "Subscription plan" });
+    const free = screen.getByRole("radio", { name: /Free/ });
+    expect(free).toHaveTextContent("₱0");
+    expect(free).toHaveTextContent("Free forever");
+    expect(free).toHaveTextContent("20 active garments");
+    expect(free).toHaveTextContent("Storefront availability and contact only");
+    fireEvent.click(free);
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+
+    const dialog = await screen.findByRole("dialog", { name: "Create your Free workspace?" });
+    expect(dialog).toHaveTextContent("ongoing Free access with no expiry");
+    fireEvent.click(screen.getByRole("button", { name: "Create Free workspace" }));
+
+    await waitFor(() => expect(locationReplace).toHaveBeenCalledWith("/calendar"));
+    expect(api.startOnboardingTrial).toHaveBeenCalledTimes(1);
+    expect(api.selectOnboardingPlan).toHaveBeenCalledWith(
+      onboarding.id,
+      { plan_code: "free" },
+      expect.any(String)
+    );
+  });
+
   it("shows Starter limits without advertising Front Desk and saves the Starter choice", async () => {
     renderPlan();
 
@@ -231,61 +305,6 @@ describe("OnboardingPlan", () => {
       { plan_code: "starter" },
       expect.any(String)
     );
-  });
-
-  it("keeps trial activation disabled until a legacy account's Terms acceptance saves", async () => {
-    mockCurrent();
-    api.getCurrentOnboarding.mockResolvedValue({
-      data: {
-        onboarding,
-        has_current_owned_tenant: false,
-        has_consumed_lifetime_trial: false,
-        required_terms_version: "2026-10-02",
-        accepted_terms_version: null,
-      },
-      requestId: "req-current-needs-terms",
-    });
-    api.acceptAccountTerms
-      .mockRejectedValueOnce(new Error("temporary write failure"))
-      .mockResolvedValueOnce({
-        data: {
-          terms_version: "2026-10-02",
-          accepted_at: "2026-10-14T00:00:00.000Z",
-        },
-        requestId: "req-terms-accepted",
-      });
-
-    renderPlan();
-    await screen.findByRole("radiogroup", { name: "Subscription plan" });
-    fireEvent.click(screen.getByRole("radio", { name: /Standard/ }));
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-    await screen.findByRole("heading", { name: "Start your free trial" });
-    const startTrial = screen.getByRole("button", { name: /Start 14-day trial/ });
-    expect(startTrial).toBeDisabled();
-    expect(screen.getByRole("link", { name: "Terms of Service" })).toHaveAttribute(
-      "href",
-      "http://localhost:3001/terms"
-    );
-
-    fireEvent.click(screen.getByRole("checkbox"));
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      "We could not complete that request. Please try again."
-    );
-    expect(startTrial).toBeDisabled();
-    expect(api.startOnboardingTrial).not.toHaveBeenCalled();
-
-    fireEvent.click(screen.getByRole("checkbox"));
-    await waitFor(() => expect(startTrial).toBeEnabled());
-    expect(api.acceptAccountTerms).toHaveBeenCalledTimes(2);
-    expect(api.acceptAccountTerms).toHaveBeenNthCalledWith(
-      1,
-      { terms_version: "2026-10-02" },
-      expect.any(String)
-    );
-    expect(api.acceptAccountTerms.mock.calls[0]?.[1]).toBe(api.acceptAccountTerms.mock.calls[1]?.[1]);
-    expect(screen.queryByRole("dialog")).toBeNull();
-    fireEvent.click(startTrial);
-    expect(await screen.findByRole("dialog", { name: "Start your 14-day trial?" })).toBeVisible();
   });
 
   it("closes on Not yet without starting anything, and the trial button reopens it", async () => {

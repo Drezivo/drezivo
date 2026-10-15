@@ -19,6 +19,8 @@ const clerk = vi.hoisted(() => ({
   getToken: vi.fn(),
   useAuth: vi.fn(),
 }));
+const entitlements = vi.hoisted(() => ({ fittings: true }));
+const upgrade = vi.hoisted(() => ({ request: vi.fn() }));
 
 const api = vi.hoisted(() => ({
   cancelFitting: vi.fn(),
@@ -40,6 +42,12 @@ const api = vi.hoisted(() => ({
 const navigation = vi.hoisted(() => ({ search: "" }));
 
 vi.mock("@clerk/nextjs", () => ({ useAuth: clerk.useAuth }));
+vi.mock("@/components/shell/dashboard-access-gate", () => ({
+  useVerifiedActorContext: () => ({ entitlements: { features: { fittings: entitlements.fittings } } }),
+}));
+vi.mock("@/components/billing/plan-upgrade-dialog", () => ({
+  useRequestPlanUpgrade: () => upgrade.request,
+}));
 
 vi.mock("next/navigation", async (importOriginal) => {
   const actual = await importOriginal<typeof import("next/navigation")>();
@@ -79,8 +87,8 @@ const listItem = fittingListItem.parse({
   id: fittingId,
   status: "pending",
   period: {
-    start: "2026-10-05T02:00:00.000Z",
-    end: "2026-10-05T03:00:00.000Z",
+    start: "2026-11-05T02:00:00.000Z",
+    end: "2026-11-05T03:00:00.000Z",
   },
   customer: { id: customerId, full_name: "Real Fitting Customer" },
   garments: [
@@ -137,8 +145,8 @@ const confirmedDetail = fittingDetail.parse({
 const rescheduledDetail = fittingDetail.parse({
   ...detail,
   period: {
-    start: "2026-10-05T03:00:00.000Z",
-    end: "2026-10-05T04:00:00.000Z",
+    start: "2026-11-05T03:00:00.000Z",
+    end: "2026-11-05T04:00:00.000Z",
   },
   version: 2,
 });
@@ -201,8 +209,20 @@ function installDefaults() {
 describe("FittingsPage production cutover", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    entitlements.fittings = true;
     navigation.search = "";
     installDefaults();
+  });
+
+  it("shows an upgrade screen on direct access when fittings are not included", () => {
+    entitlements.fittings = false;
+    render(<FittingsPage />);
+
+    expect(screen.getByRole("heading", { name: "Fittings are part of a paid plan" })).toBeVisible();
+    const upgradeButton = screen.getByRole("button", { name: "Upgrade to unlock" });
+    expect(upgradeButton).toHaveAttribute("aria-haspopup", "dialog");
+    fireEvent.click(upgradeButton);
+    expect(upgrade.request).toHaveBeenCalledWith("Fitting management");
   });
 
   it("renders authoritative fitting rows and dashboard summary instead of fixture data", async () => {
@@ -444,7 +464,7 @@ describe("FittingsPage production cutover", () => {
     await waitFor(() =>
       expect(api.rescheduleFitting).toHaveBeenCalledWith(
         fittingId,
-        { version: 1, starts_at: "2026-10-05T03:00:00.000Z" },
+        { version: 1, starts_at: "2026-11-05T03:00:00.000Z" },
         expect.any(String)
       )
     );

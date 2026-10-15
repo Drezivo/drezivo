@@ -69,6 +69,7 @@ import {
   uploadAuthorizationResponse,
   uploadFinalizeResponse,
   chooseOnboardingPlanRequest,
+  changeSubscriptionPlanRequest,
   createOwnerOnboardingRequest,
   onboardingActorContext,
   termsAcceptanceRequest,
@@ -318,6 +319,7 @@ import {
   type CatalogueImportCapabilities,
   type ClothingPhotoExtractResponse,
   type PublicPlanCatalogResponse,
+  type ChangeSubscriptionPlanRequest,
 } from "@drezivo/contracts";
 
 type TokenGetter = () => Promise<string | null>;
@@ -643,6 +645,15 @@ export function createDrezivoApiClient(getToken: TokenGetter) {
         method: "GET",
         path: "/api/v1/billing",
         responseSchema: apiEnvelope(billingOverview),
+      }),
+    changeSubscriptionPlan: (input: ChangeSubscriptionPlanRequest, idempotencyKey: string) =>
+      request<ActorContext>({
+        getToken,
+        body: changeSubscriptionPlanRequest.parse(input),
+        idempotencyKey,
+        method: "POST",
+        path: "/api/v1/billing/subscription/plan",
+        responseSchema: apiEnvelope(actorContext),
       }),
     submitSubscriptionPayment: (input: SubmitSubscriptionPaymentRequest, idempotencyKey: string) =>
       request<SubmitSubscriptionPaymentResponse>({

@@ -3,7 +3,7 @@ import { Router, type ErrorRequestHandler } from 'express';
 import { requireStaffAuth } from '../../middleware/auth.js';
 import { rateLimit } from '../../middleware/rate-limit.js';
 import { requireTenantContext } from '../../middleware/tenant-context.js';
-import { requireTenantAction } from '../tenancy/tenancy.service.js';
+import { requirePlanFeature, requireTenantAction } from '../tenancy/tenancy.service.js';
 import {
   attachFittingPaymentReceiptController,
   cancelFittingController,
@@ -61,23 +61,27 @@ const writeRateLimit = rateLimit({
   keyOf: (req) =>
     req.tenantContext?.tenantId ?? req.clerkPrincipal?.clerkUserId ?? req.ip ?? 'unknown',
 });
+const requireFittingsPlan = requirePlanFeature('fittings');
 
 const staffRead = [
   requireStaffAuth,
   requireTenantContext,
   readRateLimit,
+  requireFittingsPlan,
   requireFittingOperationalPermission,
 ] as const;
 const staffWrite = [
   requireStaffAuth,
   requireTenantContext,
   writeRateLimit,
+  requireFittingsPlan,
   requireFittingOperationalPermission,
 ] as const;
 const ownerWrite = [
   requireStaffAuth,
   requireTenantContext,
   writeRateLimit,
+  requireFittingsPlan,
   requireFittingConfigurationOwner,
 ] as const;
 
@@ -195,6 +199,7 @@ fittingsRouter.post(
   '/fittings/:id/verify-payment',
   requireStaffAuth,
   requireTenantContext,
+  requireFittingsPlan,
   writeRateLimit,
   requireFittingPaymentVerificationPermission,
   requireTenantAction('settlement'),

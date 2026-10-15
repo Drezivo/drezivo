@@ -59,15 +59,17 @@ export function Switch({
   label,
   description,
   disabled = false,
+  onLocked,
 }: {
   checked: boolean;
   onChange: (checked: boolean) => void;
   label: string;
   description?: string;
   disabled?: boolean;
+  onLocked?: (() => void) | undefined;
 }) {
   return (
-    <label className={cn("flex items-start justify-between gap-4 py-3", disabled && "opacity-60")}>
+      <label className={cn("flex items-start justify-between gap-4 py-3", (disabled || onLocked) && "opacity-60", onLocked && "cursor-pointer")}>
       <span className="min-w-0">
         <span className="block text-sm font-medium text-dashboard-navy">{label}</span>
         {description ? <span className="mt-0.5 block text-xs leading-5 text-dashboard-muted">{description}</span> : null}
@@ -79,7 +81,8 @@ export function Switch({
           className="peer sr-only"
           checked={checked}
           disabled={disabled}
-          onChange={(event) => onChange(event.target.checked)}
+          aria-disabled={onLocked ? true : undefined}
+          onChange={(event) => (onLocked ? onLocked() : onChange(event.target.checked))}
         />
         <span className="h-6 w-11 rounded-full bg-dashboard-border transition-colors peer-checked:bg-dashboard-accent peer-focus-visible:ring-2 peer-focus-visible:ring-dashboard-accent/40" />
         <span className="pointer-events-none absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform peer-checked:translate-x-5 motion-reduce:transition-none" />

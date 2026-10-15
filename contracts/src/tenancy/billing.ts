@@ -1,9 +1,9 @@
 /**
- * Pilot billing: Starter and Standard plans, a 14-day trial, and manual payment of Drezivo's
- * subscription by QR/transfer with uploaded proof that an operator approves.
+ * Pilot billing: perpetual Free plus paid Starter/Standard plans with an eligible 14-day trial
+ * and manual payment by QR/transfer with uploaded proof that an operator approves.
  *
- * Access is derived at request time from the subscription (no background job decides it). "End" is
- * the trial end while trialing, otherwise the paid-through date:
+ * Access is derived at request time from the subscription (no background job decides it). Free has
+ * no end date; for paid plans, "End" is the trial end while trialing, otherwise the paid-through date:
  * - `full`: before the end (the last 3 days carry a reminder reason).
  * - `read_only`: from the end, for READ_ONLY_ACCESS_DAYS (30). Everything is viewable, nothing can
  *   change, renters cannot book. The storefront stays online (bookings paused) for the first
@@ -15,12 +15,13 @@ import { z } from 'zod';
 
 import { fileObjectId } from '../common/ids';
 import { isoInstant } from '../common/time';
-import { subscriptionStatus } from './onboarding';
+import { planCode, subscriptionStatus } from './onboarding';
 
 export const subscriptionAccessLevel = z.enum(['full', 'read_only', 'locked']);
 export type SubscriptionAccessLevel = z.infer<typeof subscriptionAccessLevel>;
 
 export const subscriptionAccessReason = z.enum([
+  'free',
   'trial',
   'trial_ending',
   'trial_ended',
@@ -82,6 +83,7 @@ export const subscriptionPaymentView = z
   .object({
     id: z.string().uuid(),
     amount_minor: z.string().regex(/^\d+$/),
+    target_plan_code: planCode.nullable(),
     currency: z.string().regex(/^[A-Z]{3}$/),
     status: subscriptionPaymentStatus,
     reference: subscriptionPaymentReference,
@@ -95,6 +97,17 @@ export const subscriptionPaymentView = z
 export type SubscriptionPaymentView = z.infer<typeof subscriptionPaymentView>;
 
 const billingPlanDetails = z.discriminatedUnion('code', [
+  z
+    .object({
+      code: z.literal('free'),
+      name: z.literal('Free'),
+      monthly_minor: z.string().regex(/^\d+$/),
+      currency: z.string().regex(/^[A-Z]{3}$/),
+      physical_assets_max: z.number().int().positive(),
+      frontdesk_seats_max: z.number().int().nonnegative(),
+      trial_days: z.literal(0),
+    })
+    .strict(),
   z
     .object({
       code: z.literal('starter'),
@@ -132,11 +145,13 @@ export const billingOverview = z
         trial_ends_at: isoInstant.nullable(),
         /** Operator-granted read-only extension end (stored in `grace_ends_at`). */
         read_only_until: isoInstant.nullable(),
-        current_period_end: isoInstant,
+        current_period_end: isoInstant.nullable(),
       })
       .strict(),
     access: subscriptionAccess,
     can_pay: z.boolean(),
+    /** Free owners can start a paid trial only while their lifetime trial remains unused. */
+    can_start_trial: z.boolean(),
     payment_methods: z.array(platformPaymentMethod).max(10),
     payments: z.array(subscriptionPaymentView).max(24),
   })
@@ -146,6 +161,11 @@ export type BillingOverview = z.infer<typeof billingOverview>;
 /** POST /billing/payments (owner only, Idempotency-Key required). One pending payment at a time. */
 export const submitSubscriptionPaymentRequest = z
   .object({
+    /**
+     * Plan the payment activates. Optional so a renewal (and any client built before Free
+     * upgrades) keeps working: the server defaults it to the workspace's current plan.
+     */
+    plan_code: planCode.optional(),
     payment_method_id: z.string().uuid(),
     reference: subscriptionPaymentReference,
     proof_file_id: fileObjectId,

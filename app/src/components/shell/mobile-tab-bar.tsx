@@ -6,12 +6,14 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 
+import type { PlanFeatures } from "@drezivo/contracts";
 import type { DashboardIdentity } from "@/components/shell/dashboard-shell";
 import { isActivePath, MENU_ITEMS, NAV_ITEMS, TAB_HREFS } from "@/components/shell/workspace-nav";
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
 import { setThemePreference, useTheme, type ThemePreference } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 
+import { useRequestPlanUpgrade } from "@/components/billing/plan-upgrade-dialog";
 const TABS = TAB_HREFS.map((href) => NAV_ITEMS.find((item) => item.href === href)!);
 
 const THEME_OPTIONS: { value: ThemePreference; label: string; icon: typeof Sun }[] = [
@@ -25,7 +27,13 @@ const THEME_OPTIONS: { value: ThemePreference; label: string; icon: typeof Sun }
  * with every other page, your account, the theme, and sign out. The hamburger in the header still
  * opens the full sidebar; this bar is the thumb-reach shortcut, not a replacement.
  */
-export function MobileTabBar({ identity }: { identity: DashboardIdentity }) {
+export function MobileTabBar({
+  identity,
+  features,
+}: {
+  identity: DashboardIdentity;
+  features?: PlanFeatures | undefined;
+}) {
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
   const tabIndex = TABS.findIndex((tab) => isActivePath(pathname, tab.href));
@@ -77,7 +85,13 @@ export function MobileTabBar({ identity }: { identity: DashboardIdentity }) {
           </li>
         </ul>
       </nav>
-      <MenuSheet open={menuOpen} onOpenChange={setMenuOpen} identity={identity} pathname={pathname} />
+      <MenuSheet
+        open={menuOpen}
+        onOpenChange={setMenuOpen}
+        identity={identity}
+        pathname={pathname}
+        features={features}
+      />
     </>
   );
 }
@@ -100,14 +114,17 @@ function MenuSheet({
   onOpenChange,
   identity,
   pathname,
+  features,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   identity: DashboardIdentity;
   pathname: string;
+  features?: PlanFeatures | undefined;
 }) {
   const { signOut } = useClerk();
   const { preference } = useTheme();
+  const requestUpgrade = useRequestPlanUpgrade();
   const close = () => onOpenChange(false);
 
   return (
@@ -124,22 +141,39 @@ function MenuSheet({
           {MENU_ITEMS.map((item, index) => {
             const Icon = item.icon;
             const active = isActivePath(pathname, item.href);
+            const locked = item.href === "/fittings" && features !== undefined && !features.fittings;
             return (
               <li key={item.href} className="ws-rise" style={{ "--ws-i": index } as React.CSSProperties}>
-                <Link
-                  href={item.href}
-                  onClick={close}
-                  aria-current={active ? "page" : undefined}
-                  className={cn(
-                    "flex aspect-[1/0.9] flex-col items-center justify-center gap-2 rounded-2xl border px-2 text-center text-xs font-medium transition-colors active:scale-[0.97]",
-                    active
-                      ? "border-dashboard-accent/60 bg-dashboard-active text-dashboard-navy"
-                      : "border-dashboard-border bg-dashboard-canvas text-dashboard-muted hover:text-dashboard-navy",
-                  )}
-                >
-                  <Icon className={cn("h-6 w-6", active ? "text-dashboard-accent" : "text-dashboard-navy")} strokeWidth={1.6} />
-                  {item.label}
-                </Link>
+                {locked ? (
+                  <button
+                    type="button"
+                    aria-haspopup="dialog"
+                    aria-label={`${item.label}, upgrade to unlock`}
+                    onClick={() => {
+                      close();
+                      requestUpgrade("Fitting management");
+                    }}
+                    className="flex aspect-[1/0.9] w-full flex-col items-center justify-center gap-2 rounded-2xl border border-dashboard-border bg-dashboard-canvas px-2 text-center text-xs font-medium text-dashboard-muted opacity-60 transition-colors hover:bg-dashboard-active focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dashboard-accent"
+                  >
+                    <Icon className="h-6 w-6 text-dashboard-navy" strokeWidth={1.6} />
+                    {item.label}<span className="text-[0.5625rem] uppercase tracking-wide">Upgrade</span>
+                  </button>
+                ) : (
+                  <Link
+                    href={item.href}
+                    onClick={close}
+                    aria-current={active ? "page" : undefined}
+                    className={cn(
+                      "flex aspect-[1/0.9] flex-col items-center justify-center gap-2 rounded-2xl border px-2 text-center text-xs font-medium transition-colors active:scale-[0.97]",
+                      active
+                        ? "border-dashboard-accent/60 bg-dashboard-active text-dashboard-navy"
+                        : "border-dashboard-border bg-dashboard-canvas text-dashboard-muted hover:text-dashboard-navy",
+                    )}
+                  >
+                    <Icon className={cn("h-6 w-6", active ? "text-dashboard-accent" : "text-dashboard-navy")} strokeWidth={1.6} />
+                    {item.label}
+                  </Link>
+                )}
               </li>
             );
           })}

@@ -74,7 +74,7 @@ describe('pilot billing', async () => {
     await closePool();
   });
 
-  it('serves both active plans with the server-owned price and entitlement limits', async () => {
+  it('serves Free and both paid plans with server-owned prices, limits, and capabilities', async () => {
     const response = await request(createApp()).get('/api/v1/plans');
 
     expect(response.status).toBe(200);
@@ -82,12 +82,32 @@ describe('pilot billing', async () => {
     expect(bodyOf(response).data).toEqual({
       plans: [
         {
+          code: 'free',
+          name: 'Free',
+          monthly_price_minor: 0,
+          currency: 'PHP',
+          trial_days: 0,
+          limits: { active_garments: 20, frontdesk_seats: 0 },
+          features: {
+            fittings: false,
+            storefront_reservations: false,
+            storefront_payments: false,
+            storefront_themes: ['ivory', 'sage'],
+          },
+        },
+        {
           code: 'starter',
           name: 'Starter',
           monthly_price_minor: 14900,
           currency: 'PHP',
           trial_days: 14,
           limits: { active_garments: 125, frontdesk_seats: 0 },
+          features: {
+            fittings: true,
+            storefront_reservations: true,
+            storefront_payments: true,
+            storefront_themes: ['ivory', 'sage', 'blush', 'noir'],
+          },
         },
         {
           code: 'standard',
@@ -96,6 +116,12 @@ describe('pilot billing', async () => {
           currency: 'PHP',
           trial_days: 14,
           limits: { active_garments: 300, frontdesk_seats: 3 },
+          features: {
+            fittings: true,
+            storefront_reservations: true,
+            storefront_payments: true,
+            storefront_themes: ['ivory', 'sage', 'blush', 'noir'],
+          },
         },
       ],
     });

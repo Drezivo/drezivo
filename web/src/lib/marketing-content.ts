@@ -59,7 +59,7 @@ export const MARKETING_FEATURES = [
   },
 ] as const;
 
-/** Free trial length; keep in step with the API's billing constants. */
+/** Paid-plan trial length; keep in step with the API's billing constants. Free has no trial. */
 export const MARKETING_TRIAL_DAYS = 14;
 
 export interface MarketingFaqGroup {
@@ -76,8 +76,8 @@ export const MARKETING_FAQ_GROUPS: readonly MarketingFaqGroup[] = [
     title: 'Trial, plans & billing',
     faqs: [
       {
-        question: 'What happens when my free trial ends? Will I lose my data?',
-        answer: `Your trial lasts ${MARKETING_TRIAL_DAYS} days. If you do not subscribe when it ends, the workspace becomes read-only for up to 30 days. The public storefront stays online for the first 3 days with new bookings paused, then goes offline. After 30 days the workspace locks.`,
+        question: 'What happens when my paid-plan trial ends? Will I lose my data?',
+        answer: `The Starter and Standard trial lasts ${MARKETING_TRIAL_DAYS} days. Free has no trial or expiry. If a paid-plan trial ends without an approved payment, the workspace becomes read-only for up to 30 days. The public storefront stays online for the first 3 days with new bookings paused, then goes offline. After 30 days the workspace locks.`,
       },
       {
         question: 'Can I still see or export my records after cancelling?',
@@ -87,11 +87,11 @@ export const MARKETING_FAQ_GROUPS: readonly MarketingFaqGroup[] = [
       {
         question: 'Do I need a credit card to start?',
         answer:
-          'No. Your first business can start its trial without a card or payment account. During the pilot, Drezivo subscriptions are paid manually through a listed GCash, Maya, or bank-transfer option, then you upload the payment proof in the app for review.',
+          'No. You can start on the ongoing Free plan without payment details, or an eligible owner can choose a paid plan’s 14-day trial. During the pilot, paid plans are upgraded through a listed GCash, Maya, or bank-transfer option, then you upload the payment proof in the app for review.',
       },
       {
         question: 'How much does Drezivo cost?',
-        answer: `Starter is ₱149 a month for up to 125 active garments and owner-only access (no Front Desk accounts). Standard is ₱299 a month for up to 300 active garments and up to 3 Front Desk staff. Both plans include the same core features and a ${MARKETING_TRIAL_DAYS}-day free trial. Asset limits count active physical garments, not styles in your catalogue.`,
+        answer: `Free is ₱0 with up to 20 active garments, owner-only access, two storefront designs, and an availability-only storefront without fittings or online reservations. Starter is ₱149 a month for up to 125 active garments and owner-only access. Standard is ₱299 a month for up to 300 active garments and up to 3 Front Desk staff. Starter and Standard include a ${MARKETING_TRIAL_DAYS}-day trial for eligible owners. Asset limits count active physical garments, not styles in your catalogue.`,
       },
       {
         question: 'What happens if I do not renew after the trial or a paid month?',
@@ -106,7 +106,7 @@ export const MARKETING_FAQ_GROUPS: readonly MarketingFaqGroup[] = [
       {
         question: 'Can customers reserve without creating an account?',
         answer:
-          'Yes. Guest booking is the V1 default. Customers can browse, choose a garment and dates, submit their details, and manage the booking through a secure guest link.',
+          'On paid plans with online reservations enabled, yes. Guest booking does not require a renter account: customers can browse, choose a garment and dates, submit their details, and manage the booking through a secure guest link. The Free plan offers availability checking and shop contact instead of online reservations.',
       },
       {
         question: 'How does Drezivo prevent double bookings?',
@@ -151,7 +151,7 @@ export const MARKETING_FAQ_GROUPS: readonly MarketingFaqGroup[] = [
       {
         question: 'Can staff access everything in my account?',
         answer:
-          'Starter is for the shop owner only and does not include Front Desk accounts. Standard allows up to 3 Front Desk staff accounts. Staff access is role-limited; only the shop owner can manage owner-only settings and actions.',
+          'Free and Starter are for the shop owner only and do not include Front Desk accounts. Standard allows up to 3 Front Desk staff accounts. Staff access is role-limited; only the shop owner can manage owner-only settings and actions.',
       },
       {
         question: 'How is customer and business data protected?',
@@ -161,7 +161,7 @@ export const MARKETING_FAQ_GROUPS: readonly MarketingFaqGroup[] = [
       {
         question: 'Can I offer fittings, multi-item bookings, or multiple branches?',
         answer:
-          'Fittings, yes: customers can request a fitting from your storefront, and you can book walk-in fittings from the app. Multi-item bookings and multiple branches are not in V1. V1 supports one branch and one garment per booking; multi-item booking and partial returns are planned for V1.1, and multi-branch operations and transfers are V2 scope.',
+          'Starter and Standard can offer fittings from the storefront and business app. Fittings are not included in Free. Multi-item bookings and multiple branches are not in V1. V1 supports one branch and one garment per customer booking; multi-item booking and partial returns are planned for V1.1, and multi-branch operations and transfers are V2 scope.',
       },
       {
         question: 'Are reminders, payment gateways, and delivery integrations included?',

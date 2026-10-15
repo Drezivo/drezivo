@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 
+import type { PlanFeatures } from "@drezivo/contracts";
 import type { DashboardIdentity } from "@/components/shell/dashboard-shell";
 import { isActivePath, NAV_ITEMS } from "@/components/shell/workspace-nav";
 import {
@@ -27,10 +28,11 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Sidebar, useSidebar } from "@/components/ui/sidebar";
 import { cn } from "@/lib/utils";
-import { createDrezivoApiClient, DrezivoApiError } from "@/lib/drezivo-api";
+import { createDrezivoApiClient } from "@/lib/drezivo-api";
 import { activateAccessibleWorkspace, listAllAccessibleWorkspaces } from "@/lib/workspace-access";
 import { WORKSPACE_HOME } from "@/lib/workspace-routes";
 
+import { useRequestPlanUpgrade } from "@/components/billing/plan-upgrade-dialog";
 const WORKSPACE_LINKS = [
   { href: "/settings", label: "Business information", icon: Building2 },
   { href: "/settings/payment-methods", label: "Payment methods", icon: CreditCard },
@@ -121,7 +123,9 @@ function WorkspaceCard({
       setWorkspaces(result);
     } catch (error) {
       setWorkspaceError(
-        error instanceof DrezivoApiError ? error.message : "Could not load workspaces."
+        error instanceof Error
+          ? error.message
+          : "Could not load workspaces."
       );
     } finally {
       setIsLoadingWorkspaces(false);
@@ -142,7 +146,9 @@ function WorkspaceCard({
       window.location.assign(WORKSPACE_HOME);
     } catch (error) {
       setWorkspaceError(
-        error instanceof DrezivoApiError ? error.message : "Could not switch workspaces."
+        error instanceof Error
+          ? error.message
+          : "Could not switch workspaces."
       );
       // setActive may have changed the Clerk session even if the resulting API verification failed.
       // Leave this shell before it can render cached data with a different organization token.
@@ -242,11 +248,18 @@ function WorkspaceCard({
   );
 }
 
-export function DashboardSidebar({ identity }: { identity: DashboardIdentity }) {
+export function DashboardSidebar({
+  identity,
+  features,
+}: {
+  identity: DashboardIdentity;
+  features?: PlanFeatures;
+}) {
   const pathname = usePathname();
   const { state, isMobile } = useSidebar();
   const collapsed = state === "collapsed" && !isMobile;
   const helpActive = pathname.startsWith("/help");
+  const requestUpgrade = useRequestPlanUpgrade();
 
   return (
     <Sidebar aria-label="Primary navigation">
@@ -281,26 +294,46 @@ export function DashboardSidebar({ identity }: { identity: DashboardIdentity }) 
                   ? pathname.startsWith("/settings")
                   : isActivePath(pathname, item.href);
               const Icon = item.icon;
+              const locked = item.href === "/fittings" && features !== undefined && !features.fittings;
               return (
                 <div key={item.href} className="group/navitem relative">
-                  <Link
-                    href={item.href}
-                    aria-current={isActive ? "page" : undefined}
-                    aria-label={collapsed ? item.label : undefined}
-                    className={cn(
-                      "relative flex min-h-10 items-center gap-3 rounded-lg px-3 text-sm transition-colors",
-                      collapsed && "justify-center px-0",
-                      isActive
-                        ? "bg-dashboard-active font-medium text-dashboard-navy before:absolute before:inset-y-2 before:left-0 before:w-0.5 before:rounded-full before:bg-dashboard-accent"
-                        : "text-dashboard-muted hover:bg-dashboard-active hover:text-dashboard-navy"
-                    )}
-                  >
-                    <Icon
-                      className={cn("h-5 w-5 shrink-0", isActive && "text-dashboard-accent")}
-                      strokeWidth={1.7}
-                    />
-                    {!collapsed && <span>{item.label}</span>}
-                  </Link>
+                  {locked ? (
+                    <button
+                      type="button"
+                      aria-current={isActive ? "page" : undefined}
+                      aria-haspopup="dialog"
+                      aria-label={collapsed ? `${item.label}, upgrade to unlock` : undefined}
+                      onClick={() => requestUpgrade("Fitting management")}
+                      className={cn(
+                        "relative flex min-h-10 w-full items-center gap-3 rounded-lg px-3 text-left text-sm opacity-60 transition-colors hover:bg-dashboard-active hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dashboard-accent",
+                        collapsed && "justify-center px-0",
+                        isActive ? "bg-dashboard-active font-medium text-dashboard-navy" : "text-dashboard-muted"
+                      )}
+                    >
+                      <Icon className="h-5 w-5 shrink-0" strokeWidth={1.7} />
+                      {!collapsed && <><span>{item.label}</span><span className="ml-auto text-[0.625rem] uppercase tracking-wide">Upgrade</span></>}
+                    </button>
+                  ) : (
+                    <Link
+                      href={item.href}
+                      aria-current={isActive ? "page" : undefined}
+                      aria-label={collapsed ? item.label : undefined}
+                      className={cn(
+                        "relative flex min-h-10 items-center gap-3 rounded-lg px-3 text-sm transition-colors",
+                        collapsed && "justify-center px-0",
+                        isActive
+                          ? "bg-dashboard-active font-medium text-dashboard-navy before:absolute before:inset-y-2 before:left-0 before:w-0.5 before:rounded-full before:bg-dashboard-accent"
+                          : "text-dashboard-muted hover:bg-dashboard-active hover:text-dashboard-navy"
+                      )}
+                    >
+                      <Icon
+                        className={cn("h-5 w-5 shrink-0", isActive && "text-dashboard-accent")}
+                        strokeWidth={1.7}
+                      />
+                      {!collapsed && <span>{item.label}</span>}
+                    </Link>
+                  )
+                  }
                   {collapsed ? <RailTooltip label={item.label} /> : null}
                 </div>
               );

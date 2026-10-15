@@ -12,10 +12,29 @@ export interface PublicPlan {
 }
 
 /**
- * Static marketing snapshot of the current public catalog. Update alongside catalog changes;
- * onboarding and billing continue to use the API-owned catalog.
+ * Code-owned marketing snapshot. The API catalog remains authoritative for onboarding, billing,
+ * and enforcement; update this snapshot in the same release whenever those public offers change.
  */
 export const PUBLIC_MARKETING_PLANS: readonly PublicPlan[] = [
+  {
+    code: 'free',
+    name: 'Free',
+    tagline: 'The essential tools to organize your shop and help renters check availability.',
+    price: '0.00',
+    interval: 'month',
+    trialDays: 0,
+    features: [
+      'Up to 20 active garments',
+      'Owner-only access (no Front Desk accounts)',
+      'Availability-only storefront with contact links',
+      'Reservations, calendar & availability',
+      'Customers, staff payment records, returns & exports',
+      'No fittings on the business app or storefront',
+      'No online storefront payment methods',
+      '2 storefront designs',
+    ],
+    highlighted: false,
+  },
   {
     code: 'starter',
     name: 'Starter',

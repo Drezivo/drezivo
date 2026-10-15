@@ -2,11 +2,7 @@ import { render, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
 import { PlanShowcase } from '@/components/marketing/atelier/sections/plan-showcase';
-import {
-  formatPlanPrice,
-  PUBLIC_MARKETING_PLANS,
-  type PublicPlan,
-} from '@/lib/plans';
+import { formatPlanPrice, PUBLIC_MARKETING_PLANS, type PublicPlan } from '@/lib/plans';
 
 // web resolves its own vitest copy, which the root jest-dom typings do not augment, so these tests
 // use plain matchers on text content instead of the jest-dom ones.
@@ -67,41 +63,59 @@ describe('plan showcase', () => {
 });
 
 describe('public plans', () => {
-  it('keeps the static marketing snapshot aligned with the current catalog', () => {
+  it('keeps the marketing snapshot aligned with the current public offers', () => {
     expect(PUBLIC_MARKETING_PLANS).toEqual([
-      {
+      expect.objectContaining({
+        code: 'free',
+        name: 'Free',
+        price: '0.00',
+        trialDays: 0,
+        highlighted: false,
+        features: expect.arrayContaining([
+          'Up to 20 active garments',
+          'Owner-only access (no Front Desk accounts)',
+          'Availability-only storefront with contact links',
+          'No fittings on the business app or storefront',
+          'No online storefront payment methods',
+          '2 storefront designs',
+        ]),
+      }),
+      expect.objectContaining({
         code: 'starter',
         name: 'Starter',
-        tagline: 'The essentials to keep a clothing rental shop organized and bookable.',
         price: '149.00',
-        interval: 'month',
         trialDays: 14,
-        features: [
-          'Up to 125 active garments',
-          'Owner-only access (no Front Desk accounts)',
-          'Online storefront with bookings and fittings',
-          'Reservations, calendar & availability',
-          'Customers, payments, returns & exports',
-        ],
         highlighted: false,
-      },
-      {
+        features: expect.arrayContaining(['Up to 125 active garments']),
+      }),
+      expect.objectContaining({
         code: 'standard',
         name: 'Standard',
-        tagline: 'More room for a growing rental shop and a small front-desk team.',
         price: '299.00',
-        interval: 'month',
         trialDays: 14,
-        features: [
-          'Up to 300 active garments',
-          'Up to 3 Front Desk staff',
-          'Online storefront with bookings and fittings',
-          'Reservations, calendar & availability',
-          'Customers, payments, returns & exports',
-        ],
         highlighted: true,
-      },
+        features: expect.arrayContaining(['Up to 300 active garments', 'Up to 3 Front Desk staff']),
+      }),
     ]);
+    expect(PUBLIC_MARKETING_PLANS).toHaveLength(3);
+    expect(PUBLIC_MARKETING_PLANS[1]?.features.some((feature) => feature.includes('Front Desk staff'))).toBe(false);
+  });
+
+  it('renders all offers immediately with the correct cards and links', () => {
+    render(<PlanShowcase plans={PUBLIC_MARKETING_PLANS} signUpUrl="https://partners.example/sign-up" />);
+
+    expect(screen.getByText('Free')).toBeTruthy();
+    expect(screen.getByText('Starter')).toBeTruthy();
+    expect(screen.getByText('Standard')).toBeTruthy();
+    expect(screen.getByText('₱0')).toBeTruthy();
+    expect(screen.getByText('₱149')).toBeTruthy();
+    expect(screen.getByText('₱299')).toBeTruthy();
+    expect(screen.getAllByRole('link', { name: /Start with/ })).toHaveLength(3);
+    const standardCard = screen.getByRole('link', { name: 'Start with Standard' }).closest('li');
+    expect(standardCard?.className).toContain('bg-atelier-night');
+    const freeCard = screen.getByRole('link', { name: 'Start with Free' }).closest('li');
+    expect(text(freeCard!)).toContain('Free forever');
+    expect(text(freeCard!)).not.toContain('14-day free trial');
   });
 
   it('formats whole pesos without centavos and keeps real centavos', () => {

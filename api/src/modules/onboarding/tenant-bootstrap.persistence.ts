@@ -67,7 +67,7 @@ export async function runTenantBootstrap(input: RunBootstrapInput): Promise<Boot
       onboarding.status !== 'incomplete' ||
       onboarding.provisioned_tenant_id ||
       !onboarding.selected_plan_code ||
-      account.trial_consumed_at ||
+      (account.trial_consumed_at && onboarding.selected_plan_code !== 'free') ||
       account.current_owned_tenant_id
     ) {
       return rejectAndFinalize(context, account.id, input, claim.recordId, 409, 'STATE_CONFLICT', 'Onboarding is not eligible for bootstrap.', 'state_conflict');

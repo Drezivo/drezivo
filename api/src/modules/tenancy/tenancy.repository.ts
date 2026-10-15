@@ -287,6 +287,7 @@ async function resolveInsideTenant(
       entitlements: {
         physical_assets_max: entitlementSnapshot.physicalAssetsMax,
         frontdesk_seats_max: entitlementSnapshot.frontdeskSeatsMax,
+        features: entitlementSnapshot.features,
       },
       effectiveTenantStatus,
       // Lifecycle state is an authorization boundary. Keep the complete grant projection for

@@ -11,6 +11,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { useVerifiedActorContext } from "@/components/shell/dashboard-access-gate";
+import { useRequestPlanUpgrade } from "@/components/billing/plan-upgrade-dialog";
 
 import { PolicyImagesField } from "./policy-images-field";
 import { PageShell } from "./storefront-details-page";
@@ -57,6 +59,9 @@ function rulesWithPrivacyStarter(saved: StorefrontPolicyRules | null): Storefron
 
 export function StorefrontPoliciesPage() {
   const editor = useStorefrontEditor();
+  const actor = useVerifiedActorContext();
+  const requestUpgrade = useRequestPlanUpgrade();
+  const deliveryLocked = actor?.entitlements.features.storefront_reservations === false;
   const saved = editor.settings?.policy.rules ?? null;
   const version = editor.settings?.policy.version;
   const [rules, setRules] = useState<StorefrontPolicyRules>(() => rulesWithPrivacyStarter(saved));
@@ -156,9 +161,14 @@ export function StorefrontPoliciesPage() {
           )}
         </Section>
 
-        <Section icon={Truck} title="Delivery" description="Pickup is always available. Turn on delivery to let renters choose it.">
-          <Switch label="Offer delivery" checked={rules.delivery.enabled} onChange={(enabled) => update({ delivery: { ...rules.delivery, enabled } })} />
-          {rules.delivery.enabled ? (
+        <Section icon={Truck} title="Delivery" description={deliveryLocked ? "Free storefronts support availability checks and shop contact only." : "Pickup is always available. Turn on delivery to let renters choose it."}>
+          <Switch
+            label="Offer delivery"
+            checked={deliveryLocked ? false : rules.delivery.enabled}
+            onChange={(enabled) => update({ delivery: { ...rules.delivery, enabled } })}
+            onLocked={deliveryLocked ? () => requestUpgrade("storefront delivery") : undefined}
+          />
+          {rules.delivery.enabled && !deliveryLocked ? (
             <div className="mt-3 grid gap-4 sm:grid-cols-[200px_minmax(0,1fr)]">
               <Field label="Delivery fee (₱)" error={feeMinor === null ? "Enter an amount like 150 or 150.50." : err("delivery.fee_minor")}>
                 {(props) => <Input {...props} inputMode="decimal" value={fee} onChange={(e) => { setFee(e.target.value); editor.markEdited(); }} />}
@@ -167,6 +177,9 @@ export function StorefrontPoliciesPage() {
                 {(props) => <Textarea {...props} rows={2} maxLength={600} value={rules.delivery.notes ?? ""} onChange={(e) => update({ delivery: { ...rules.delivery, notes: e.target.value.trim() ? e.target.value : null } })} />}
               </Field>
             </div>
+          ) : null}
+          {rules.delivery.enabled && deliveryLocked ? (
+            <p className="mt-2 text-xs text-dashboard-muted">Your saved delivery settings are inactive on Free and will return if you upgrade.</p>
           ) : null}
         </Section>
 
@@ -196,21 +209,23 @@ const REQUIREMENT_OPTIONS: Array<{ value: FieldRequirement; label: string }> = [
   { value: "hidden", label: "Don't ask" },
 ];
 
-function RequirementRow({ label, description, value, onChange }: { label: string; description: string; value: FieldRequirement; onChange: (value: FieldRequirement) => void }) {
+function RequirementRow({ label, description, value, onChange, onLocked }: { label: string; description: string; value: FieldRequirement; onChange: (value: FieldRequirement) => void; onLocked?: (() => void) | undefined }) {
   return (
     <div className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between">
       <div>
         <p className="text-sm font-medium text-dashboard-navy">{label}</p>
         <p className="mt-0.5 text-xs text-dashboard-muted">{description}</p>
       </div>
-      <div role="radiogroup" aria-label={label} className="inline-flex shrink-0 rounded-lg border border-dashboard-border p-0.5">
+      <div role="radiogroup" aria-label={label} aria-disabled={onLocked ? true : undefined} className={cn("inline-flex shrink-0 rounded-lg border border-dashboard-border p-0.5", onLocked && "opacity-70")}>
         {REQUIREMENT_OPTIONS.map((option) => (
           <button
             key={option.value}
             type="button"
             role="radio"
             aria-checked={value === option.value}
-            onClick={() => onChange(option.value)}
+            aria-disabled={onLocked ? true : undefined}
+            title={onLocked ? "Upgrade to customize renter checkout details" : undefined}
+            onClick={onLocked ?? (() => onChange(option.value))}
             className={cn(
               "rounded-md px-3 py-1.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dashboard-accent/40",
               value === option.value ? "bg-dashboard-primary text-dashboard-primary-ink" : "text-dashboard-muted hover:text-dashboard-navy",
@@ -235,6 +250,9 @@ function useCheckoutDraft() {
 
 export function StorefrontRequirementsPage() {
   const { editor, checkout, save } = useCheckoutDraft();
+  const actor = useVerifiedActorContext();
+  const requestUpgrade = useRequestPlanUpgrade();
+  const requirementsLocked = actor?.entitlements.features.storefront_reservations === false;
   if (!editor.settings || !checkout.draft) {
     return <PageShell>{editor.loadError ? <ErrorState message={editor.loadError} onRetry={editor.reload} /> : <LoadingState label="Loading…" />}</PageShell>;
   }
@@ -243,21 +261,34 @@ export function StorefrontRequirementsPage() {
 
   return (
     <PageShell>
-      <PageHeader title="Customer requirements" description="Ask only for what you need. Every renter always gives a full name, a verified email, and an address." />
+      <PageHeader
+        title="Customer requirements"
+        description={requirementsLocked ? "Free storefronts show availability and shop contact only. Upgrade to customize renter checkout details." : "Ask only for what you need. Every renter always gives a full name, a verified email, and an address."}
+      />
       <Section icon={ClipboardList} title="Checkout details">
         <div className="divide-y divide-dashboard-border">
-          <RequirementRow label="Mobile number" description="For pickup and delivery coordination." value={draft.requirements.phone} onChange={set("phone")} />
-          <RequirementRow label="Social media handle" description="Instagram or Facebook, if you confirm renters there." value={draft.requirements.social_handle} onChange={set("social_handle")} />
-          <RequirementRow label="Event date" description="The date the renter will wear the piece." value={draft.requirements.event_date} onChange={set("event_date")} />
+          <RequirementRow label="Mobile number" description="For pickup and delivery coordination." value={draft.requirements.phone} onChange={set("phone")} onLocked={requirementsLocked ? () => requestUpgrade("customer requirements") : undefined} />
+          <RequirementRow label="Social media handle" description="Instagram or Facebook, if you confirm renters there." value={draft.requirements.social_handle} onChange={set("social_handle")} onLocked={requirementsLocked ? () => requestUpgrade("customer requirements") : undefined} />
+          <RequirementRow label="Event date" description="The date the renter will wear the piece." value={draft.requirements.event_date} onChange={set("event_date")} onLocked={requirementsLocked ? () => requestUpgrade("customer requirements") : undefined} />
         </div>
       </Section>
-      <SaveBar dirty={checkout.dirty} saving={editor.saving} state={editor.saveState} onSave={() => save(draft)} />
+      <SaveBar
+        dirty={checkout.dirty}
+        saving={editor.saving}
+        state={editor.saveState}
+        blockedReason={requirementsLocked ? "Upgrade to change customer requirements." : null}
+        onSave={() => save(draft)}
+      />
     </PageShell>
   );
 }
 
 export function StorefrontBookingSettingsPage() {
   const { editor, checkout, save } = useCheckoutDraft();
+  const actor = useVerifiedActorContext();
+  const requestUpgrade = useRequestPlanUpgrade();
+  const reservationsLocked = actor?.entitlements.features.storefront_reservations === false;
+  const fittingsLocked = actor?.entitlements.features.fittings === false;
   if (!editor.settings || !checkout.draft) {
     return <PageShell>{editor.loadError ? <ErrorState message={editor.loadError} onRetry={editor.reload} /> : <LoadingState label="Loading…" />}</PageShell>;
   }
@@ -272,9 +303,10 @@ export function StorefrontBookingSettingsPage() {
         <Section icon={CalendarCheck} title="Online reservations">
           <Switch
             label="Take reservations online"
-            description="Renters can pick dates and reserve on your storefront. Turn this off to keep your storefront for browsing only; renters will be asked to contact you to reserve."
-            checked={draft.reservation_requests}
+            description={reservationsLocked ? "Free storefronts support availability checks and shop contact only." : "Renters can pick dates and reserve on your storefront. Turn this off to keep your storefront for browsing only; renters will be asked to contact you to reserve."}
+            checked={reservationsLocked ? false : draft.reservation_requests}
             onChange={(reservation_requests) => checkout.update({ reservation_requests })}
+            onLocked={reservationsLocked ? () => requestUpgrade("online storefront reservations") : undefined}
           />
           {!draft.reservation_requests ? (
             <p className="mt-2 text-xs text-dashboard-muted">
@@ -309,6 +341,7 @@ export function StorefrontBookingSettingsPage() {
             description="Renters can request a fitting time. Each request arrives as pending for you to confirm."
             checked={draft.fitting_requests}
             onChange={(fitting_requests) => checkout.update({ fitting_requests })}
+            onLocked={fittingsLocked ? () => requestUpgrade("storefront fitting requests") : undefined}
           />
           <p className="mt-2 text-xs text-dashboard-muted">
             Times follow{" "}
@@ -320,7 +353,9 @@ export function StorefrontBookingSettingsPage() {
         </Section>
         <Section icon={Info} title="Payment methods">
           <p className="text-sm text-dashboard-muted">
-            Renters pay with the online methods you mark as available on the storefront in{" "}
+            {reservationsLocked
+              ? "Payment methods remain available for staff-created reservations. Storefront payments are locked on Free. Manage staff methods or view the storefront upgrade option in "
+              : "Renters pay with the online methods you mark as available on the storefront in "}
             <Link href="/settings/payment-methods" className="font-medium text-dashboard-accent hover:underline">
               Settings › Payment methods
             </Link>

@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   getBilling: vi.fn(),
+  getPublicPlanCatalog: vi.fn(),
   getToken: vi.fn(),
 }));
 
@@ -11,7 +12,10 @@ vi.mock("@clerk/nextjs", () => ({
 }));
 
 vi.mock("@/lib/drezivo-api", () => ({
-  createDrezivoApiClient: () => ({ getBilling: mocks.getBilling }),
+  createDrezivoApiClient: () => ({
+    getBilling: mocks.getBilling,
+    getPublicPlanCatalog: mocks.getPublicPlanCatalog,
+  }),
   DrezivoApiError: class DrezivoApiError extends Error {},
 }));
 
@@ -48,12 +52,23 @@ function billingFor(code: "starter" | "standard") {
     can_pay: true,
     payment_methods: [],
     payments: [],
+    can_start_trial: false,
   };
 }
+
+const planCatalog = {
+  plans: [
+    { code: "free", name: "Free", monthly_price_minor: 0, currency: "PHP", trial_days: 0, limits: { active_garments: 20, frontdesk_seats: 0 }, features: { fittings: false, storefront_reservations: false, storefront_payments: false, storefront_themes: ["ivory", "sage"] } },
+    { code: "starter", name: "Starter", monthly_price_minor: 14900, currency: "PHP", trial_days: 14, limits: { active_garments: 125, frontdesk_seats: 0 }, features: { fittings: true, storefront_reservations: true, storefront_payments: true, storefront_themes: ["ivory", "sage", "blush", "noir"] } },
+    { code: "standard", name: "Standard", monthly_price_minor: 29900, currency: "PHP", trial_days: 14, limits: { active_garments: 300, frontdesk_seats: 3 }, features: { fittings: true, storefront_reservations: true, storefront_payments: true, storefront_themes: ["ivory", "sage", "blush", "noir"] } },
+  ],
+};
 
 describe("SubscribeDialog plan details", () => {
   beforeEach(() => {
     mocks.getBilling.mockReset();
+    mocks.getPublicPlanCatalog.mockReset();
+    mocks.getPublicPlanCatalog.mockResolvedValue({ data: planCatalog });
   });
 
   it("shows Starter billing details without Front Desk seats", async () => {

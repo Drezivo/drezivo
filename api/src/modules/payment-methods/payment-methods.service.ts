@@ -39,6 +39,7 @@ import { claimTenantIdempotency, finalizeTenantIdempotency } from '../../shared/
 import { signPaymentRenterStepsImages } from '../files/payment-renter-steps-media.js';
 import { storefrontMediaUrlMapper } from '../storefront/storefront-media.js';
 import { isPaymentMaterialContentType } from './payment-method-readiness.js';
+import { assertPlanFeatureEnabled } from '../entitlements/entitlements.service.js';
 import {
   assertFileObjectCleanupProducerEnabled,
   enqueueDetachedFileObjectCleanup,
@@ -226,6 +227,7 @@ export async function updatePaymentMethodSettings(
     const current = await readPaymentMethodSettings(client, input.tenantId, input.paymentMethodId, true);
     if (!current) throw new NotFoundError('The payment method could not be found.');
     const cash = current.rail === 'cash';
+    if (request.storefront_enabled) await assertPlanFeatureEnabled(client, input.tenantId, 'storefront_payments');
     if (cash && request.storefront_enabled) {
       throw new ValidationError('Cash is available for staff bookings only and cannot be enabled on the storefront.');
     }
@@ -296,6 +298,7 @@ export async function createPaymentMethod(
 
   return runCommand(input, CREATE_OPERATION, request, 201, async (client) => {
     if (request.destination.instructions?.trim()) throw new ValidationError('Renter steps are saved once for the whole workspace.');
+    if (request.storefront_enabled) await assertPlanFeatureEnabled(client, input.tenantId, 'storefront_payments');
     await assertBelowLimit(client, input.tenantId);
     const files = await checkedFiles(client, input.tenantId, request.name, request.rail, request);
     const paymentMethodId = await insertPaymentMethod(client, {

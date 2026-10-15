@@ -19,6 +19,17 @@ export const termsAcceptanceRequest = z
   .object({ terms_version: z.literal(CURRENT_TERMS_VERSION) })
   .strict();
 export type TermsAcceptanceRequest = z.infer<typeof termsAcceptanceRequest>;
+export const storefrontPlanTheme = z.enum(['ivory', 'sage', 'blush', 'noir']);
+export type StorefrontPlanTheme = z.infer<typeof storefrontPlanTheme>;
+
+export const planFeatures = z.object({
+  fittings: z.boolean(),
+  storefront_reservations: z.boolean(),
+  storefront_payments: z.boolean(),
+  storefront_themes: z.array(storefrontPlanTheme).min(1),
+}).strict();
+export type PlanFeatures = z.infer<typeof planFeatures>;
+
 
 export const termsAcceptanceResponse = z
   .object({ terms_version: z.literal(CURRENT_TERMS_VERSION), accepted_at: isoInstant })
@@ -29,22 +40,23 @@ export type TermsAcceptanceResponse = z.infer<typeof termsAcceptanceResponse>;
 export const onboardingStatus = z.enum(['incomplete', 'abandoned', 'payment_pending', 'provisioned']);
 export type OnboardingStatus = z.infer<typeof onboardingStatus>;
 
-export const planCode = z.enum(['starter', 'standard']);
+export const planCode = z.enum(['free', 'starter', 'standard']);
 export type PlanCode = z.infer<typeof planCode>;
 
 export const publicPlanCatalogItem = z
   .object({
     code: planCode,
-    name: z.enum(['Starter', 'Standard']),
-    monthly_price_minor: z.number().int().positive(),
+    name: z.enum(['Free', 'Starter', 'Standard']),
+    monthly_price_minor: z.number().int().nonnegative(),
     currency: z.literal('PHP'),
-    trial_days: z.number().int().positive(),
+    trial_days: z.number().int().nonnegative(),
     limits: z
       .object({
         active_garments: z.number().int().nonnegative(),
         frontdesk_seats: z.number().int().nonnegative(),
       })
       .strict(),
+    features: planFeatures,
   })
   .strict();
 export type PublicPlanCatalogItem = z.infer<typeof publicPlanCatalogItem>;

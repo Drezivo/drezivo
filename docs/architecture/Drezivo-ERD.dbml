@@ -1,6 +1,6 @@
 Project Drezivo {
   database_type: 'PostgreSQL'
-  Note: 'ERD-ready logical specification. V1/V1.1/V2 tables are grouped; do not deploy all phases blindly. SQL invariants in Drezivo-Data-Model.md are mandatory. TBF-031 workspace discovery uses a narrow resolver function, not a new entity. TBF-032 resolves v1 plan entitlements through one internal service; the pilot has one active Standard offer (`starter` v1), set by migration 0063; runtime plan writes are migration-owned.'
+  Note: 'ERD-ready logical specification. V1/V1.1/V2 tables are grouped; do not deploy all phases blindly. SQL invariants in Drezivo-Data-Model.md are mandatory. TBF-031 workspace discovery uses a narrow resolver function, not a new entity. TBF-032 resolves plan entitlements through one internal service; Free, Starter, and Standard catalog rows are migration-owned, and runtime plan writes are migration-owned.'
 }
 
 Table account {
@@ -864,7 +864,7 @@ Table plan {
   indexes {
     (code, version) [unique]
   }
-  Note: 'V1. Current pilot offer: Standard at 29900 PHP minor units/month, internal code `starter` v1. Migrations 0063, 0071 and 0072 manage the active offer while retaining inactive plan rows and payment history. TBF-032 validates the active v1 row and runtime roles retain SELECT only. Prices are migration-managed.'
+  Note: 'V1. Free is 0 PHP minor units/month and perpetual; Starter is 14900 and Standard is 29900. Migration 0075 preserves the former Standard plan UUID while renaming its code; migration 0081 adds Free and capabilities without changing paid subscriptions. Free bootstrap does not consume lifetime trial eligibility. TBF-032 validates the active v1 row and runtime roles retain SELECT only. Prices are migration-managed.'
 }
 
 Table plan_entitlement {
@@ -877,7 +877,7 @@ Table plan_entitlement {
   indexes {
     (plan_id, capability) [unique]
   }
-  Note: 'V1. Current Standard limits after migration 0071: physical_assets.max 300 and frontdesk_seats.max 3. TBF-032 guards usage under a tenant row lock; limits and release flags both required; null means nonnumeric capability, not implicitly unlimited.'
+  Note: 'V1. Free has 20 active physical assets, zero Front Desk seats, fittings/reservations/storefront-payments disabled, and Ivory/Sage themes only. Starter is 125/0; Standard is 300/3. TBF-032 guards usage under a tenant row lock. Required limits and feature flags fail closed; numeric zero is valid for a disabled capability, while null never means unlimited.'
 }
 
 Table subscription {
@@ -896,7 +896,7 @@ Table subscription {
     (tenant_id, id) [pk]
     (tenant_id) [unique]
   }
-  Note: 'V1. One current subscription per tenant. The pilot derives full/read-only/locked access from period dates; grace_ends_at is an operator-granted read-only extension. subscription_event preserves history; restricted/cancelled actions follow the shared policy.'
+  Note: 'V1. One current subscription per tenant. Perpetual Free is active with trial_ends_at and current_period_end null; paid plans require a trial or period end. The pilot derives full/read-only/locked access from dates; grace_ends_at is an operator-granted read-only extension. subscription_event preserves history.'
 }
 
 Table subscription_event {
@@ -913,6 +913,7 @@ Table subscription_event {
     (tenant_id, id) [pk]
     (tenant_id, business_key) [unique]
   }
+  target_plan_id uuid
   Note: 'V1. Immutable commercial transition history; no silent repricing existing period.'
 }
 
@@ -931,7 +932,7 @@ Table subscription_payment {
     (tenant_id, id) [pk]
     (tenant_id, business_key) [unique]
   }
-  Note: 'V1. Drezivo revenue collection only; never shares merchant rental payment balances.'
+  Note: 'V1. Drezivo revenue collection only; target_plan_id holds a Free-to-paid upgrade choice until operator approval activates it. Never shares merchant rental payment balances.'
 }
 
 Table support_grant {
@@ -1238,6 +1239,7 @@ Ref: deposit_entry.(tenant_id, charge_id) > charge.(tenant_id, id) [delete: rest
 Ref: deposit_entry.(tenant_id, refund_id) > refund.(tenant_id, id) [delete: restrict, update: no action]
 Ref: deposit_entry.(tenant_id, reverses_id) > deposit_entry.(tenant_id, id) [delete: restrict, update: no action]
 Ref: guest_access_token.(tenant_id, reservation_id) > reservation.(tenant_id, id) [delete: restrict, update: no action]
+Ref: subscription_payment.target_plan_id > plan.id [delete: restrict, update: no action]
 Ref: notification_delivery.(tenant_id, outbox_id) > outbox_event.(tenant_id, id) [delete: restrict, update: no action]
 Ref: audit_event.(tenant_id, support_grant_id) > support_grant.(tenant_id, id) [delete: restrict, update: no action]
 Ref: import_job.(tenant_id, requested_by) > membership.(tenant_id, id) [delete: restrict, update: no action]
