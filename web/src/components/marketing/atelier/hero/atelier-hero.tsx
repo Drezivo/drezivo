@@ -121,10 +121,10 @@ export function AtelierHero({ signUpUrl, priceLabel, trialDays }: { signUpUrl: s
         {/* Phones: the copy sits over the lower half of the scene, so it gets a night scrim for contrast. */}
         <div aria-hidden="true" className="at-hero-scrim absolute inset-x-0 bottom-0 h-[62%] lg:hidden" />
 
-        <div className="at-container relative z-10 flex h-full flex-col justify-end-safe pb-[max(2.5rem,8svh)] pt-24 lg:justify-center lg:pb-0 lg:pt-0">
+        <div className="at-hero-frame at-container relative z-10 flex h-full flex-col justify-end-safe pb-[max(2.5rem,8svh)] pt-24">
           <div data-hero-act="one" className="max-w-[48rem]">
             <p data-hero-eyebrow className="at-eyebrow text-atelier-champagne">Clothing rental software, made in the Philippines</p>
-            <h1 className="mt-4 sm:mt-6 font-[family-name:var(--font-atelier-display)] text-at-hero font-normal">
+            <h1 className="at-hero-title mt-4 sm:mt-6 font-[family-name:var(--font-atelier-display)] text-at-hero font-normal">
               {['Every gown.', 'Every booking.', 'One calm place.'].map((line, index) => (
                 <span key={line} className="block overflow-hidden whitespace-nowrap pb-[0.08em]">
                   <span data-hero-line className="block" style={{ '--line': index } as React.CSSProperties}>
@@ -133,7 +133,7 @@ export function AtelierHero({ signUpUrl, priceLabel, trialDays }: { signUpUrl: s
                 </span>
               ))}
             </h1>
-            <p data-hero-fade className="mt-5 max-w-[34rem] sm:mt-7 text-at-lead text-atelier-mist">
+            <p data-hero-fade className="at-hero-lead mt-5 max-w-[34rem] sm:mt-7 text-at-lead text-atelier-mist">
               Drezivo runs the busy side of a clothing rental shop: availability, reservations, deposits, payments, and returns.
               Your evenings stop belonging to Messenger.
             </p>
@@ -145,7 +145,7 @@ export function AtelierHero({ signUpUrl, priceLabel, trialDays }: { signUpUrl: s
                 See what changes
               </a>
             </div>
-            <p data-hero-fade className="mt-5 text-at-small text-atelier-mist sm:mt-6">
+            <p data-hero-fade className="at-hero-note mt-5 text-at-small text-atelier-mist sm:mt-6">
               {priceLabel ? `No credit card. ${priceLabel} after your trial.` : 'No credit card. Compare plans below.'}
             </p>
           </div>

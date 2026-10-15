@@ -240,6 +240,25 @@ html.at-entering.at-entered main {
 .at-hero-canvas { opacity: 0; transition: opacity 1200ms cubic-bezier(0.22, 1, 0.36, 1); }
 .at-hero-canvas[data-ready] { opacity: 1; }
 .at-scroll-cue { justify-items: center; gap: 0.6rem; }
+
+/* Laptop and up: the hero copy centres in the space BELOW the fixed 4.5rem header (and above the
+   scroll cue). `safe` alignment starts it at the top when it does not fit, instead of letting it
+   overflow upward under the navigation. */
+@media (min-width: 64rem) {
+  .at-hero-frame { justify-content: safe center; padding-top: calc(4.5rem + 1.5rem); padding-bottom: 4rem; }
+}
+
+/* Short laptop windows (1024×600, 1280×640, a browser with toolbars): the headline also scales with
+   height and the vertical rhythm tightens so the whole first act fits. The scroll cue would collide
+   with the buttons here, so it steps aside. */
+@media (min-width: 64rem) and (max-height: 47.5rem) {
+  .at-hero-frame { padding-top: calc(4.5rem + 1rem); padding-bottom: 1.5rem; }
+  .at-hero-title { margin-top: 1rem; font-size: min(var(--text-at-hero), 11svh); }
+  .at-hero-lead { margin-top: 1rem; }
+  .at-hero-frame .at-cta-row { margin-top: 1.25rem; }
+  .at-hero-note { margin-top: 0.75rem; }
+  .at-scroll-cue { display: none; }
+}
 .at-scroll-cue-line {
   display: block;
   width: 1px;
