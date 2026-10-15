@@ -932,7 +932,7 @@ function CalendarMessage({
   onRetry?: () => void;
 }) {
   return (
-    <Card role={role} aria-live={role === "alert" ? "assertive" : "polite"}>
+    <Card role={role} data-mobile-card="keep" aria-live={role === "alert" ? "assertive" : "polite"}>
       <CardContent className="flex min-h-40 flex-col items-center justify-center gap-2 p-6 text-center">
         <CircleAlert className="h-5 w-5 text-dashboard-accent" aria-hidden="true" />
         <h2 className="font-semibold text-dashboard-navy">{title}</h2>
