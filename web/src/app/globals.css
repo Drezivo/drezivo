@@ -115,12 +115,12 @@
 }
 
 :root {
-  --font-bodoni: 'Bodoni Moda Variable';
+  --font-playfair: 'Playfair Display Variable';
   --font-atelier-jost: 'Jost Variable';
   --font-atelier-hand: 'Caveat Variable';
   --font-newsreader: 'Newsreader Variable';
   --font-jost: 'Jost Variable';
-  --font-nf-display: 'Bodoni Moda Variable';
+  --font-nf-display: 'Playfair Display Variable';
   --font-nf-body: 'Jost Variable';
 }
 
