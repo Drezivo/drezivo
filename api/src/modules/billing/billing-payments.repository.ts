@@ -11,10 +11,11 @@ import type { SubscriptionPaymentStatus, SubscriptionStatus } from '@drezivo/con
  */
 
 export interface AccessRow {
+  plan_code: string;
   status: SubscriptionStatus;
   trial_ends_at: Date | null;
   grace_ends_at: Date | null;
-  current_period_end: Date;
+  current_period_end: Date | null;
   pending_payment: boolean;
   /** Database clock, so every access decision uses one time source. */
   now: Date;
@@ -22,13 +23,14 @@ export interface AccessRow {
 
 export async function readAccessRow(client: PoolClient, tenantId: string): Promise<AccessRow | null> {
   const result = await client.query<AccessRow>(
-    `SELECT s.status, s.trial_ends_at, s.grace_ends_at, s.current_period_end,
+    `SELECT p.code AS plan_code, s.status, s.trial_ends_at, s.grace_ends_at, s.current_period_end,
             EXISTS (
               SELECT 1 FROM subscription_payment sp
                WHERE sp.tenant_id = s.tenant_id AND sp.status = 'pending'
             ) AS pending_payment,
             statement_timestamp() AS now
        FROM subscription s
+       JOIN plan p ON p.id = s.plan_id
       WHERE s.tenant_id = $1
       LIMIT 1`,
     [tenantId],
@@ -56,7 +58,7 @@ export async function readBillingSubscription(
   }
   const result = await client.query<BillingSubscriptionRow>(
     `SELECT s.id AS subscription_id, s.plan_id, p.monthly_minor, p.currency,
-            s.status, s.trial_ends_at, s.grace_ends_at, s.current_period_end,
+            p.code AS plan_code, s.status, s.trial_ends_at, s.grace_ends_at, s.current_period_end,
             EXISTS (
               SELECT 1 FROM subscription_payment sp
                WHERE sp.tenant_id = s.tenant_id AND sp.status = 'pending'
@@ -119,6 +121,7 @@ export async function readActivePlatformQr(
 export interface SubscriptionPaymentRow {
   id: string;
   amount_minor: number;
+  target_plan_code: string | null;
   currency: string;
   status: SubscriptionPaymentStatus;
   reference: string | null;
@@ -129,10 +132,11 @@ export interface SubscriptionPaymentRow {
 }
 
 const paymentProjection = `
-  SELECT sp.id, sp.amount_minor, sp.currency, sp.status, sp.reference,
+  SELECT sp.id, sp.amount_minor, tp.code AS target_plan_code, sp.currency, sp.status, sp.reference,
          ppm.label AS payment_method_label, sp.created_at, sp.reviewed_at, sp.review_note
     FROM subscription_payment sp
     LEFT JOIN platform_payment_method ppm ON ppm.id = sp.payment_method_id
+    LEFT JOIN plan tp ON tp.id = sp.target_plan_id
 `;
 
 export async function listSubscriptionPayments(
@@ -181,6 +185,7 @@ export async function insertPendingSubscriptionPayment(
     id: string;
     tenantId: string;
     subscriptionId: string;
+    targetPlanId: string;
     amountMinor: number;
     currency: string;
     paymentMethodId: string;
@@ -191,13 +196,14 @@ export async function insertPendingSubscriptionPayment(
 ): Promise<void> {
   await client.query(
     `INSERT INTO subscription_payment
-       (id, tenant_id, subscription_id, amount_minor, currency, status, collection_method,
+       (id, tenant_id, subscription_id, target_plan_id, amount_minor, currency, status, collection_method,
         business_key, payment_method_id, reference, proof_file_id, submitted_by_membership_id)
-     VALUES ($1, $2, $3, $4, $5, 'pending', 'manual_proof', $6, $7, $8, $9, $10)`,
+     VALUES ($1, $2, $3, $4, $5, $6, 'pending', 'manual_proof', $7, $8, $9, $10, $11)`,
     [
       input.id,
       input.tenantId,
       input.subscriptionId,
+      input.targetPlanId,
       input.amountMinor,
       input.currency,
       `manual-proof:${input.id}`,

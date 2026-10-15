@@ -1,5 +1,17 @@
 import { pool } from '../../db/client.js';
 
+export const PLAN_CAPABILITIES = [
+  'physical_assets.max',
+  'frontdesk_seats.max',
+  'fittings.enabled',
+  'storefront_reservations.enabled',
+  'storefront_payments.enabled',
+  'storefront_theme.ivory',
+  'storefront_theme.sage',
+  'storefront_theme.blush',
+  'storefront_theme.noir',
+] as const;
+
 export interface PlanCatalogRow {
   code: string;
   monthly_minor: number;
@@ -17,10 +29,11 @@ export async function listActivePlanRows(): Promise<PlanCatalogRow[]> {
        JOIN plan_entitlement e ON e.plan_id = p.id
       WHERE p.active IS TRUE
         AND p.version = 1
-        AND p.code IN ('starter', 'standard')
-        AND e.capability IN ('physical_assets.max', 'frontdesk_seats.max')
-      ORDER BY CASE p.code WHEN 'starter' THEN 1 WHEN 'standard' THEN 2 END,
+        AND p.code IN ('free', 'starter', 'standard')
+        AND e.capability = ANY($1::text[])
+      ORDER BY CASE p.code WHEN 'free' THEN 1 WHEN 'starter' THEN 2 WHEN 'standard' THEN 3 END,
                e.capability`,
+    [[...PLAN_CAPABILITIES]],
   );
   return result.rows;
 }

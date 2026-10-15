@@ -60,6 +60,7 @@ export function SizingTransitionDialog({
   disabled,
   getToken,
   onCompleted,
+  onCapacityLimit,
   onOpenChange,
   open,
   productId,
@@ -70,6 +71,7 @@ export function SizingTransitionDialog({
   disabled: boolean;
   getToken: () => Promise<string | null>;
   onCompleted: (data: ChangeClothingSizingModeResponse) => Promise<void> | void;
+  onCapacityLimit?: () => void;
   onOpenChange: (open: boolean) => void;
   open: boolean;
   productId: string;
@@ -130,6 +132,9 @@ export function SizingTransitionDialog({
       await onCompleted(result.data);
     } catch (caughtError) {
       if (caughtError instanceof DrezivoApiError) {
+        if (caughtError.code === "ASSET_LIMIT_EXCEEDED") {
+          onCapacityLimit?.();
+        }
         setError(caughtError.message);
       } else if (caughtError instanceof Error) {
         setError(caughtError.message);

@@ -7,6 +7,7 @@ import { CalendarDays, Loader2, Mail, RefreshCw, UserMinus, UserPlus, Users, X }
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useVerifiedActorContext } from "@/components/shell/dashboard-access-gate";
+import { useRequestPlanUpgrade } from "@/components/billing/plan-upgrade-dialog";
 import { ErrorState, Field, LoadingState, Section } from "@/components/forms/form-kit";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -23,6 +24,7 @@ type InvitationAction = "resend" | "cancel";
 export function MembersSettingsPage() {
   const { getToken } = useAuth();
   const actor = useVerifiedActorContext();
+  const requestUpgrade = useRequestPlanUpgrade();
   const [roster, setRoster] = useState<MemberRosterResponse | null>(null);
   const [invitations, setInvitations] = useState<Invitation[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
@@ -217,6 +219,7 @@ export function MembersSettingsPage() {
     return <ErrorState message={loadError ?? "Could not load your team."} onRetry={reload} />;
 
   const atSeatLimit = roster.frontdesk_seats.used >= roster.frontdesk_seats.max;
+  const freePlan = actor.subscription.plan_code === "free";
 
   return (
     <div className="grid gap-4">
@@ -226,10 +229,12 @@ export function MembersSettingsPage() {
         </p>
         <Button
           type="button"
-          onClick={() => handleInviteOpenChange(true)}
-          disabled={atSeatLimit || pendingAction !== null}
+          onClick={() => freePlan ? requestUpgrade("Front Desk staff access") : handleInviteOpenChange(true)}
+          disabled={(!freePlan && atSeatLimit) || pendingAction !== null}
+          aria-haspopup={freePlan ? "dialog" : undefined}
+          className={freePlan ? "opacity-70" : undefined}
         >
-          <UserPlus className="h-4 w-4" aria-hidden="true" /> Invite Front Desk
+          <UserPlus className="h-4 w-4" aria-hidden="true" /> Invite Front Desk{freePlan ? " · Upgrade" : ""}
         </Button>
       </div>
 
@@ -258,7 +263,11 @@ export function MembersSettingsPage() {
             Includes active Front Desk members and unexpired pending invitations. The Owner does not
             use a Front Desk seat.
           </p>
-          {atSeatLimit ? (
+          {freePlan ? (
+            <button type="button" className="mt-2 text-left text-xs font-medium text-dashboard-accent underline underline-offset-2" onClick={() => requestUpgrade("Front Desk staff access")}>
+              Front Desk access is available on paid plans. Upgrade to invite staff.
+            </button>
+          ) : atSeatLimit ? (
             <p className="mt-2 text-xs font-medium text-dashboard-danger">
               The Front Desk seat limit has been reached.
             </p>

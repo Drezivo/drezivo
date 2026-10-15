@@ -32210,7 +32210,9 @@ paths:
                               - "null"
                             format: date-time
                           current_period_end:
-                            type: string
+                            type:
+                              - string
+                              - "null"
                             format: date-time
                         required:
                           - status

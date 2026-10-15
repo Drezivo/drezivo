@@ -35,7 +35,7 @@ type LoadState =
 
 type LaunchPhase = "idle" | "bootstrapping" | "resolving" | "context-error";
 
-/** Owners select a catalog plan before starting the trial; the API remains authoritative. */
+/** Owners choose a catalog plan; Free is ongoing, while paid plans start a trial. */
 export function OnboardingPlan() {
   const { getToken, isLoaded, isSignedIn } = useAuth();
   const { setActive } = useClerk();
@@ -73,10 +73,7 @@ export function OnboardingPlan() {
       }
       setSelectedPlanCode(onboarding.selected_plan_code);
       setStep(onboarding.selected_plan_code ? "launch" : "plan");
-      setLaunchOpen(
-        Boolean(onboarding.selected_plan_code) &&
-          context.accepted_terms_version === context.required_terms_version
-      );
+      setLaunchOpen(Boolean(onboarding.selected_plan_code));
       if (catalogResult.status === "rejected") {
         setState({
           kind: "catalog-error",
@@ -213,7 +210,7 @@ export function OnboardingPlan() {
     return (
       <ProvisioningState
         title="Creating your workspace…"
-        description="Your trial has started. We’re opening your dashboard now."
+        description={selectedPlan.code === "free" ? "Your Free workspace is being set up." : "Your trial has started. We’re opening your dashboard now."}
       />
     );
   }
@@ -226,8 +223,7 @@ export function OnboardingPlan() {
           <CheckCircle2 aria-hidden="true" className="mx-auto mt-10 h-12 w-12 text-auth-gold" />
           <h1 className="mt-6 font-display text-4xl text-auth-text">Your workspace was created</h1>
           <p className="mx-auto mt-4 max-w-md text-sm leading-6 text-auth-dark-muted">
-            We couldn&apos;t finish loading your workspace. Your trial has already started, so
-            trying again only reloads your workspace.
+            We couldn&apos;t finish loading your workspace. {selectedPlan.code === "free" ? "Your Free workspace is ready" : "Your trial has already started"}, so trying again only reloads your workspace.
           </p>
           {launchError?.requestId ? (
             <p className="mt-3 text-xs text-auth-dark-muted">
@@ -341,10 +337,12 @@ export function OnboardingPlan() {
             id="trial-heading"
             className="font-display text-3xl leading-tight text-auth-text sm:text-4xl"
           >
-            Start your free trial
+            {selectedPlan.code === "free" ? "Start with Free" : "Start your free trial"}
           </h1>
           <p className="mt-2 text-sm text-auth-dark-muted">
-            Your selected plan includes a {selectedPlan.trial_days}-day trial. No card needed.
+            {selectedPlan.code === "free"
+              ? "Free forever. No trial or payment required."
+              : `Your selected plan includes a ${selectedPlan.trial_days}-day trial. No card needed.`}
           </p>
         </div>
 
@@ -439,12 +437,8 @@ export function OnboardingPlan() {
           }}
         >
           <Dialog.Trigger asChild>
-            <button
-              type="button"
-              disabled={!hasCurrentTermsAcceptance || termsSubmit.isSubmitting}
-              className={`${launchButtonClass} mt-5`}
-            >
-              Start {selectedPlan.trial_days}-day trial{" "}
+            <button type="button" className={`${launchButtonClass} mt-5`}>
+              {selectedPlan.code === "free" ? "Create Free workspace" : `Start ${selectedPlan.trial_days}-day trial`}{" "}
               <ArrowRight aria-hidden="true" className="h-5 w-5" />
             </button>
           </Dialog.Trigger>
@@ -452,11 +446,12 @@ export function OnboardingPlan() {
             <Dialog.Overlay className="fixed inset-0 z-50 bg-auth-page/80 backdrop-blur-sm" />
             <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-auth-line bg-auth-panel p-6 shadow-2xl outline-none sm:p-7">
               <Dialog.Title className="font-display text-3xl text-auth-text">
-                Start your {selectedPlan.trial_days}-day trial?
+                {selectedPlan.code === "free" ? "Create your Free workspace?" : `Start your ${selectedPlan.trial_days}-day trial?`}
               </Dialog.Title>
               <Dialog.Description className="mt-3 text-sm leading-6 text-auth-dark-muted">
-                Your trial starts now. After the trial, {selectedPlan.name} is{" "}
-                {formatPlanPrice(selectedPlan.monthly_price_minor)} a month.
+                {selectedPlan.code === "free"
+                  ? "Your workspace will have ongoing Free access with no expiry."
+                  : `Your trial starts now. After the trial, ${selectedPlan.name} is ${formatPlanPrice(selectedPlan.monthly_price_minor)} a month.`}
               </Dialog.Description>
               <div className="mt-5 rounded-xl border border-auth-line bg-auth-page/30 p-4">
                 <PlanSummary plan={selectedPlan} />
@@ -474,7 +469,7 @@ export function OnboardingPlan() {
                   onClick={() => void handleStartTrial()}
                   className={dialogLaunchButtonClass}
                 >
-                  {isLaunching ? "Starting trial…" : `Start ${selectedPlan.trial_days}-day trial`}
+                  {isLaunching ? "Creating workspace…" : selectedPlan.code === "free" ? "Create Free workspace" : `Start ${selectedPlan.trial_days}-day trial`}
                 </button>
               </div>
             </Dialog.Content>
@@ -495,7 +490,7 @@ function PlanSummary({ plan }: { plan: PublicPlanCatalogItem }) {
       <p className="font-display text-xl text-auth-text">
         {plan.name}{" "}
         <span className="text-base text-auth-gold">
-          {formatPlanPrice(plan.monthly_price_minor)} / month after the trial
+          {plan.code === "free" ? "₱0 · Free forever" : `${formatPlanPrice(plan.monthly_price_minor)} / month after trial`}
         </span>
       </p>
       <p className="mt-2 flex items-center gap-2">
@@ -540,8 +535,7 @@ function PlanSelection({
           Choose your plan
         </h1>
         <p className="mt-2 text-sm text-auth-dark-muted">
-          Both plans include a {catalog.plans[0]?.trial_days ?? 14}-day trial. Review your choice
-          before starting.
+          Choose Free for ongoing access or a paid plan with a 14-day trial.
         </p>
       </div>
       <div
@@ -555,9 +549,10 @@ function PlanSelection({
           if (plan.limits.frontdesk_seats > 0)
             features.push(`Up to ${plan.limits.frontdesk_seats} Front Desk staff`);
           features.push(
-            "Online storefront with bookings and fittings",
-            "Reservations, calendar and availability",
-            "Customers, payments, returns and exports"
+            plan.features.storefront_reservations ? "Online storefront reservations" : "Storefront availability and contact only",
+            plan.features.fittings ? "Fitting management" : "No fitting workflow",
+            plan.features.storefront_payments ? "Storefront payment methods" : "Staff payments only",
+            `${plan.features.storefront_themes.length} storefront designs`
           );
           return (
             <button
@@ -572,7 +567,9 @@ function PlanSelection({
                 <span>
                   <span className="block font-display text-2xl text-auth-text">{plan.name}</span>
                   <span className="mt-1 block text-sm text-auth-dark-muted">
-                    {formatPlanPrice(plan.monthly_price_minor)} / month after trial
+                    {plan.code === "free"
+                      ? "₱0 · Free forever"
+                      : `${formatPlanPrice(plan.monthly_price_minor)} / month after ${plan.trial_days}-day trial`}
                   </span>
                 </span>
                 <span

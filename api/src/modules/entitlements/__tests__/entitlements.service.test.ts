@@ -3,9 +3,20 @@ import type { PoolClient } from 'pg';
 
 import {
   assertFrontDeskSeatCapacity,
+  assertPlanFeatureEnabled,
   assertPhysicalAssetCapacity,
   resolvePlanEntitlements,
 } from '../entitlements.service.js';
+
+const enabledStorefrontFeatures = [
+  { capability: 'fittings.enabled', limit_value: 1, enabled: true },
+  { capability: 'storefront_reservations.enabled', limit_value: 1, enabled: true },
+  { capability: 'storefront_payments.enabled', limit_value: 1, enabled: true },
+  { capability: 'storefront_theme.ivory', limit_value: 1, enabled: true },
+  { capability: 'storefront_theme.sage', limit_value: 1, enabled: true },
+  { capability: 'storefront_theme.blush', limit_value: 1, enabled: true },
+  { capability: 'storefront_theme.noir', limit_value: 1, enabled: true },
+];
 
 describe('entitlement service', () => {
   it('rejects invalid quota increments before touching the database', async () => {
@@ -80,6 +91,7 @@ describe('entitlement service', () => {
           rows: [
             { capability: 'physical_assets.max', limit_value: 125, enabled: true },
             { capability: 'frontdesk_seats.max', limit_value: 0, enabled: true },
+            ...enabledStorefrontFeatures,
           ],
         }),
     } as unknown as PoolClient;
@@ -116,6 +128,160 @@ describe('entitlement service', () => {
 
     await expect(resolvePlanEntitlements(client, 'starter')).rejects.toMatchObject({
       code: 'STATE_CONFLICT',
+    });
+  });
+
+  it('resolves Free with its bounded garment cap and limited storefront capabilities', async () => {
+    const client = {
+      query: vi
+        .fn()
+        .mockResolvedValueOnce({
+          rows: [
+            {
+              id: 'free-plan',
+              code: 'free',
+              version: 1,
+              monthly_minor: 0,
+              currency: 'PHP',
+              active: true,
+            },
+          ],
+        })
+        .mockResolvedValueOnce({
+          rows: [
+            { capability: 'physical_assets.max', limit_value: 20, enabled: true },
+            { capability: 'frontdesk_seats.max', limit_value: 0, enabled: true },
+            { capability: 'fittings.enabled', limit_value: 0, enabled: true },
+            { capability: 'storefront_reservations.enabled', limit_value: 0, enabled: true },
+            { capability: 'storefront_payments.enabled', limit_value: 0, enabled: true },
+            { capability: 'storefront_theme.ivory', limit_value: 1, enabled: true },
+            { capability: 'storefront_theme.sage', limit_value: 1, enabled: true },
+            { capability: 'storefront_theme.blush', limit_value: 0, enabled: true },
+            { capability: 'storefront_theme.noir', limit_value: 0, enabled: true },
+          ],
+        }),
+    } as unknown as PoolClient;
+
+    await expect(resolvePlanEntitlements(client, 'free')).resolves.toMatchObject({
+      planCode: 'free',
+      monthlyMinor: 0,
+      physicalAssetsMax: 20,
+      frontdeskSeatsMax: 0,
+      features: {
+        fittings: false,
+        storefront_reservations: false,
+        storefront_payments: false,
+        storefront_themes: ['ivory', 'sage'],
+      },
+    });
+  });
+
+  it('rejects direct use of a disabled Free capability', async () => {
+    const client = {
+      query: vi
+        .fn()
+        .mockResolvedValueOnce({
+          rows: [
+            {
+              id: 'free-plan',
+              code: 'free',
+              version: 1,
+              monthly_minor: 0,
+              currency: 'PHP',
+              active: true,
+              subscription_status: 'active',
+            },
+          ],
+        })
+        .mockResolvedValueOnce({
+          rows: [
+            { capability: 'physical_assets.max', limit_value: 20, enabled: true },
+            { capability: 'frontdesk_seats.max', limit_value: 0, enabled: true },
+            { capability: 'fittings.enabled', limit_value: 0, enabled: true },
+            { capability: 'storefront_reservations.enabled', limit_value: 0, enabled: true },
+            { capability: 'storefront_payments.enabled', limit_value: 0, enabled: true },
+            { capability: 'storefront_theme.ivory', limit_value: 1, enabled: true },
+            { capability: 'storefront_theme.sage', limit_value: 1, enabled: true },
+            { capability: 'storefront_theme.blush', limit_value: 0, enabled: true },
+            { capability: 'storefront_theme.noir', limit_value: 0, enabled: true },
+          ],
+        }),
+    } as unknown as PoolClient;
+
+    await expect(assertPlanFeatureEnabled(client, 'tenant-id', 'storefront_reservations')).rejects.toMatchObject({
+      code: 'STATE_CONFLICT',
+    });
+  });
+
+  it('rejects a Free asset activation that would exceed the 20-piece limit', async () => {
+    const client = {
+      query: vi
+        .fn()
+        .mockResolvedValueOnce({ rows: [{ id: 'tenant-id' }] })
+        .mockResolvedValueOnce({
+          rows: [
+            {
+              id: 'free-plan',
+              code: 'free',
+              version: 1,
+              monthly_minor: 0,
+              currency: 'PHP',
+              active: true,
+              subscription_status: 'active',
+            },
+          ],
+        })
+        .mockResolvedValueOnce({
+          rows: [
+            { capability: 'physical_assets.max', limit_value: 20, enabled: true },
+            { capability: 'frontdesk_seats.max', limit_value: 0, enabled: true },
+            { capability: 'fittings.enabled', limit_value: 0, enabled: true },
+            { capability: 'storefront_reservations.enabled', limit_value: 0, enabled: true },
+            { capability: 'storefront_payments.enabled', limit_value: 0, enabled: true },
+            { capability: 'storefront_theme.ivory', limit_value: 1, enabled: true },
+            { capability: 'storefront_theme.sage', limit_value: 1, enabled: true },
+            { capability: 'storefront_theme.blush', limit_value: 0, enabled: true },
+            { capability: 'storefront_theme.noir', limit_value: 0, enabled: true },
+          ],
+        })
+        .mockResolvedValueOnce({ rows: [{ count: 20 }] }),
+    } as unknown as PoolClient;
+
+    await expect(assertPhysicalAssetCapacity(client, 'tenant-id', 1)).rejects.toMatchObject({
+      code: 'CAPACITY_CONFLICT',
+    });
+  });
+
+  it('rejects reserving a Front Desk seat when the plan allows zero seats', async () => {
+    const client = {
+      query: vi
+        .fn()
+        .mockResolvedValueOnce({ rows: [{ id: 'tenant-id' }] })
+        .mockResolvedValueOnce({
+          rows: [
+            {
+              id: 'starter-plan',
+              code: 'starter',
+              version: 1,
+              monthly_minor: 14900,
+              currency: 'PHP',
+              active: true,
+              subscription_status: 'trialing',
+            },
+          ],
+        })
+        .mockResolvedValueOnce({
+          rows: [
+            { capability: 'physical_assets.max', limit_value: 125, enabled: true },
+            { capability: 'frontdesk_seats.max', limit_value: 0, enabled: true },
+            ...enabledStorefrontFeatures,
+          ],
+        })
+        .mockResolvedValueOnce({ rows: [{ count: 0 }] }),
+    } as unknown as PoolClient;
+
+    await expect(assertFrontDeskSeatCapacity(client, 'tenant-id', 1)).rejects.toMatchObject({
+      code: 'CAPACITY_CONFLICT',
     });
   });
 

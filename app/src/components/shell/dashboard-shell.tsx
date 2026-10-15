@@ -38,6 +38,10 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   const [businessLogoUrl, setBusinessLogoUrl] = useState<string | null>(null);
   const actorContext = verifiedActor ?? fetchedActor;
   const access = actorContext?.access ?? null;
+  // Keep the shell renderable while an actor context is being upgraded to include
+  // entitlement data (and for older cached/test contexts). The API remains the
+  // authority; absent features simply means no client-side locks are applied yet.
+  const features = actorContext?.entitlements?.features;
   const refreshActor = useRefreshVerifiedActor();
 
   useEffect(() => {
@@ -112,7 +116,10 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   return (
     <SubscriptionProvider access={access} onChanged={refreshActor}>
     <SidebarProvider className="h-svh min-h-0 overflow-hidden">
-      <DashboardSidebar identity={identity} />
+      <DashboardSidebar
+        identity={identity}
+        {...(features ? { features } : {})}
+      />
       <SidebarInset className="h-svh min-h-0 overflow-hidden">
         <DashboardHeader identity={identity} />
         <SubscriptionBanner access={access} />
@@ -123,7 +130,10 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
           {access?.level === "locked" ? <SubscriptionWall access={access} /> : children}
         </main>
         {/* Phones only: thumb-reach tabs + Menu sheet, in the column so sticky save bars sit above it. */}
-        <MobileTabBar identity={identity} />
+        <MobileTabBar
+          identity={identity}
+          {...(features ? { features } : {})}
+        />
         {/* Reopens a live garment hold after navigation or refresh; see components/reservations/pending-hold-guard.tsx. */}
         <PendingHoldGuard />
       </SidebarInset>

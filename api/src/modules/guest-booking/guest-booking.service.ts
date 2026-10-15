@@ -33,6 +33,7 @@ import {
 import { runIdempotentCommand, type CommandResult } from '../../shared/idempotent-command.js';
 import { guestAccessExpiresAt, guestTokenFor, guestTokenHash } from '../../shared/guest-token.js';
 import { digestRecipientEmail } from '../../shared/protected-recipient.js';
+import { resolveTenantEntitlements } from '../entitlements/entitlements.service.js';
 
 export { guestTokenFor };
 import { acceptFileObject, insertPendingFile, rejectFileObject } from '../files/files.repository.js';
@@ -121,6 +122,10 @@ export class GuestBookingService {
         async () => {
           const core = await readStoreCore(client, store);
           if (!core) throw new NotFoundError(STORE_NOT_FOUND);
+          const entitlements = await resolveTenantEntitlements(client, store.tenantId);
+          if (!entitlements.features.storefront_reservations) {
+            throw new BookingPausedError('This shop takes reservations by message. Please contact the shop to reserve.');
+          }
           const checkout = toDocument(core).checkout;
           const businessHours = branchOperatingHours.safeParse(core.operating_hours);
           if (!businessHours.success) {
@@ -333,6 +338,8 @@ export class GuestBookingService {
         idempotencyRequest,
         async () => {
           const core = await readStoreCore(client, store);
+          const entitlements = await resolveTenantEntitlements(client, store.tenantId);
+          if (!entitlements.features.fittings) throw new NotFoundError('This shop is not taking fitting requests online.');
           const document = core ? toDocument(core) : null;
           if (!document?.checkout.fitting_requests) throw new NotFoundError('This shop is not taking fitting requests online.');
           if (document.checkout.requirements.phone === 'required' && request.customer.phone === null) {

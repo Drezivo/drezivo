@@ -13,7 +13,7 @@ import {
   type SubscriptionPaymentView,
 } from '@drezivo/contracts';
 
-import { withTenantTransaction } from '../../db/client.js';
+import { withActorTenantResolutionTransaction, withTenantTransaction } from '../../db/client.js';
 import type { ObjectStorage } from '../../integrations/storage/object-storage.js';
 import { objectStorage } from '../../integrations/storage/s3-compatible-object-storage.js';
 import type { FileStreamResponse } from '../files/file-stream.js';
@@ -25,7 +25,7 @@ import {
   ValidationError,
 } from '../../shared/errors.js';
 import { runIdempotentCommand, type CommandResult } from '../../shared/idempotent-command.js';
-import { resolveTenantEntitlements } from '../entitlements/entitlements.service.js';
+import { resolvePlanEntitlements, resolveTenantEntitlements } from '../entitlements/entitlements.service.js';
 import { accessOf } from './access.js';
 import { TRIAL_DURATION_DAYS } from './billing.constants.js';
 import {
@@ -65,31 +65,51 @@ export async function readTenantAccess(
 
 /** GET /billing. Owner and front desk may read it; only the owner may pay. */
 export function getBillingOverview(actor: BillingActor): Promise<BillingOverview> {
-  return withTenantTransaction(actor.tenantId, actor.principalId, async (client) => {
+  return withActorTenantResolutionTransaction(actor.principalId, async (transaction) => {
+    const { client } = transaction;
+    const eligibility = actor.role === 'owner'
+      ? await client.query<{ eligible: boolean }>(
+          `SELECT EXISTS (
+             SELECT 1
+               FROM account a
+              WHERE a.clerk_user_id = $1
+                AND a.current_owned_tenant_id = $2
+                AND a.trial_consumed_at IS NULL
+           ) AS eligible`,
+          [actor.principalId, actor.tenantId],
+        )
+      : null;
+    await transaction.setTenantContext(actor.tenantId);
     const subscription = await readBillingSubscription(client, actor.tenantId);
     if (!subscription) throw new StateConflictError('Workspace subscription is unavailable.');
     const entitlements = await resolveTenantEntitlements(client, actor.tenantId);
     const methods = await listActivePlatformPaymentMethods(client);
     const payments = await listSubscriptionPayments(client, actor.tenantId, PAYMENT_HISTORY_LIMIT);
+    const canStartTrial =
+      actor.role === 'owner' &&
+      entitlements.planCode === 'free' &&
+      !subscription.pending_payment &&
+      eligibility?.rows[0]?.eligible === true;
 
     return billingOverview.parse({
       plan: {
         code: entitlements.planCode,
-        name: entitlements.planCode === 'starter' ? 'Starter' : 'Standard',
+        name: entitlements.planCode === 'free' ? 'Free' : entitlements.planCode === 'starter' ? 'Starter' : 'Standard',
         monthly_minor: String(subscription.monthly_minor),
         currency: subscription.currency,
         physical_assets_max: entitlements.physicalAssetsMax,
         frontdesk_seats_max: entitlements.frontdeskSeatsMax,
-        trial_days: TRIAL_DURATION_DAYS,
+        trial_days: entitlements.planCode === 'free' ? 0 : TRIAL_DURATION_DAYS,
       },
       subscription: {
         status: subscription.status,
         trial_ends_at: subscription.trial_ends_at?.toISOString() ?? null,
         read_only_until: subscription.grace_ends_at?.toISOString() ?? null,
-        current_period_end: subscription.current_period_end.toISOString(),
+        current_period_end: subscription.current_period_end?.toISOString() ?? null,
       },
       access: accessOf(subscription, subscription.now),
       can_pay: actor.role === 'owner',
+      can_start_trial: canStartTrial,
       payment_methods: methods.map((method) => ({
         id: method.id,
         label: method.label,
@@ -115,8 +135,21 @@ export function submitSubscriptionPayment(
 ): Promise<CommandResult<SubmitSubscriptionPaymentResponse>> {
   if (actor.role !== 'owner')
     throw new ForbiddenError('Only the workspace owner can pay for the subscription.');
-  return withTenantTransaction(actor.tenantId, actor.principalId, (client) =>
-    runIdempotentCommand(
+  return withActorTenantResolutionTransaction(actor.principalId, async (transaction) => {
+    const { client } = transaction;
+    const accountResult = await client.query<{
+      trial_consumed_at: Date | null;
+      current_owned_tenant_id: string | null;
+    }>(
+      `SELECT trial_consumed_at, current_owned_tenant_id
+         FROM account
+        WHERE clerk_user_id = $1
+        FOR UPDATE`,
+      [actor.principalId],
+    );
+    const account = accountResult.rows[0] ?? null;
+    await transaction.setTenantContext(actor.tenantId);
+    return runIdempotentCommand(
       client,
       {
         tenantId: actor.tenantId,
@@ -134,6 +167,21 @@ export function submitSubscriptionPayment(
         if (subscription.pending_payment) {
           throw new PaymentAlreadyPendingError('A payment is already waiting for review.');
         }
+        const currentPlan = await resolveTenantEntitlements(client, actor.tenantId);
+        const targetPlan = await resolvePlanEntitlements(client, request.plan_code);
+        if (targetPlan.planCode === 'free') {
+          throw new ValidationError('Choose Starter or Standard to submit an upgrade payment.');
+        }
+        if (currentPlan.planCode === 'free') {
+          if (
+            account?.current_owned_tenant_id !== actor.tenantId ||
+            !account.trial_consumed_at
+          ) {
+            throw new StateConflictError('Start your eligible 14-day trial to activate this plan.');
+          }
+        } else if (targetPlan.planId !== currentPlan.planId) {
+          throw new StateConflictError('Paid plan changes are not available.');
+        }
         const method = await readActivePlatformPaymentMethod(client, request.payment_method_id);
         if (!method) throw new ValidationError('Choose one of the listed payment methods.');
         if (!(await isAcceptedPaymentProof(client, actor.tenantId, request.proof_file_id))) {
@@ -146,8 +194,9 @@ export function submitSubscriptionPayment(
             id: paymentId,
             tenantId: actor.tenantId,
             subscriptionId: subscription.subscription_id,
-            amountMinor: subscription.monthly_minor,
-            currency: subscription.currency,
+            targetPlanId: targetPlan.planId,
+            amountMinor: targetPlan.monthlyMinor,
+            currency: targetPlan.currency,
             paymentMethodId: method.id,
             reference: request.reference,
             proofFileId: request.proof_file_id,
@@ -164,7 +213,7 @@ export function submitSubscriptionPayment(
           actorKey: actor.principalId,
           action: 'subscription.payment.submitted',
           entityId: paymentId,
-          summary: { payment_method_id: method.id, amount_minor: subscription.monthly_minor },
+          summary: { payment_method_id: method.id, target_plan_code: targetPlan.planCode, amount_minor: targetPlan.monthlyMinor },
           requestId: actor.requestId,
         });
 
@@ -176,8 +225,8 @@ export function submitSubscriptionPayment(
         });
       },
       201,
-    ),
-  );
+    );
+  });
 }
 
 /** QR image of one of Drezivo's active payment methods, with its type re-checked before serving. */
@@ -217,6 +266,7 @@ function toPaymentView(row: SubscriptionPaymentRow): SubscriptionPaymentView {
   return subscriptionPaymentView.parse({
     id: row.id,
     amount_minor: String(row.amount_minor),
+    target_plan_code: row.target_plan_code,
     currency: row.currency,
     status: row.status,
     reference: row.reference ?? 'Not provided',

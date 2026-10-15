@@ -24,6 +24,8 @@ import { useState } from "react";
 import type { StorefrontSettings } from "@drezivo/contracts";
 
 import { ErrorState, LoadingState, PageHeader, Section } from "@/components/forms/form-kit";
+import { useVerifiedActorContext } from "@/components/shell/dashboard-access-gate";
+import { useRequestPlanUpgrade } from "@/components/billing/plan-upgrade-dialog";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { mediaImageSrcSet } from "@/lib/media-image-srcset";
@@ -34,6 +36,8 @@ import { StorefrontPreviewButton } from "./storefront-preview-button";
 
 export function StorefrontOverviewPage() {
   const editor = useStorefrontEditor();
+  const actor = useVerifiedActorContext();
+  const requestUpgrade = useRequestPlanUpgrade();
   if (editor.loading && !editor.settings) return <Shell><LoadingState label="Loading your storefront…" /></Shell>;
   if (!editor.settings) return <Shell><ErrorState message={editor.loadError ?? "Could not load your storefront."} onRetry={editor.reload} /></Shell>;
   const settings = editor.settings;
@@ -71,13 +75,19 @@ export function StorefrontOverviewPage() {
 
       <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
         <DetailsSummary settings={settings} />
-        <PublishCard settings={settings} />
+        <PublishCard settings={settings} storefrontReservations={actor?.entitlements.features.storefront_reservations !== false} />
       </div>
 
       <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <ManageCard href="/storefront/content" icon={LayoutTemplate} title="Homepage content" text="Hero, about, sections, and featured clothing." />
         <ManageCard href="/storefront/policies" icon={ShieldCheck} title="Rental policies" text={`Version ${settings.policy.version}${settings.policy.rules ? "" : " · not written yet"}`} />
-        <ManageCard href="/storefront/requirements" icon={ClipboardList} title="Customer requirements" text="Details you ask renters for at checkout." />
+        <ManageCard
+          href="/storefront/requirements"
+          icon={ClipboardList}
+          title="Customer requirements"
+          text="Details you ask renters for at checkout."
+          onLocked={actor?.entitlements.features.storefront_reservations === false ? () => requestUpgrade("customer requirements") : undefined}
+        />
         <ManageCard href="/storefront/settings" icon={Settings2} title="Booking settings" text="Handover time, notice, length, and fittings." />
       </div>
     </Shell>
@@ -215,20 +225,30 @@ function DetailsSummary({ settings }: { settings: StorefrontSettings }) {
   );
 }
 
-function PublishCard({ settings }: { settings: StorefrontSettings }) {
+function PublishCard({ settings, storefrontReservations }: { settings: StorefrontSettings; storefrontReservations: boolean }) {
   const editor = useStorefrontEditor();
   const { readiness } = settings;
   const checks = [
     { ok: readiness.has_policy, label: "Rental policy written", href: "/storefront/policies" },
     { ok: readiness.has_active_clothing, label: "At least one active clothing item", href: "/inventory" },
-    { ok: readiness.has_storefront_payment_method, label: "An online payment method is ready", href: "/settings/payment-methods" },
+    ...(storefrontReservations ? [{ ok: readiness.has_storefront_payment_method, label: "An online payment method is ready", href: "/settings/payment-methods" }] : []),
     { ok: readiness.has_contact, label: "A contact phone or email", href: "/storefront/details" },
   ];
   const published = settings.status === "published";
   const suspended = settings.status === "suspended";
 
   return (
-    <Section icon={Globe} title="Status" description={published ? "Your storefront is live." : "Publish when every item below is done."}>
+    <Section
+      icon={Globe}
+      title="Status"
+      description={
+        published
+          ? "Your storefront is live."
+          : storefrontReservations
+            ? "Publish when every item below is done."
+            : "Your Free storefront can show availability and contact details."
+      }
+    >
       <ul className="grid gap-2">
         {checks.map((check) => (
           <li key={check.label}>
@@ -270,9 +290,8 @@ function PublishCard({ settings }: { settings: StorefrontSettings }) {
   );
 }
 
-function ManageCard({ href, icon: Icon, title, text }: { href: string; icon: React.ComponentType<{ className?: string }>; title: string; text: string }) {
-  return (
-    <Link href={href} className="group rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dashboard-accent/40">
+function ManageCard({ href, icon: Icon, title, text, onLocked }: { href: string; icon: React.ComponentType<{ className?: string }>; title: string; text: string; onLocked?: (() => void) | undefined }) {
+  const card = (
       <Card className="h-full gap-0 py-0 transition-colors group-hover:border-dashboard-accent/40">
         <CardContent className="flex h-full flex-col p-5">
           <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-dashboard-active text-dashboard-accent">
@@ -281,10 +300,18 @@ function ManageCard({ href, icon: Icon, title, text }: { href: string; icon: Rea
           <span className="mt-3 text-sm font-semibold text-dashboard-navy">{title}</span>
           <span className="mt-1 flex-1 text-xs leading-5 text-dashboard-muted">{text}</span>
           <span className="mt-3 inline-flex items-center text-xs font-medium text-dashboard-accent">
-            Manage <ChevronRight className="ml-0.5 h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5 motion-reduce:transition-none" />
+            {onLocked ? "Upgrade to unlock" : "Manage"} <ChevronRight className="ml-0.5 h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5 motion-reduce:transition-none" />
           </span>
         </CardContent>
       </Card>
+  );
+  return onLocked ? (
+    <button type="button" aria-haspopup="dialog" onClick={onLocked} className="group w-full rounded-xl text-left opacity-75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dashboard-accent/40">
+      {card}
+    </button>
+  ) : (
+    <Link href={href} className="group rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dashboard-accent/40">
+      {card}
     </Link>
   );
 }

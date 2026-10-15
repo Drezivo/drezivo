@@ -39,6 +39,17 @@ describe('storefront CMS and settings', async () => {
     privacy_notice: 'We use your details only to handle this rental.',
   };
 
+  async function setFreePlan(tenantId: string): Promise<void> {
+    const result = await admin.query(
+      `UPDATE subscription
+          SET plan_id = (SELECT id FROM plan WHERE code = 'free' AND version = 1),
+              current_period_start = now(), current_period_end = NULL
+        WHERE tenant_id = $1`,
+      [tenantId],
+    );
+    expect(result.rowCount).toBe(1);
+  }
+
   beforeAll(async () => {
     await migrateTestDatabase(adminUrl);
     await ensureAppRoleLogin(adminUrl);
@@ -148,6 +159,47 @@ describe('storefront CMS and settings', async () => {
     expect(unpublished.body.success && unpublished.body.data.status).toBe('draft');
     const policies = await admin.query<Record<string, unknown>>(`SELECT version FROM policy_snapshot WHERE tenant_id = $1 ORDER BY version`, [ws.tenantId]);
     expect(policies.rows.map((r) => r['version'])).toEqual([1, 2]);
+  });
+
+  it('lets Free publish without storefront payment and rejects changes to locked renter settings', async () => {
+    const ws = await createStorefrontWorkspace('cms-free-storefront');
+    const document = defaultStorefrontDocument('Free Shop');
+    document.contact.email = 'hello@free.test';
+    document.checkout.requirements = { phone: 'required', social_handle: 'optional', event_date: 'optional' };
+    expect((await cms.updateDocument(ws.owner, 'free-doc', { version: 1, document })).status).toBe(200);
+    expect((await cms.publishPolicy(ws.owner, 'free-policy-initial', { expected_version: 1, rules: policy })).status).toBe(200);
+    await setFreePlan(ws.tenantId);
+
+    const changedRequirements = {
+      ...document,
+      checkout: {
+        ...document.checkout,
+        requirements: { ...document.checkout.requirements, phone: 'hidden' as const },
+      },
+    };
+    expect((await cms.updateDocument(ws.owner, 'free-req-change', { version: 2, document: changedRequirements })).status).toBe(409);
+
+    const changedDelivery = { ...policy, delivery: { ...policy.delivery, enabled: false } };
+    expect((await cms.publishPolicy(ws.owner, 'free-delivery-change', { expected_version: 2, rules: changedDelivery })).status).toBe(409);
+
+    const unrelatedDocumentEdit = {
+      ...document,
+      contact: { ...document.contact, phone: '09171234567' },
+    };
+    expect((await cms.updateDocument(ws.owner, 'free-doc-unrelated', { version: 2, document: unrelatedDocumentEdit })).status).toBe(200);
+    const unrelatedPolicyEdit = { ...policy, rental: 'Updated rental details.', delivery: policy.delivery };
+    expect((await cms.publishPolicy(ws.owner, 'free-policy-unrelated', { expected_version: 2, rules: unrelatedPolicyEdit })).status).toBe(200);
+
+    await admin.query('UPDATE payment_method SET storefront_enabled = false WHERE tenant_id = $1', [ws.tenantId]);
+    const freeSettings = await cms.get(ws.owner);
+    expect(freeSettings.readiness).toMatchObject({
+      has_policy: true,
+      has_active_clothing: true,
+      has_storefront_payment_method: false,
+      has_contact: true,
+      ready: true,
+    });
+    expect((await cms.publish(ws.owner, 'free-publish', 3)).status).toBe(200);
   });
 
   it('keeps storefront addresses unique across workspaces', async () => {

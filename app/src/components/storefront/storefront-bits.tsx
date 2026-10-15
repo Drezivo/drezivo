@@ -103,11 +103,22 @@ export function StorefrontMiniPreview({ settings, theme }: { settings: Storefron
   );
 }
 
-export function ThemeSwatches({ value, onChange }: { value: StorefrontTheme; onChange: (theme: StorefrontTheme) => void }) {
+export function ThemeSwatches({
+  value,
+  onChange,
+  allowedThemes,
+  onLocked,
+}: {
+  value: StorefrontTheme;
+  onChange: (theme: StorefrontTheme) => void;
+  allowedThemes?: readonly StorefrontTheme[];
+  onLocked?: (theme: StorefrontTheme) => void;
+}) {
   return (
     <div role="radiogroup" aria-label="Storefront theme" className="grid grid-cols-2 gap-3 sm:grid-cols-4">
       {(Object.keys(STOREFRONT_THEMES) as StorefrontTheme[]).map((key) => {
         const palette = STOREFRONT_THEMES[key];
+        const locked = allowedThemes !== undefined && !allowedThemes.includes(key);
         const selected = value === key;
         return (
           <button
@@ -115,9 +126,11 @@ export function ThemeSwatches({ value, onChange }: { value: StorefrontTheme; onC
             type="button"
             role="radio"
             aria-checked={selected}
-            onClick={() => onChange(key)}
+            aria-disabled={locked || undefined}
+            onClick={() => (locked ? onLocked?.(key) : onChange(key))}
             className={cn(
               "rounded-lg border p-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dashboard-accent/40",
+              locked && "opacity-60",
               selected ? "border-dashboard-accent ring-1 ring-dashboard-accent" : "border-dashboard-border hover:border-dashboard-muted",
             )}
           >

@@ -7,6 +7,8 @@ import { ErrorState, Field, LoadingState, PageHeader, SaveBar, Section } from "@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { useRequestPlanUpgrade } from "@/components/billing/plan-upgrade-dialog";
+import { useVerifiedActorContext } from "@/components/shell/dashboard-access-gate";
 
 import { ImageField } from "./image-field";
 import { StorefrontMiniPreview, ThemeSwatches, storefrontUrl } from "./storefront-bits";
@@ -16,6 +18,8 @@ const orNull = (value: string): string | null => (value.trim() === "" ? null : v
 
 export function StorefrontDetailsPage() {
   const editor = useStorefrontEditor();
+  const actor = useVerifiedActorContext();
+  const requestUpgrade = useRequestPlanUpgrade();
   const branding = useDocumentDraft("branding");
   const contact = useDocumentDraft("contact");
   const [slug, setSlug] = useState("");
@@ -52,7 +56,12 @@ export function StorefrontDetailsPage() {
           </Section>
 
           <Section icon={Palette} title="Look" description="Pick a palette. Every palette is tested for readable contrast.">
-            <ThemeSwatches value={b.theme} onChange={(theme) => branding.update({ theme })} />
+            <ThemeSwatches
+              value={b.theme}
+              {...(actor ? { allowedThemes: actor.entitlements.features.storefront_themes } : {})}
+              onChange={(theme) => branding.update({ theme })}
+              onLocked={() => requestUpgrade("Blush and Noir storefront designs")}
+            />
             <div className="mt-5 grid gap-5 sm:grid-cols-[180px_minmax(0,1fr)]">
               <ImageField label="Logo" hint="Square, at least 400 px." aspect="aspect-square" fileId={b.logo_file_id} savedUrl={settings.media.logo_url} onChange={(id) => branding.update({ logo_file_id: id })} />
               <ImageField label="Cover photo" hint="Wide, at least 1600 × 900 px." fileId={b.cover_file_id} savedUrl={settings.media.cover_url} onChange={(id) => branding.update({ cover_file_id: id })} />

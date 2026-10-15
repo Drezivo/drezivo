@@ -25,6 +25,7 @@ describe('tenancy onboarding contracts', () => {
       expect(onboardingStatus.safeParse(status).success).toBe(true);
     }
     expect(onboardingStatus.safeParse('started').success).toBe(false);
+    expect(planCode.safeParse('free').success).toBe(true);
     expect(planCode.safeParse('starter').success).toBe(true);
     expect(planCode.safeParse('standard').success).toBe(true);
     expect(planCode.safeParse('professional').success).toBe(false);
@@ -41,9 +42,29 @@ describe('tenancy onboarding contracts', () => {
       currency: 'PHP',
       trial_days: 14,
       limits: { active_garments: 125, frontdesk_seats: 0 },
+      features: {
+        fittings: true,
+        storefront_reservations: true,
+        storefront_payments: true,
+        storefront_themes: ['ivory', 'sage', 'blush', 'noir'],
+      },
     };
     const catalog = {
       plans: [
+        {
+          code: 'free',
+          name: 'Free',
+          monthly_price_minor: 0,
+          currency: 'PHP',
+          trial_days: 0,
+          limits: { active_garments: 20, frontdesk_seats: 0 },
+          features: {
+            fittings: false,
+            storefront_reservations: false,
+            storefront_payments: false,
+            storefront_themes: ['ivory', 'sage'],
+          },
+        },
         starterPlan,
         {
           code: 'standard',
@@ -52,12 +73,18 @@ describe('tenancy onboarding contracts', () => {
           currency: 'PHP',
           trial_days: 14,
           limits: { active_garments: 300, frontdesk_seats: 3 },
+          features: {
+            fittings: true,
+            storefront_reservations: true,
+            storefront_payments: true,
+            storefront_themes: ['ivory', 'sage', 'blush', 'noir'],
+          },
         },
       ],
     };
     expect(publicPlanCatalogResponse.safeParse(catalog).success).toBe(true);
     expect(
-      publicPlanCatalogResponse.safeParse({ plans: [{ ...catalog.plans[0], monthly_price_minor: 0 }] })
+      publicPlanCatalogResponse.safeParse({ plans: [{ ...catalog.plans[0], monthly_price_minor: -1 }] })
         .success,
     ).toBe(false);
     expect(

@@ -25,6 +25,7 @@ import { boundStoredObjectBody } from '../../integrations/storage/object-storage
 import type { ObjectStorage } from '../../integrations/storage/object-storage.js';
 import { objectStorage } from '../../integrations/storage/s3-compatible-object-storage.js';
 import { DependencyUnavailableError, NotFoundError, StateConflictError } from '../../shared/errors.js';
+import { resolveTenantEntitlements } from '../entitlements/entitlements.service.js';
 import { toDocument } from '../storefront-cms/storefront-cms.service.js';
 import { closedReason, readShopClosures } from './shop-closures.js';
 import { storefrontMediaUrlMapper, type StorefrontMediaUrlMapper } from './storefront-media.js';
@@ -68,6 +69,7 @@ export class PublicStorefrontService {
   async getStorefront(slug: string, preview: PreviewGrant | null = null): Promise<PublicStorefront> {
     const result = await withPublishedStore(slug, async (client, store) => {
       const core = await this.requireCore(client, store);
+      const entitlements = await resolveTenantEntitlements(client, store.tenantId);
       const document = toDocument(core);
       const businessHours = branchOperatingHours.safeParse(core.operating_hours);
       if (!businessHours.success) {
@@ -75,7 +77,8 @@ export class PublicStorefrontService {
       }
       // One pooled connection runs queries one at a time, so these are sequential on purpose.
       const policy = await readEffectivePolicy(client, store);
-      const paymentMethods = await readStorefrontPaymentMethods(client, store.tenantId);
+      const storefrontReservations = entitlements.features.storefront_reservations;
+      const paymentMethods = storefrontReservations ? await readStorefrontPaymentMethods(client, store.tenantId) : [];
       const fitting = await readFittingConfig(client, store);
       const categories = await readPublicCategories(client, store.tenantId);
       const featuredRows = document.content.featured_product_ids.length > 0
@@ -101,7 +104,7 @@ export class PublicStorefrontService {
       ], { kind: 'public', slug: core.slug, preview: preview !== null });
       const urlOf = (id: string | null): string | null => (id ? (urls.get(id) ?? null) : null);
       const policyImageUrls = imageTerms ? rules.image_file_ids.flatMap((id) => urlOf(id) ?? []) : [];
-      const fittingOpen = fitting !== null && fitting.enabled && document.checkout.fitting_requests;
+      const fittingOpen = entitlements.features.fittings && fitting !== null && fitting.enabled && document.checkout.fitting_requests;
 
       return publicStorefront.parse({
         slug: core.slug,
@@ -131,19 +134,21 @@ export class PublicStorefrontService {
           deposit: typedTerms?.deposit ?? '',
           cancellation: typedTerms?.cancellation ?? '',
           damage: typedTerms?.damage ?? null,
-          delivery_notes: rules?.delivery.notes ?? null,
+          delivery_notes: storefrontReservations ? rules?.delivery.notes ?? null : null,
           privacy_notice: rules?.privacy_notice ?? '',
         },
         fulfillment: {
           pickup: true,
-          delivery: rules?.delivery.enabled ?? false,
+          delivery: storefrontReservations && (rules?.delivery.enabled ?? false),
           delivery_fee_minor: '0',
         },
         payment_methods: paymentMethods,
         booking_open: store.bookingOpen,
-        reservations_open: store.bookingOpen && document.checkout.reservation_requests,
+        reservations_open: store.bookingOpen && entitlements.features.storefront_reservations && document.checkout.reservation_requests,
         checkout: {
-          requirements: document.checkout.requirements,
+          requirements: storefrontReservations
+            ? document.checkout.requirements
+            : { phone: 'hidden', social_handle: 'hidden', event_date: 'hidden' },
           handover_time: document.checkout.handover_time,
           min_notice_days: document.checkout.min_notice_days,
           max_rental_days: document.checkout.max_rental_days,
@@ -270,8 +275,9 @@ export class PublicStorefrontService {
   async getFittingSlots(slug: string, date: string, preview: PreviewGrant | null = null): Promise<FittingSlotsResponse> {
     const result = await withPublishedStore(slug, async (client, store) => {
       const core = await this.requireCore(client, store);
+      const entitlements = await resolveTenantEntitlements(client, store.tenantId);
       const fitting = await readFittingConfig(client, store);
-      if (!fitting?.enabled || !toDocument(core).checkout.fitting_requests) return null;
+      if (!entitlements.features.fittings || !fitting?.enabled || !toDocument(core).checkout.fitting_requests) return null;
       const slots = await readOpenFittingSlots(client, store, date);
       return fittingSlotsResponse.parse({
         date,

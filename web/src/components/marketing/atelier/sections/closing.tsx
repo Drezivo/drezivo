@@ -32,7 +32,7 @@ export function FaqTeaser({ faqs }: { faqs: readonly MarketingFaq[] }) {
   );
 }
 
-export function ClosingCall({ signUpUrl, trialDays }: { signUpUrl: string; trialDays: number }) {
+export function ClosingCall({ signUpUrl }: { signUpUrl: string }) {
   return (
     <section data-header="dark" className="relative overflow-hidden bg-atelier-night py-at-section text-atelier-paper">
       <div aria-hidden="true" className="at-closing-glow" />
@@ -43,7 +43,7 @@ export function ClosingCall({ signUpUrl, trialDays }: { signUpUrl: string; trial
           <span className="block overflow-hidden"><span data-at-line className="block italic">back to yourself.{' '}</span></span>
         </h2>
         <div data-at-reveal="up" className="at-cta-row mx-auto mt-10 max-w-[24rem] sm:mt-12 sm:max-w-none sm:justify-center">
-          <a href={signUpUrl} className="at-button at-button-light">Start your {trialDays}-day free trial</a>
+          <a href={signUpUrl} className="at-button at-button-light">Start with Free</a>
           <Link href="/pricing" className="at-button at-button-ghost-dark">See pricing</Link>
         </div>
       </div>

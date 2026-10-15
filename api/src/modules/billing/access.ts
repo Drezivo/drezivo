@@ -20,11 +20,12 @@ import {
  * `grace_ends_at` is repurposed as the operator-granted "read-only until" extension.
  */
 export interface AccessSubscription {
+  plan_code?: string;
   status: SubscriptionStatus;
   trial_ends_at: Date | null;
   /** Operator-granted read-only extension end (stored in `subscription.grace_ends_at`). */
   grace_ends_at: Date | null;
-  current_period_end: Date;
+  current_period_end: Date | null;
   pending_payment: boolean;
 }
 
@@ -36,10 +37,27 @@ export function accessOf(subscription: AccessSubscription, now: Date): Subscript
     return locked('cancelled', pending);
   }
 
+  if (subscription.plan_code === 'free') {
+    if (subscription.status === 'active' && subscription.trial_ends_at === null && subscription.current_period_end === null) {
+      return {
+        level: 'full',
+        reason: 'free',
+        ends_at: null,
+        days_left: null,
+        pending_payment: pending,
+        storefront_online: true,
+        storefront_offline_at: null,
+        read_only_until: null,
+      };
+    }
+    return locked('payment_overdue', pending);
+  }
+
   const trialing = subscription.status === 'trialing';
   // Bootstrap writes trial_ends_at and current_period_end as the same instant; the fallback only
   // guards a malformed trialing row, which must still resolve to a definite state.
   const end = trialing ? (subscription.trial_ends_at ?? subscription.current_period_end) : subscription.current_period_end;
+  if (!end) return locked(trialing ? 'trial_ended' : 'payment_overdue', pending);
   const nowMs = now.getTime();
   const endMs = end.getTime();
 
