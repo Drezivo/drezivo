@@ -1705,8 +1705,7 @@ function PhoneCalendarFilters({
         side="bottom"
         className="max-h-[85svh] gap-0 overflow-y-auto rounded-t-2xl border-t border-dashboard-border bg-dashboard-canvas p-0 pb-[env(safe-area-inset-bottom)] text-dashboard-navy"
       >
-        <div className="mx-auto mt-2.5 h-1 w-10 rounded-full bg-dashboard-border" aria-hidden="true" />
-        <div className="flex items-center justify-between px-5 pb-2 pt-4">
+        <div className="flex items-center justify-between px-5 pb-2 pt-1">
           <SheetTitle className="text-base text-dashboard-navy">Filter the calendar</SheetTitle>
           {activeCount > 0 ? (
             <button
