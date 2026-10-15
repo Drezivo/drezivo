@@ -451,7 +451,7 @@ describe('Dashboard overview API', async () => {
       );
 
       const planResult = await client.query<{ id: string }>(
-        `SELECT id FROM plan WHERE active = true ORDER BY code LIMIT 1`,
+        `SELECT id FROM plan WHERE code = 'standard' AND active = true ORDER BY version DESC LIMIT 1`,
       );
       const planId = requireId(planResult.rows[0]?.id, 'active plan');
       await client.query(

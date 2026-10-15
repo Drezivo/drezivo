@@ -197,11 +197,10 @@ export async function changeTrialPlan(
       [input.principalId],
     );
     const account = accountResult.rows[0];
-    if (!account || account.current_owned_tenant_id !== input.tenantId) {
-      throw new StateConflictError('Workspace trial eligibility is unavailable.');
-    }
     await transaction.setTenantContext(input.tenantId);
 
+    // Authorization before eligibility: a non-owner is refused as such (403), never told about
+    // the owner's account state.
     const membership = await client.query<{
       clerk_user_id: string;
       role: 'owner' | 'frontdesk';
@@ -219,6 +218,9 @@ export async function changeTrialPlan(
       membership.rows[0]?.status !== 'active'
     ) {
       throw new ForbiddenError('Only the tenant owner can change the trial plan.');
+    }
+    if (!account || account.current_owned_tenant_id !== input.tenantId) {
+      throw new StateConflictError('Workspace trial eligibility is unavailable.');
     }
 
     const claim = await claimTenantIdempotency(client, {

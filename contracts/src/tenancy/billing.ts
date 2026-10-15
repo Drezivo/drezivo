@@ -161,7 +161,11 @@ export type BillingOverview = z.infer<typeof billingOverview>;
 /** POST /billing/payments (owner only, Idempotency-Key required). One pending payment at a time. */
 export const submitSubscriptionPaymentRequest = z
   .object({
-    plan_code: planCode,
+    /**
+     * Plan the payment activates. Optional so a renewal (and any client built before Free
+     * upgrades) keeps working: the server defaults it to the workspace's current plan.
+     */
+    plan_code: planCode.optional(),
     payment_method_id: z.string().uuid(),
     reference: subscriptionPaymentReference,
     proof_file_id: fileObjectId,

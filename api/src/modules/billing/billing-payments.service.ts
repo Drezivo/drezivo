@@ -168,7 +168,7 @@ export function submitSubscriptionPayment(
           throw new PaymentAlreadyPendingError('A payment is already waiting for review.');
         }
         const currentPlan = await resolveTenantEntitlements(client, actor.tenantId);
-        const targetPlan = await resolvePlanEntitlements(client, request.plan_code);
+        const targetPlan = await resolvePlanEntitlements(client, request.plan_code ?? currentPlan.planCode);
         if (targetPlan.planCode === 'free') {
           throw new ValidationError('Choose Starter or Standard to submit an upgrade payment.');
         }

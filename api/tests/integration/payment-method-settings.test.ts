@@ -30,7 +30,7 @@ describe('payment method settings', async () => {
   const { config } = await import('../../src/config/index.js');
   const { updatePaymentMethodSettings, getPaymentMethodSettings, updatePaymentRenterSteps } =
     await import('../../src/modules/payment-methods/payment-methods.service.js');
-  const { createTestMembership, createTestTenant } = await import('./helpers/factories.js');
+  const { createTestMembership, createTestSubscription, createTestTenant } = await import('./helpers/factories.js');
 
   beforeAll(async () => {
     await migrateTestDatabase(adminUrl);
@@ -48,6 +48,8 @@ describe('payment method settings', async () => {
   async function seed() {
     const principalId = 'user_payment_settings';
     const tenant = await createTestTenant({ clerkOrgId: 'org_payment_settings' });
+    // Storefront payment methods are a paid-plan feature.
+    await createTestSubscription(tenant.id);
     const membershipId = await createTestMembership(tenant.id, principalId, 'owner');
     const branchId = await withTenantTransaction(tenant.id, principalId, async (client) => {
       const branch = await client.query<{ id: string }>(
