@@ -31,8 +31,13 @@ const SheetContent = forwardRef<
   React.ElementRef<typeof SheetPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof SheetPrimitive.Content> & {
     side?: "top" | "right" | "bottom" | "left";
+    /**
+     * Phones present every sheet as a bottom sheet, except navigation drawers, which keep
+     * sliding in from their side ("side").
+     */
+    phoneLayout?: "bottom" | "side";
   }
->(function SheetContent({ side = "right", className, children, ...props }, ref) {
+>(function SheetContent({ side = "right", phoneLayout = "bottom", className, children, ...props }, ref) {
   const contentRef = useRef<HTMLDivElement | null>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
   const setContentRef = useCallback(
@@ -62,9 +67,12 @@ const SheetContent = forwardRef<
           className
         )}
         data-side={side}
+        data-phone-layout={phoneLayout}
         {...props}
       >
-        <SheetGrabber sheet={contentRef} onDismiss={() => closeRef.current?.click()} />
+        {phoneLayout === "bottom" ? (
+          <SheetGrabber sheet={contentRef} onDismiss={() => closeRef.current?.click()} />
+        ) : null}
         {children}
         <SheetPrimitive.Close ref={closeRef} className="absolute right-4 top-4 rounded-md p-2 text-dashboard-muted opacity-80 transition-opacity hover:bg-dashboard-active hover:text-dashboard-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dashboard-accent/30 disabled:pointer-events-none">
           <X className="h-4 w-4" />

@@ -86,6 +86,12 @@ const Sidebar = forwardRef<HTMLElement, React.HTMLAttributes<HTMLElement>>(funct
       <Sheet open={openMobile} onOpenChange={setOpenMobile}>
         <SheetContent
           side="left"
+          phoneLayout="side"
+          // Tapping a page closes the drawer straight away, so it slides out while the page loads
+          // instead of staying open over the new page.
+          onClickCapture={(event: React.MouseEvent<HTMLDivElement>) => {
+            if ((event.target as HTMLElement).closest("a[href]")) setOpenMobile(false);
+          }}
           className={cn(
             "w-[256px] gap-0 border-r border-dashboard-border bg-dashboard-surface p-0",
             className
