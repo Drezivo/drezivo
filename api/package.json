@@ -21,6 +21,7 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx scripts/migrate.ts",
     "db:migrate:status": "tsx scripts/migrate.ts --status",
+    "backup:database": "tsx scripts/backup-database.ts",
     "seed:clothing:local": "tsx scripts/seed-local-clothing.ts",
     "db:studio": "drizzle-kit studio",
     "prepare": "husky"

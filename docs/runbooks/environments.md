@@ -196,6 +196,28 @@ naming convention) once TRD §12's "remaining selection" of hosting plans/region
   reminder that the contract version in use is part of what "which environment is running what"
   means.
 
+### GitHub Actions production database backup
+
+The isolated `database-backup-production` GitHub Environment owns the backup-only credentials. It
+is restricted to `main`; these values are not API or worker environment variables.
+
+- `SUPABASE_BACKUP_DATABASE_URL` — GitHub Environment secret containing a connection for
+  `drezivo_backup_reader`, never `postgres`, `DATABASE_URL_DIRECT`, or a runtime role. Use the
+  shared Session pooler on port 5432 for an IPv4-only GitHub runner; the backup workflow checks the
+  project reference and role before reading data.
+- `SUPABASE_PROJECT_REF` — GitHub Environment variable used to bind the URL to the intended
+  Supabase project.
+- `R2_ACCOUNT_ID` and `R2_BACKUP_BUCKET` — GitHub Environment variables for the dedicated private
+  backup bucket.
+- `R2_ACCESS_KEY_ID` and `R2_SECRET_ACCESS_KEY` — GitHub Environment secrets for a separate R2
+  token scoped to that bucket.
+- `AGE_RECIPIENT` — GitHub Environment variable containing the public age encryption recipient.
+  The matching private identity stays offline and is never stored in GitHub.
+
+Setup, grants, retention behavior, and restore steps are in
+[`database-backups.md`](database-backups.md). `DATABASE_URL_DIRECT` remains a privileged
+administrative credential and is not used by the automated backup.
+
 ## `app` (Next.js staff/business dashboard)
 
 - `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` — client-side Clerk key for staff sign-in and

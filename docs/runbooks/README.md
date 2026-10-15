@@ -23,6 +23,7 @@ way a contract-affecting change with no `@drezivo/contracts` PR is incomplete
 | File                     | Use when                                                                                                             |
 | ------------------------ | -------------------------------------------------------------------------------------------------------------------- |
 | `environments.md`        | You need to know what an environment variable is for, or which environment (dev/staging/production) you're touching. |
+| `database-backups.md`    | You need to configure, verify, retain, or manually restore encrypted production database snapshots and test restore. |
 | `release.md`             | You're cutting a release of `contracts`, `api`, `app`, or `web`.                                                     |
 | `deploy.md`              | You're deploying, or a deploy just failed, or you need to know what "graceful shutdown" means for a given surface.   |
 | `migrations.md`          | You're running or reviewing a database migration.                                                                    |
