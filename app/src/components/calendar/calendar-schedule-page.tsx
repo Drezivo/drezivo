@@ -1370,18 +1370,21 @@ function MonthGrid({
   return (
     <Card
       role="region"
-      aria-label="Monthly schedule grid, horizontally scrollable on narrow screens"
+      aria-label="Monthly schedule grid"
       tabIndex={0}
-      className="gap-0 overflow-x-auto py-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dashboard-accent"
+      className="gap-0 py-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dashboard-accent sm:overflow-x-auto"
     >
-      <div className="min-w-[700px]">
+      {/* Phones see the whole month at once (date + activity dots, tap opens the day); the chip
+          previews and the minimum width that needs sideways scrolling start at tablet width. */}
+      <div className="sm:min-w-[700px]">
         <div className="border-b border-dashboard-border bg-dashboard-surface px-3 py-2 text-sm font-semibold text-dashboard-navy">
           {formatCalendarDate(cursor, { month: "long", year: "numeric" })}
         </div>
         <div className="grid grid-cols-7 border-b border-dashboard-border bg-dashboard-surface">
           {weekdays.map((day) => (
             <div key={day} className="p-2 text-center text-xs font-semibold text-dashboard-muted">
-              {day}
+              <span className="sm:hidden" aria-hidden="true">{day.slice(0, 1)}</span>
+              <span className="hidden sm:inline">{day}</span>
             </div>
           ))}
         </div>
@@ -1396,7 +1399,7 @@ function MonthGrid({
               <div
                 key={dateKey}
                 className={cn(
-                  "min-h-32 border-b border-r border-dashboard-border p-1.5 sm:min-h-36 sm:p-2",
+                  "min-h-14 border-b border-r border-dashboard-border p-0.5 sm:min-h-36 sm:p-2",
                   !inMonth && "bg-dashboard-canvas/50",
                   dateKey === todayKey && "bg-dashboard-active/40",
                   closedReason && "bg-dashboard-canvas/75"
@@ -1406,20 +1409,25 @@ function MonthGrid({
                   type="button"
                   onClick={() => onOpenDay(dateKey)}
                   className={cn(
-                    "mb-1 flex h-11 min-w-11 items-center justify-center rounded-full px-1 text-xs font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dashboard-accent",
+                    "mx-auto flex h-11 w-full min-w-11 flex-col items-center justify-center gap-1 rounded-xl px-1 text-sm font-medium tabular-nums focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dashboard-accent sm:mx-0 sm:mb-1 sm:w-auto sm:flex-row sm:rounded-full sm:text-xs",
                     dateKey === todayKey ? "bg-dashboard-primary text-dashboard-primary-ink" : "text-dashboard-navy",
                     !inMonth && "text-dashboard-muted"
                   )}
                   aria-label={`Open ${formatCalendarDate(dateKey, { month: "long", day: "numeric", year: "numeric" })} agenda`}
                 >
                   {formatCalendarDate(dateKey, { day: "numeric" })}
+                  <span aria-hidden="true" className="flex h-1 items-center gap-0.5 sm:hidden">
+                    {dayActivities.slice(0, 3).map((activity) => (
+                      <span key={activity.id} className={cn("h-1 w-1 rounded-full", dateKey === todayKey ? "bg-current" : "bg-dashboard-accent")} />
+                    ))}
+                  </span>
                 </button>
                 {closedReason ? (
-                  <div className="mb-1 rounded border border-dashboard-border bg-dashboard-canvas px-1.5 py-1 text-[10px] font-semibold text-dashboard-muted">
+                  <div className="mb-1 hidden rounded border border-dashboard-border bg-dashboard-canvas px-1.5 py-1 sm:block text-[10px] font-semibold text-dashboard-muted">
                     Closed{businessHours.specialClosedDates[dateKey] ? ` · ${businessHours.specialClosedDates[dateKey]}` : ""}
                   </div>
                 ) : null}
-                <div className="space-y-1">
+                <div className="hidden space-y-1 sm:block">
                   {preview.map((activity) => (
                     <button
                       key={activity.id}

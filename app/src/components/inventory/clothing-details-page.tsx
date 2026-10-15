@@ -399,7 +399,7 @@ function DetailContent({
           {item.variants.length === 0 ? (
             <EmptySection message="No variants are configured for this clothing style." />
           ) : (
-            <div className="overflow-x-auto rounded-xl border border-dashboard-border">
+            <div className="sm:overflow-x-auto sm:rounded-xl sm:border sm:border-dashboard-border">
               <Table>
                 <TableHeader>
                   <TableRow className="bg-dashboard-active/40 hover:bg-dashboard-active/40">
@@ -450,7 +450,7 @@ function DetailContent({
             {allAssets.length === 0 ? (
               <EmptySection message="No physical pieces are attached to this clothing style in the active branch." />
             ) : (
-              <div className="overflow-x-auto rounded-xl border border-dashboard-border">
+              <div className="sm:overflow-x-auto sm:rounded-xl sm:border sm:border-dashboard-border">
                 <Table>
                   <TableHeader>
                     <TableRow className="bg-dashboard-active/40 hover:bg-dashboard-active/40">

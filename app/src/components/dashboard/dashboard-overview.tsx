@@ -322,7 +322,7 @@ export function DashboardOverview() {
               </CardAction>
             </CardHeader>
             <CardContent className="p-0">
-              <div className="w-full overflow-x-auto">
+              <div className="w-full sm:overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow className="hover:bg-transparent">
@@ -415,7 +415,7 @@ export function DashboardOverview() {
               </CardAction>
             </CardHeader>
             <CardContent className="p-0">
-              <div className="w-full overflow-x-auto">
+              <div className="w-full sm:overflow-x-auto">
                 <Table className="min-w-[680px]">
                   <TableHeader>
                     <TableRow className="hover:bg-transparent">
