@@ -208,7 +208,7 @@ describe('Free plan upgrade', async () => {
 
     const refused = await request(app)
       .post('/api/v1/subscription/plan')
-      .set('Idempotency-Key', 'fu-no-second-trial-1')
+      .set('Idempotency-Key', 'fu-second-trial')
       .send({ plan_code: 'standard' });
     expect(refused.status).toBe(409);
     expect(bodyOf(refused).error?.message).toContain('Submit a plan payment');
@@ -293,7 +293,7 @@ describe('Free plan upgrade', async () => {
     const app = createApp();
     const submitted = await request(app)
       .post('/api/v1/billing/payments')
-      .set('Idempotency-Key', 'fu-rejected-pay-1')
+      .set('Idempotency-Key', 'fu-rejected-pay')
       .send({ plan_code: 'standard', reference: 'GC-1', ...(await paymentInputs(ws.tenantId)) });
     const paymentId = (bodyOf(submitted).data as { payment: { id: string } }).payment.id;
     await admin.query(
