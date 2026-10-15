@@ -32,6 +32,8 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { createDrezivoApiClient, DrezivoApiError } from "@/lib/drezivo-api";
 import { mediaImageSrcSet } from "@/lib/media-image-srcset";
+import { useVerifiedActorContext } from "@/components/shell/dashboard-access-gate";
+import { useRequestPlanUpgrade } from "@/components/billing/plan-upgrade-dialog";
 import { detectImageType, STOREFRONT_IMAGE_MAX_BYTES, storefrontImageProblem, uploadStorefrontImage, type ImageUploadPurpose, type UploadIntent } from "@/lib/storefront-assets";
 import { useSubmitGuard } from "@/lib/use-submit-guard";
 
@@ -61,6 +63,9 @@ const isOnline = (method: PaymentMethodSettingsItem) => method.rail !== "cash";
 
 export function PaymentMethodSettingsPage() {
   const { getToken } = useAuth();
+  const actor = useVerifiedActorContext();
+  const storefrontLocked = actor?.entitlements.features.storefront_payments === false;
+  const requestUpgrade = useRequestPlanUpgrade();
   const [methods, setMethods] = useState<PaymentMethodSettingsItem[]>([]);
   const [renterSteps, setRenterSteps] = useState<PaymentRenterStepsSetting | null>(null);
   const [loading, setLoading] = useState(true);
@@ -129,7 +134,14 @@ export function PaymentMethodSettingsPage() {
         </div>
       ) : null}
 
-      {adding ? <AddPaymentMethodCard onCancel={() => setAdding(false)} onCreated={(created) => { upsert(created); setAdding(false); }} /> : null}
+      {storefrontLocked ? (
+        <p className="mb-4 rounded-lg border border-dashboard-border bg-dashboard-active/40 px-4 py-3 text-sm text-dashboard-muted">
+          Free includes payment methods for staff-created reservations. Storefront payment options are available on paid plans. {" "}
+          <button type="button" className="font-semibold text-dashboard-accent underline underline-offset-2" onClick={() => requestUpgrade("storefront payment methods")}>Upgrade to unlock</button>
+        </p>
+      ) : null}
+
+      {adding ? <AddPaymentMethodCard storefrontLocked={storefrontLocked} onCancel={() => setAdding(false)} onCreated={(created) => { upsert(created); setAdding(false); }} /> : null}
 
       {loading ? (
         <div className="flex items-center gap-2 py-8 text-sm text-dashboard-muted">
@@ -138,7 +150,7 @@ export function PaymentMethodSettingsPage() {
       ) : (
         <div className="grid gap-4">
           {ordered.map((method) => (
-            <PaymentMethodEditor key={method.id} method={method} onSaved={upsert} />
+            <PaymentMethodEditor key={method.id} method={method} storefrontLocked={storefrontLocked === true} onSaved={upsert} />
           ))}
         </div>
       )}
@@ -330,7 +342,7 @@ function SharedRenterStepsCard({ setting, onSaved }: { setting: PaymentRenterSte
   );
 }
 
-function AddPaymentMethodCard({ onCancel, onCreated }: { onCancel: () => void; onCreated: (created: PaymentMethodSettingsItem) => void }) {
+function AddPaymentMethodCard({ storefrontLocked, onCancel, onCreated }: { storefrontLocked: boolean; onCancel: () => void; onCreated: (created: PaymentMethodSettingsItem) => void }) {
   const { getToken } = useAuth();
   const guard = useSubmitGuard();
   const listId = useId();
@@ -353,8 +365,8 @@ function AddPaymentMethodCard({ onCancel, onCreated }: { onCancel: () => void; o
           {
             name: trimmed,
             rail,
-            // Online methods are meant for renters; the storefront still hides one until it is ready.
-            storefront_enabled: true,
+            // Free keeps new methods staff-only; renters cannot pay through a Free storefront.
+            storefront_enabled: !storefrontLocked,
             destination: { account_name: null, account_number: null, instructions: null },
             qr_file_id: null,
             presentation: "details",
@@ -455,8 +467,9 @@ function PresentationChoice({ value, onChange }: { value: PaymentMethodPresentat
   );
 }
 
-function PaymentMethodEditor({ method, onSaved }: { method: PaymentMethodSettingsItem; onSaved: (saved: PaymentMethodSettingsItem) => void }) {
+function PaymentMethodEditor({ method, storefrontLocked, onSaved }: { method: PaymentMethodSettingsItem; storefrontLocked: boolean; onSaved: (saved: PaymentMethodSettingsItem) => void }) {
   const { getToken } = useAuth();
+  const requestUpgrade = useRequestPlanUpgrade();
   const saveGuard = useSubmitGuard();
   const removeGuard = useSubmitGuard();
   const [active, setActive] = useState(method.active);
@@ -612,7 +625,8 @@ function PaymentMethodEditor({ method, onSaved }: { method: PaymentMethodSetting
             checked={!staffOnly && storefrontEnabled}
             disabled={staffOnly}
             label="Available on storefront"
-            description={staffOnly ? "Cash cannot secure an online storefront reservation." : "Shown to renters once the details or file are set."}
+            description={staffOnly ? "Cash cannot secure an online storefront reservation." : storefrontLocked ? "Upgrade to enable renter-facing payment methods. This method remains available to staff." : "Shown to renters once the details or file are set."}
+            onLocked={() => requestUpgrade("storefront payment methods")}
             onChange={(checked) => {
               setStorefrontEnabled(checked);
               markDirty();
@@ -943,17 +957,19 @@ function ToggleRow({
   disabled = false,
   label,
   description,
+  onLocked,
   onChange,
 }: {
   checked: boolean;
   disabled?: boolean;
   label: string;
   description: string;
+  onLocked?: (() => void) | undefined;
   onChange: (checked: boolean) => void;
 }) {
   return (
     <label className="flex items-start gap-3 rounded-lg border border-dashboard-border p-3">
-      <input type="checkbox" className="mt-1" checked={checked} disabled={disabled} onChange={(event) => onChange(event.target.checked)} />
+      <input type="checkbox" className="mt-1" checked={checked} disabled={disabled} onChange={(event) => (onLocked ? onLocked() : onChange(event.target.checked))} />
       <span>
         <span className="block text-sm font-medium text-dashboard-navy">{label}</span>
         <span className="mt-1 block text-xs leading-5 text-dashboard-muted">{description}</span>

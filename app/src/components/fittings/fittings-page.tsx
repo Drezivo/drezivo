@@ -9,6 +9,7 @@ import {
   Clock3,
   Info,
   Plus,
+  Ruler,
   Search,
   Settings2,
   Shirt,
@@ -40,6 +41,8 @@ import { createDrezivoApiClient, DrezivoApiError } from "@/lib/drezivo-api";
 import { useDebouncedValue } from "@/lib/use-debounced-value";
 import { cn } from "@/lib/utils";
 import { mediaImageSrcSet } from "@/lib/media-image-srcset";
+import { useVerifiedActorContext } from "@/components/shell/dashboard-access-gate";
+import { useRequestPlanUpgrade } from "@/components/billing/plan-upgrade-dialog";
 
 import {
   FITTING_PAYMENT_CLASSES,
@@ -93,6 +96,9 @@ function parseFittingDateFilter(value: string | null): FittingDateFilter {
 export function FittingsPage() {
   const { getToken, isLoaded, isSignedIn } = useAuth();
   const searchParams = useSearchParams();
+  const actor = useVerifiedActorContext();
+  const requestUpgrade = useRequestPlanUpgrade();
+  const planLocked = actor?.entitlements.features.fittings === false;
   const [query, setQuery] = useState("");
   const debouncedQuery = useDebouncedValue(query.trim());
   const isSearchPending = query.trim() !== debouncedQuery;
@@ -255,6 +261,19 @@ export function FittingsPage() {
   };
 
   const goPrevious = () => setPageIndex((current) => Math.max(0, current - 1));
+
+  if (planLocked) {
+    return (
+      <main className="flex min-h-full items-center justify-center bg-dashboard-canvas px-4 py-12">
+        <section className="w-full max-w-xl rounded-2xl border border-dashboard-border bg-dashboard-surface p-7 text-center shadow-sm sm:p-9">
+          <Ruler className="mx-auto h-9 w-9 text-dashboard-accent" aria-hidden="true" />
+          <h1 className="mt-4 font-display text-3xl text-dashboard-navy">Fittings are part of a paid plan</h1>
+          <p className="mt-3 text-sm leading-6 text-dashboard-muted">Upgrade to manage fitting appointments in your workspace and accept fitting requests from your storefront.</p>
+          <Button type="button" className="mt-6" aria-haspopup="dialog" onClick={() => requestUpgrade("Fitting management")}>Upgrade to unlock</Button>
+        </section>
+      </main>
+    );
+  }
 
   return (
     <div className="min-h-[calc(100svh-4.5rem)] overflow-x-hidden bg-dashboard-canvas px-3 py-5 sm:px-6 sm:py-6 lg:px-8">

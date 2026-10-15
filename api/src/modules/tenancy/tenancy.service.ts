@@ -6,6 +6,7 @@ import {
   ForbiddenError,
   TenantCancelledError,
   TenantRestrictedError,
+  StateConflictError,
 } from '../../shared/errors.js';
 import {
   hasActiveTenantOwnerMembership,
@@ -13,6 +14,7 @@ import {
   type ResolvedActorContext,
 } from './tenancy.repository.js';
 import { toWorkspaceList } from './tenancy.dto.js';
+import type { PlanFeatureKey } from '../entitlements/entitlements.service.js';
 
 export async function getWorkspaces(input: {
   principalId: string;
@@ -82,6 +84,22 @@ export function requireTenantAction(action: TenantAction): RequestHandler {
     } catch (error) {
       next(error);
     }
+  };
+}
+
+/** Shared server-side feature check for tenant routes; UI visibility is never authorization. */
+export function requirePlanFeature(feature: PlanFeatureKey): RequestHandler {
+  return (req, _res, next): void => {
+    const features = req.tenantContext?.actorContext.entitlements.features;
+    if (!features) {
+      next(new StateConflictError('Workspace entitlement state is unavailable.'));
+      return;
+    }
+    if (!features[feature]) {
+      next(new StateConflictError('Upgrade your plan to unlock this feature.'));
+      return;
+    }
+    next();
   };
 }
 

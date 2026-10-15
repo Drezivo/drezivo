@@ -7,6 +7,7 @@ import {
   type PermissionCode,
   type PublishStorefrontPolicyRequest,
   type StorefrontDocument,
+  type StorefrontPolicyRules,
   type StorefrontPreviewLink,
   type StorefrontReadiness,
   type StorefrontSettings,
@@ -26,6 +27,7 @@ import {
   ValidationError,
 } from '../../shared/errors.js';
 import { runIdempotentCommand, type CommandResult } from '../../shared/idempotent-command.js';
+import { resolveTenantEntitlements } from '../entitlements/entitlements.service.js';
 import { enqueueReplacedFileObjectCleanup } from '../files/file-object-cleanup.repository.js';
 import {
   appendSettingsAudit,
@@ -83,6 +85,28 @@ export class StorefrontCmsService {
       const previousDocument = toDocument(row);
       // Lock tenant settings after the storefront row so cross-page contact sync uses one lock order.
       await readTenantSettings(client, context.tenantId, true);
+      const entitlements = await resolveTenantEntitlements(client, context.tenantId);
+      if (!entitlements.features.storefront_themes.includes(request.document.branding.theme)) {
+        throw new StateConflictError('Upgrade your plan to use this storefront design.');
+      }
+      if (
+        request.document.checkout.fitting_requests !== previousDocument.checkout.fitting_requests &&
+        !entitlements.features.fittings
+      ) {
+        throw new StateConflictError('Upgrade your plan to unlock storefront fitting requests.');
+      }
+      if (
+        request.document.checkout.reservation_requests !== previousDocument.checkout.reservation_requests &&
+        !entitlements.features.storefront_reservations
+      ) {
+        throw new StateConflictError('Upgrade your plan to unlock online reservations.');
+      }
+      if (
+        !entitlements.features.storefront_reservations &&
+        !sameCheckoutRequirements(previousDocument.checkout.requirements, request.document.checkout.requirements)
+      ) {
+        throw new StateConflictError('Upgrade your plan to change renter checkout requirements.');
+      }
       await this.assertReferencesBelongToWorkspace(client, context.tenantId, request.document);
       await updateStorefrontDocument(client, {
         tenantId: context.tenantId,
@@ -154,10 +178,11 @@ export class StorefrontCmsService {
       if (row.status === 'suspended') throw new StateConflictError('This storefront is suspended by Drezivo support.');
       if (row.status === 'published') return null;
       const readiness = await this.readiness(client, context.tenantId, row, await readCurrentPolicy(client, context.tenantId, row.id));
+      const entitlements = await resolveTenantEntitlements(client, context.tenantId);
       const missing = [
         !readiness.has_policy && 'a rental policy',
         !readiness.has_active_clothing && 'at least one active clothing item',
-        !readiness.has_storefront_payment_method && 'a storefront payment method',
+        entitlements.features.storefront_reservations && !readiness.has_storefront_payment_method && 'a storefront payment method',
         !readiness.has_contact && 'a contact phone or email',
       ].filter(Boolean);
       if (missing.length > 0) throw new ValidationError(`Add ${missing.join(', ')} before publishing.`);
@@ -181,6 +206,13 @@ export class StorefrontCmsService {
       const currentVersion = current?.version ?? 0;
       if (currentVersion !== request.expected_version) {
         throw new StaleVersionError('The rental policy changed since you opened it. Reload and review the latest version.');
+      }
+      const entitlements = await resolveTenantEntitlements(client, context.tenantId);
+      if (
+        !entitlements.features.storefront_reservations &&
+        !sameDeliverySettings(readDeliverySettings(current), request.rules.delivery)
+      ) {
+        throw new StateConflictError('Upgrade your plan to change storefront delivery settings.');
       }
       const imageIds = request.rules.image_file_ids;
       const accepted = await findAcceptedStorefrontAssets(client, context.tenantId, imageIds);
@@ -268,6 +300,7 @@ export class StorefrontCmsService {
   private async readiness(client: PoolClient, tenantId: string, row: StorefrontRow, policy: PolicyRow | null): Promise<StorefrontReadiness> {
     const document = toDocument(row);
     const counts = await readReadiness(client, tenantId);
+    const entitlements = await resolveTenantEntitlements(client, tenantId);
     const has_policy = policy !== null && fromPolicyColumns(policy) !== null;
     const has_contact = document.contact.phone !== null || document.contact.email !== null;
     return {
@@ -275,7 +308,7 @@ export class StorefrontCmsService {
       has_active_clothing: counts.has_active_clothing,
       has_storefront_payment_method: counts.has_storefront_payment_method,
       has_contact,
-      ready: has_policy && counts.has_active_clothing && counts.has_storefront_payment_method && has_contact,
+      ready: has_policy && counts.has_active_clothing && (!entitlements.features.storefront_reservations || counts.has_storefront_payment_method) && has_contact,
     };
   }
 
@@ -323,6 +356,30 @@ export class StorefrontCmsService {
       readiness,
     });
   }
+}
+
+function sameCheckoutRequirements(
+  left: StorefrontDocument['checkout']['requirements'],
+  right: StorefrontDocument['checkout']['requirements'],
+): boolean {
+  return left.phone === right.phone && left.social_handle === right.social_handle && left.event_date === right.event_date;
+}
+
+function readDeliverySettings(policy: PolicyRow | null): StorefrontPolicyRules['delivery'] {
+  const saved = policy?.delivery_rules ?? {};
+  const fee = saved['fee_minor'];
+  return {
+    enabled: saved['enabled'] === true,
+    fee_minor: typeof fee === 'string' ? fee : typeof fee === 'number' && Number.isSafeInteger(fee) ? String(fee) : '0',
+    notes: typeof saved['summary'] === 'string' && saved['summary'] !== '' ? saved['summary'] : null,
+  };
+}
+
+function sameDeliverySettings(
+  left: StorefrontPolicyRules['delivery'],
+  right: StorefrontPolicyRules['delivery'],
+): boolean {
+  return left.enabled === right.enabled && left.fee_minor === right.fee_minor && left.notes === right.notes;
 }
 
 /** Bootstrap rows store empty objects; hydrate missing sections before validating the saved document. */

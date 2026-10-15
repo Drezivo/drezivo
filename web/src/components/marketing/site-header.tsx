@@ -100,7 +100,7 @@ export function SiteHeader() {
 
         <div className="hidden items-center gap-2 lg:flex">
           <a href={SIGN_IN_URL} className="at-nav-link px-3 py-2 text-at-body">Sign in</a>
-          <a href={SIGN_UP_URL} className={`at-button at-button-sm ${dark ? 'at-button-light' : 'at-button-dark'}`}>Start free trial</a>
+          <a href={SIGN_UP_URL} className={`at-button at-button-sm ${dark ? 'at-button-light' : 'at-button-dark'}`}>Start with Free</a>
         </div>
 
         <button
@@ -130,7 +130,7 @@ export function SiteHeader() {
             ))}
           </ul>
           <div data-menu-item className="grid gap-3">
-            <a href={SIGN_UP_URL} className="at-button at-button-light justify-center">Start free trial</a>
+            <a href={SIGN_UP_URL} className="at-button at-button-light justify-center">Start with Free</a>
             <a href={SIGN_IN_URL} className="at-button at-button-ghost-dark justify-center">Sign in</a>
           </div>
         </nav>

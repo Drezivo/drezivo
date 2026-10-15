@@ -6,7 +6,11 @@ import {
 } from '@drezivo/contracts';
 import type { PoolClient } from 'pg';
 
-import { db, withSystemTenantTransaction, withTenantTransaction } from '../../db/client.js';
+import {
+  db,
+  withActorTenantResolutionTransaction,
+  withSystemTenantTransaction,
+} from '../../db/client.js';
 import { tenant } from '../../db/schema/index.js';
 import {
   ForbiddenError,
@@ -28,10 +32,11 @@ import {
   type LockedSubscriptionRow,
 } from './billing.repository.js';
 import {
+  assertPlanCapacity,
   resolvePlanEntitlements as resolvePlan,
   resolveTenantEntitlements,
 } from '../entitlements/entitlements.service.js';
-import { PAST_DUE_GRACE_DURATION_DAYS } from './billing.constants.js';
+import { PAST_DUE_GRACE_DURATION_DAYS, TRIAL_DURATION_DAYS } from './billing.constants.js';
 
 const PLAN_CHANGE_OPERATION = 'subscription.plan_change';
 
@@ -178,7 +183,24 @@ export async function changeTrialPlan(
   input: ChangeTrialPlanInput,
 ): Promise<SubscriptionCommandResponse> {
   const payloadHash = canonicalRequestHash(input.request);
-  return withTenantTransaction(input.tenantId, input.principalId, async (client) => {
+  return withActorTenantResolutionTransaction(input.principalId, async (transaction) => {
+    const { client } = transaction;
+    const accountResult = await client.query<{
+      id: string;
+      trial_consumed_at: Date | null;
+      current_owned_tenant_id: string | null;
+    }>(
+      `SELECT id, trial_consumed_at, current_owned_tenant_id
+         FROM account
+        WHERE clerk_user_id = $1
+        FOR UPDATE`,
+      [input.principalId],
+    );
+    const account = accountResult.rows[0];
+    await transaction.setTenantContext(input.tenantId);
+
+    // Authorization before eligibility: a non-owner is refused as such (403), never told about
+    // the owner's account state.
     const membership = await client.query<{
       clerk_user_id: string;
       role: 'owner' | 'frontdesk';
@@ -196,6 +218,9 @@ export async function changeTrialPlan(
       membership.rows[0]?.status !== 'active'
     ) {
       throw new ForbiddenError('Only the tenant owner can change the trial plan.');
+    }
+    if (!account || account.current_owned_tenant_id !== input.tenantId) {
+      throw new StateConflictError('Workspace trial eligibility is unavailable.');
     }
 
     const claim = await claimTenantIdempotency(client, {
@@ -226,17 +251,63 @@ export async function changeTrialPlan(
       });
       const current = await lockTenantSubscription(client, input.tenantId);
       if (!current) throw new StateConflictError('Workspace subscription is unavailable.');
-      if (current.tenant_status !== 'active' || current.status !== 'trialing') {
-        throw new StateConflictError('The subscription plan can only change during the trial.');
-      }
-
       const currentPlan = await resolveTenantEntitlements(client, input.tenantId);
       if (currentPlan.planId !== current.plan_id) {
         throw new StateConflictError('Workspace entitlement state is inconsistent.');
       }
       const target = await resolvePlan(client, input.request.plan_code);
       if (target.planId !== current.plan_id) {
-        throw new StateConflictError('Plan selection is locked after workspace setup.');
+        if (
+          current.tenant_status !== 'active' ||
+          currentPlan.planCode !== 'free' ||
+          current.status !== 'active' ||
+          target.planCode === 'free'
+        ) {
+          throw new StateConflictError('Only a Free workspace can select a paid plan.');
+        }
+        if (account.trial_consumed_at) {
+          throw new StateConflictError('The lifetime trial has already been used. Submit a plan payment to upgrade.');
+        }
+        await assertPlanCapacity(client, input.tenantId, target);
+        const nowResult = await client.query<{ now: Date }>('SELECT statement_timestamp() AS now');
+        const now = nowResult.rows[0]?.now;
+        if (!now) throw new StateConflictError('Subscription clock is unavailable.');
+        const trialEndsAt = new Date(now.getTime() + TRIAL_DURATION_DAYS * 24 * 60 * 60 * 1000);
+        await transaction.clearTenantContext();
+        const consumed = await client.query(
+          `UPDATE account SET trial_consumed_at = $2, updated_at = $2
+            WHERE id = $1 AND current_owned_tenant_id = $3 AND trial_consumed_at IS NULL`,
+          [account.id, now, input.tenantId],
+        );
+        if (consumed.rowCount !== 1) throw new StateConflictError('The lifetime trial has already been used. Submit a plan payment to upgrade.');
+        await transaction.setTenantContext(input.tenantId);
+        const updated = await client.query(
+          `UPDATE subscription
+              SET plan_id = $3, status = 'trialing', trial_ends_at = $4,
+                  current_period_start = $5, current_period_end = $4, grace_ends_at = NULL
+            WHERE tenant_id = $1 AND id = $2 AND plan_id = $6 AND status = 'active'`,
+          [input.tenantId, current.subscription_id, target.planId, trialEndsAt, now, current.plan_id],
+        );
+        if (updated.rowCount !== 1) throw new Error('The locked Free subscription changed before trial activation.');
+        await appendSubscriptionEvent(client, {
+          tenantId: input.tenantId,
+          subscriptionId: current.subscription_id,
+          priorPlanId: current.plan_id,
+          nextPlanId: target.planId,
+          eventType: 'plan_changed',
+          effectiveAt: now,
+          businessKey: `free-upgrade-trial:${input.idempotencyKey}`,
+        });
+        await appendTenantAuditEvent(client, {
+          tenantId: input.tenantId,
+          actorKey: input.principalId,
+          action: 'subscription.free_trial_started',
+          entityId: current.subscription_id,
+          redactedSummary: { prior_plan_code: 'free', next_plan_code: target.planCode },
+          requestId: input.requestId,
+        });
+      } else if (current.status !== 'trialing' && currentPlan.planCode !== 'free') {
+        throw new StateConflictError('The subscription plan can only change during the trial.');
       }
 
       const projection = await readSubscriptionProjection(client, input.tenantId);

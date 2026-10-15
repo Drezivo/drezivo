@@ -26,10 +26,16 @@ function SinglePlan({ plan, signUpUrl }: { plan: PublicPlan; signUpUrl: string }
         <p className="mt-6 flex items-start font-[family-name:var(--font-atelier-display)] leading-[0.85] tracking-[-0.03em]">
           <span className="text-at-price tabular-nums">{formatPlanPrice(plan.price)}</span>
         </p>
-        <p className="mt-4 text-at-lead text-atelier-muted">a month, after your {plan.trialDays}-day free trial</p>
+        <p className="mt-4 text-at-lead text-atelier-muted">
+          {plan.trialDays === 0 ? 'Free forever' : `a month, after your ${plan.trialDays}-day free trial`}
+        </p>
         <div className="at-cta-row mt-10">
-          <a href={signUpUrl} className="at-button at-button-dark">Start your free trial</a>
-          <p className="text-at-small text-atelier-muted">No credit card needed.</p>
+          <a href={signUpUrl} className="at-button at-button-dark">
+            {plan.trialDays === 0 ? `Start with ${plan.name}` : 'Start your free trial'}
+          </a>
+          <p className="text-at-small text-atelier-muted">
+            {plan.trialDays === 0 ? 'No payment needed.' : 'No credit card needed.'}
+          </p>
         </div>
       </div>
       <div data-at-reveal="up">
@@ -67,7 +73,9 @@ function PlanCards({ plans, signUpUrl }: { plans: readonly PublicPlan[]; signUpU
         >
           <p className={`at-eyebrow ${plan.highlighted ? 'text-atelier-champagne' : 'text-atelier-gold-ink'}`}>{plan.name}</p>
           <p className="mt-6 font-[family-name:var(--font-atelier-display)] text-at-display leading-none tabular-nums">{formatPlanPrice(plan.price)}</p>
-          <p className={`mt-2 text-at-small ${plan.highlighted ? 'text-atelier-mist' : 'text-atelier-muted'}`}>a month · {plan.trialDays}-day free trial</p>
+          <p className={`mt-2 text-at-small ${plan.highlighted ? 'text-atelier-mist' : 'text-atelier-muted'}`}>
+            {plan.trialDays === 0 ? 'Free forever' : `a month · ${plan.trialDays}-day free trial`}
+          </p>
           <p className={`mt-6 text-at-body leading-[1.6] ${plan.highlighted ? 'text-atelier-mist' : 'text-atelier-muted'}`}>{plan.tagline}</p>
           <div className="mt-6 flex-1"><Features features={plan.features} onDark={plan.highlighted} /></div>
           <a href={signUpUrl} className={`at-button mt-8 justify-center ${plan.highlighted ? 'at-button-light' : 'at-button-dark'}`}>Start with {plan.name}</a>

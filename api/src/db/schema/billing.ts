@@ -32,7 +32,7 @@ export const subscriptionEventTypeEnum = pgEnum('subscription_event_type', [
 ]);
 export const subscriptionPaymentStatusEnum = pgEnum('subscription_payment_status', ['pending', 'verified', 'failed']);
 
-/** Migration-managed plan prices, in PHP minor units; current Standard (`starter` v1) price is 29900. */
+/** Migration-managed plan prices, in PHP minor units; Free/Starter/Standard are the current v1 catalog. */
 export const plan = pgTable(
   'plan',
   {
@@ -104,6 +104,7 @@ export const subscriptionPayment = pgTable(
       .notNull()
       .references(() => subscription.id),
     amountMinor: integer('amount_minor').notNull(),
+    targetPlanId: uuid('target_plan_id').references(() => plan.id),
     currency: text('currency').notNull().default('PHP'),
     status: subscriptionPaymentStatusEnum('status').notNull().default('pending'),
     collectionMethod: text('collection_method').notNull(),

@@ -48,6 +48,7 @@ import {
 
 import { ArchiveClothingDialog, archiveSuccessMessage } from "@/components/inventory/archive-clothing-dialog";
 import { SizingTransitionDialog } from "@/components/inventory/sizing-transition-dialog";
+import { useRequestPlanUpgrade } from "@/components/billing/plan-upgrade-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -130,6 +131,7 @@ type EditablePhoto = ExistingPhoto | NewPhoto;
 
 export function EditClothingPage({ productId }: { productId: string }) {
   const { getToken, isLoaded, isSignedIn } = useAuth();
+  const requestUpgrade = useRequestPlanUpgrade();
   const router = useRouter();
   const saveGuard = useSubmitGuard();
   const resetSaveIntent = saveGuard.resetIntent;
@@ -1025,6 +1027,7 @@ export function EditClothingPage({ productId }: { productId: string }) {
             `Sizing mode changed to ${data.sizing_mode === "free_size" ? "one flexible-fit variant" : "multiple labeled sizes"} (${data.active_variant_count} active variant${data.active_variant_count === 1 ? "" : "s"}; ${data.archived_variant_count} archived).`
           );
         }}
+        onCapacityLimit={() => requestUpgrade("more active clothing pieces")}
         onOpenChange={setSizingModeOpen}
         open={sizingModeOpen}
         productId={productId}
@@ -1036,6 +1039,7 @@ export function EditClothingPage({ productId }: { productId: string }) {
         productId={item.product_id}
         defaultGuide={defaultGuide}
         getToken={getToken}
+        onCapacityLimit={() => requestUpgrade("more active clothing pieces")}
         onCreated={() => {
           void load().then(() => setSaveNotice("Variant added"));
         }}
@@ -1074,6 +1078,7 @@ export function EditClothingPage({ productId }: { productId: string }) {
 function AddVariantDialog({
   defaultGuide,
   getToken,
+  onCapacityLimit,
   onCreated,
   onOpenChange,
   open,
@@ -1081,6 +1086,7 @@ function AddVariantDialog({
 }: {
   defaultGuide: MeasurementGuide | null;
   getToken: () => Promise<string | null>;
+  onCapacityLimit?: () => void;
   onCreated: () => void;
   onOpenChange: (open: boolean) => void;
   open: boolean;
@@ -1169,6 +1175,9 @@ function AddVariantDialog({
       reset();
       onCreated();
     } catch (caughtError) {
+      if (caughtError instanceof DrezivoApiError && caughtError.code === "ASSET_LIMIT_EXCEEDED") {
+        onCapacityLimit?.();
+      }
       setError(errorMessage(caughtError, "Could not add this variant."));
     }
   }

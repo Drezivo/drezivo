@@ -340,7 +340,7 @@ export async function chooseOnboardingPlanInTransaction(
     return { kind: 'plan_unavailable' };
   }
 
-  const nextStatus: OnboardingStatus = account.trial_consumed_at ? 'payment_pending' : 'incomplete';
+  const nextStatus: OnboardingStatus = account.trial_consumed_at && planCode !== 'free' ? 'payment_pending' : 'incomplete';
   const updated = await client.query<OnboardingRow>(
     `UPDATE organization_onboarding
      SET selected_plan_code = $2, status = $3, updated_at = now()
@@ -553,7 +553,7 @@ function requireOnboardingStatus(value: string): OnboardingStatus {
 }
 
 function requirePlanCode(value: string): PlanCode {
-  if (value === 'starter' || value === 'standard') {
+  if (value === 'free' || value === 'starter' || value === 'standard') {
     return value;
   }
   throw new Error(`Unexpected onboarding plan code from database: ${value}`);

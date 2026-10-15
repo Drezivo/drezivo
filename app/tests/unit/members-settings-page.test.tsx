@@ -4,7 +4,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MembersSettingsPage } from "@/components/settings/members-settings-page";
 
 const clerk = vi.hoisted(() => ({ getToken: vi.fn(), useAuth: vi.fn() }));
-const actorState = vi.hoisted(() => ({ role: "owner" as "owner" | "frontdesk" }));
+const actorState = vi.hoisted(() => ({
+  role: "owner" as "owner" | "frontdesk",
+  planCode: "standard" as "free" | "starter" | "standard",
+}));
+const upgrade = vi.hoisted(() => ({ request: vi.fn() }));
 const api = vi.hoisted(() => ({
   getMemberRoster: vi.fn(),
   getMembershipInvitations: vi.fn(),
@@ -16,7 +20,13 @@ const api = vi.hoisted(() => ({
 
 vi.mock("@clerk/nextjs", () => ({ useAuth: clerk.useAuth }));
 vi.mock("@/components/shell/dashboard-access-gate", () => ({
-  useVerifiedActorContext: () => ({ membership: { role: actorState.role } }),
+  useVerifiedActorContext: () => ({
+    membership: { role: actorState.role },
+    subscription: { plan_code: actorState.planCode },
+  }),
+}));
+vi.mock("@/components/billing/plan-upgrade-dialog", () => ({
+  useRequestPlanUpgrade: () => upgrade.request,
 }));
 vi.mock("@/lib/drezivo-api", () => ({
   createDrezivoApiClient: () => api,
@@ -85,6 +95,7 @@ describe("MembersSettingsPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     actorState.role = "owner";
+    actorState.planCode = "standard";
     installDefaults();
   });
 
@@ -135,6 +146,18 @@ describe("MembersSettingsPage", () => {
     expect(await screen.findByText("The Front Desk seat limit has been reached.")).toBeVisible();
     expect(screen.getByRole("button", { name: "Invite Front Desk" })).toBeDisabled();
     expect(screen.getByText("Riley Owner")).toBeVisible();
+  });
+
+  it("routes Free plan invitations to the upgrade prompt instead of creating an invite", async () => {
+    actorState.planCode = "free";
+    render(<MembersSettingsPage />);
+
+    const inviteButton = await screen.findByRole("button", { name: "Invite Front Desk · Upgrade" });
+    expect(inviteButton).toBeEnabled();
+    fireEvent.click(inviteButton);
+
+    expect(upgrade.request).toHaveBeenCalledWith("Front Desk staff access");
+    expect(api.createMembershipInvitation).not.toHaveBeenCalled();
   });
 
   it("creates a fixed-role Front Desk invitation once with an idempotency key", async () => {

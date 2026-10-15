@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { assertTenantAction } from '../tenancy.service.js';
+import { assertTenantAction, requirePlanFeature } from '../tenancy.service.js';
 import type { ResolvedActorContext } from '../tenancy.repository.js';
 
 function context(status: 'active' | 'restricted' | 'cancelled'): ResolvedActorContext {
@@ -33,5 +33,35 @@ describe('tenant lifecycle action policy', () => {
   it('keeps settlement and export available after cancellation', () => {
     expect(() => assertTenantAction(context('cancelled'), 'settlement')).not.toThrow();
     expect(() => assertTenantAction(context('cancelled'), 'refund')).toThrowError('closed');
+  });
+});
+
+describe('plan feature route guard', () => {
+  it('rejects direct requests when a feature is not in the resolved plan entitlements', () => {
+    let forwardedError: unknown;
+    const guard = requirePlanFeature('fittings');
+    guard(
+      {
+        tenantContext: {
+          actorContext: { entitlements: { features: { fittings: false } } },
+        },
+      } as never,
+      {} as never,
+      (error?: unknown) => {
+        forwardedError = error;
+      },
+    );
+
+    expect(forwardedError).toMatchObject({ code: 'STATE_CONFLICT', status: 409 });
+  });
+
+  it('fails closed when entitlement context is missing', () => {
+    let forwardedError: unknown;
+    const guard = requirePlanFeature('storefront_reservations');
+    guard({} as never, {} as never, (error?: unknown) => {
+      forwardedError = error;
+    });
+
+    expect(forwardedError).toMatchObject({ code: 'STATE_CONFLICT', status: 409 });
   });
 });

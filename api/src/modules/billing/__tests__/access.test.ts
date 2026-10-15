@@ -24,6 +24,31 @@ function paid(overrides: Partial<AccessSubscription> = {}): AccessSubscription {
 }
 
 describe('accessOf', () => {
+  it('keeps a valid Free subscription active indefinitely without a synthetic expiry', () => {
+    expect(
+      accessOf(
+        paid({ plan_code: 'free', trial_ends_at: null, current_period_end: null }),
+        at(365 * DAY),
+      ),
+    ).toEqual({
+      level: 'full',
+      reason: 'free',
+      ends_at: null,
+      days_left: null,
+      pending_payment: false,
+      storefront_online: true,
+      storefront_offline_at: null,
+      read_only_until: null,
+    });
+  });
+
+  it('fails closed for malformed Free lifecycle state', () => {
+    expect(accessOf(paid({ plan_code: 'free' }), at(0))).toMatchObject({
+      level: 'locked',
+      reason: 'payment_overdue',
+    });
+  });
+
   it('always returns a contract-valid access object', () => {
     const offsets = [-10 * DAY, -3 * DAY, -1, 0, 3 * DAY - 1, 3 * DAY, 30 * DAY - 1, 30 * DAY];
     for (const subscription of [trial(), paid(), trial({ status: 'cancelled' }), paid({ status: 'past_due' })]) {

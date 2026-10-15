@@ -12,7 +12,7 @@ import { paginatedResponse } from '../common/pagination';
 import { isoInstant } from '../common/time';
 import { branch, branchGrant, membership, membershipRole, tenant } from './tenant';
 import { subscriptionAccess } from './billing';
-import { subscriptionSummary } from './onboarding';
+import { planFeatures, subscriptionSummary } from './onboarding';
 
 export const actorContext = z.object({
   tenant,
@@ -26,6 +26,7 @@ export const actorContext = z.object({
   entitlements: z.object({
     physical_assets_max: z.number().int().positive(),
     frontdesk_seats_max: z.number().int().nonnegative(),
+    features: planFeatures,
   }),
 });
 export type ActorContext = z.infer<typeof actorContext>;

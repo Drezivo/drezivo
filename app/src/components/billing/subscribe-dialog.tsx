@@ -17,7 +17,9 @@ import { useEffect, useRef, useState } from "react";
 import type {
   BillingOverview,
   FileObjectId,
+  PlanCode,
   PlatformPaymentMethod,
+  PublicPlanCatalogResponse,
   SubscriptionPaymentView,
 } from "@drezivo/contracts";
 
@@ -31,7 +33,7 @@ import {
 } from "@/lib/storefront-assets";
 import { useSubmitGuard } from "@/lib/use-submit-guard";
 
-const peso = (minor: string) =>
+const peso = (minor: string | number) =>
   new Intl.NumberFormat("en-PH", {
     style: "currency",
     currency: "PHP",
@@ -43,7 +45,7 @@ const shortDate = (iso: string) =>
 type Load =
   | { kind: "loading" }
   | { kind: "error"; message: string }
-  | { kind: "ready"; billing: BillingOverview };
+  | { kind: "ready"; billing: BillingOverview; catalog: PublicPlanCatalogResponse };
 
 function planDescription(billing: BillingOverview): string {
   const staffSeats =
@@ -62,10 +64,12 @@ export function SubscribeDialog({
   open,
   onOpenChange,
   onSubmitted,
+  targetPlanCode,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSubmitted: () => void;
+  targetPlanCode?: PlanCode | null;
 }) {
   const { getToken } = useAuth();
   const [load, setLoad] = useState<Load>({ kind: "loading" });
@@ -75,10 +79,12 @@ export function SubscribeDialog({
     if (!open) return;
     let cancelled = false;
     setLoad({ kind: "loading" });
-    createDrezivoApiClient(getToken)
-      .getBilling()
-      .then((result) => {
-        if (!cancelled) setLoad({ kind: "ready", billing: result.data });
+    const api = createDrezivoApiClient(getToken);
+    Promise.all([api.getBilling(), api.getPublicPlanCatalog()])
+      .then(([billingResult, catalogResult]) => {
+        if (!cancelled) {
+          setLoad({ kind: "ready", billing: billingResult.data, catalog: catalogResult.data });
+        }
       })
       .catch((error: unknown) => {
         if (!cancelled)
@@ -138,6 +144,8 @@ export function SubscribeDialog({
           ) : (
             <SubscribeBody
               billing={load.billing}
+              catalog={load.catalog}
+              targetPlanCode={targetPlanCode ?? load.billing.plan.code}
               onSubmitted={() => {
                 onSubmitted();
                 setReloadKey((value) => value + 1);
@@ -153,11 +161,16 @@ export function SubscribeDialog({
 function SubscribeBody({
   billing,
   onSubmitted,
+  catalog,
+  targetPlanCode,
 }: {
   billing: BillingOverview;
   onSubmitted: () => void;
+  catalog: PublicPlanCatalogResponse;
+  targetPlanCode: PlanCode;
 }) {
   const pending = billing.payments.find((payment) => payment.status === "pending") ?? null;
+  const targetPlan = catalog.plans.find((plan) => plan.code === targetPlanCode);
   const lastRejected = !pending
     ? (billing.payments.find((payment) => payment.status !== "pending") ?? null)
     : null;
@@ -180,7 +193,11 @@ function SubscribeBody({
       {!pending ? (
         billing.can_pay ? (
           billing.payment_methods.length > 0 ? (
-            <PaymentForm billing={billing} onSubmitted={onSubmitted} />
+            targetPlan ? (
+              <PaymentForm billing={billing} targetPlan={targetPlan} onSubmitted={onSubmitted} />
+            ) : (
+              <p role="alert" className="text-sm text-red-500">The selected plan is unavailable.</p>
+            )
           ) : (
             <p className="text-sm text-dashboard-muted">
               Payment options are being set up. Contact Drezivo support to subscribe.
@@ -201,9 +218,11 @@ function SubscribeBody({
 function PaymentForm({
   billing,
   onSubmitted,
+  targetPlan,
 }: {
   billing: BillingOverview;
   onSubmitted: () => void;
+  targetPlan: PublicPlanCatalogResponse["plans"][number];
 }) {
   const { getToken } = useAuth();
   const guard = useSubmitGuard();
@@ -248,7 +267,7 @@ function PaymentForm({
       const fileId = proofId;
       const result = await guard.submit((idempotencyKey) =>
         createDrezivoApiClient(getToken).submitSubscriptionPayment(
-          { payment_method_id: method.id, reference: reference.trim(), proof_file_id: fileId },
+          { plan_code: targetPlan.code, payment_method_id: method.id, reference: reference.trim(), proof_file_id: fileId },
           idempotencyKey
         )
       );
@@ -263,7 +282,7 @@ function PaymentForm({
   return (
     <form onSubmit={(event) => void submit(event)} className="grid gap-5">
       <fieldset>
-        <legend className="text-sm font-semibold">1. Pay {peso(billing.plan.monthly_minor)}</legend>
+        <legend className="text-sm font-semibold">1. Pay {peso(targetPlan.monthly_price_minor)} for {targetPlan.name}</legend>
         <div className="mt-3 flex flex-wrap gap-2" role="radiogroup" aria-label="Payment method">
           {billing.payment_methods.map((option) => (
             <button
@@ -282,7 +301,7 @@ function PaymentForm({
           ))}
         </div>
         {method ? (
-          <MethodDetails method={method} amount={peso(billing.plan.monthly_minor)} />
+          <MethodDetails method={method} amount={peso(targetPlan.monthly_price_minor)} />
         ) : null}
       </fieldset>
 

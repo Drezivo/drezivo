@@ -1,6 +1,16 @@
 import type { PoolClient } from 'pg';
 
-const REQUIRED_CAPABILITIES = ['physical_assets.max', 'frontdesk_seats.max'] as const;
+const REQUIRED_CAPABILITIES = [
+  'physical_assets.max',
+  'frontdesk_seats.max',
+  'fittings.enabled',
+  'storefront_reservations.enabled',
+  'storefront_payments.enabled',
+  'storefront_theme.ivory',
+  'storefront_theme.sage',
+  'storefront_theme.blush',
+  'storefront_theme.noir',
+] as const;
 
 export type RequiredCapability = (typeof REQUIRED_CAPABILITIES)[number];
 

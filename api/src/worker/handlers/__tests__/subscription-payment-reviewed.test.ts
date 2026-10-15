@@ -2,10 +2,18 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { PermanentOutboxError, type OutboxRow } from '../../runner.js';
 
-const db = vi.hoisted(() => ({ payment: null as Record<string, unknown> | null }));
+type TestQueryResult = { rows: Array<Record<string, unknown>>; rowCount?: number | null };
+
+const db = vi.hoisted(() => ({
+  payment: null as Record<string, unknown> | null,
+  currentPlanId: 'paid-plan-id',
+  currentPlanCode: 'standard',
+  eventExists: false,
+  query: vi.fn<(sql: string) => Promise<TestQueryResult>>(),
+}));
 vi.mock('../../../db/client.js', () => ({
   withSystemTenantTransaction: (_tenantId: string, _actor: string, fn: (client: unknown) => unknown) =>
-    fn({ query: () => Promise.resolve({ rows: db.payment ? [db.payment] : [] }) }),
+    fn({ query: db.query }),
 }));
 
 const { createSubscriptionPaymentReviewedHandler } = await import('../subscription-payment-reviewed.js');
@@ -22,6 +30,10 @@ const row = (payload: Record<string, unknown>): OutboxRow => ({
 });
 const reviewed = (overrides: Record<string, unknown> = {}) => ({
   status: 'verified',
+  subscription_id: 'subscription-1',
+  target_plan_id: null,
+  target_plan_code: null,
+  current_plan_code: 'standard',
   reference: 'GC-778899',
   amount_minor: 30000,
   currency: 'PHP',
@@ -35,6 +47,45 @@ const reviewed = (overrides: Record<string, unknown> = {}) => ({
 describe('subscription payment reviewed email', () => {
   beforeEach(() => {
     db.payment = null;
+    db.currentPlanId = 'paid-plan-id';
+    db.currentPlanCode = 'standard';
+    db.eventExists = false;
+    db.query.mockReset().mockImplementation((sql: string) => {
+      if (sql.includes('SELECT sp.subscription_id')) {
+        return Promise.resolve({ rows: db.payment ? [db.payment] : [] });
+      }
+      if (sql.includes('SELECT s.plan_id, current_plan.code')) {
+        return Promise.resolve({
+          rows: [{
+            plan_id: db.currentPlanId,
+            plan_code: db.currentPlanCode,
+            status: 'active',
+            tenant_status: 'active',
+            target_plan_active: true,
+          }],
+        });
+      }
+      if (sql.includes('SELECT EXISTS')) return Promise.resolve({ rows: [{ present: db.eventExists }] });
+      if (sql.includes('UPDATE subscription')) {
+        db.currentPlanId = 'starter-plan-id';
+        db.currentPlanCode = 'starter';
+        db.payment = {
+          ...db.payment,
+          current_plan_code: 'starter',
+          current_period_end: new Date('2026-11-15T00:00:00.000Z'),
+        };
+        return Promise.resolve({
+          rowCount: 1,
+          rows: [{ current_period_end: new Date('2026-11-15T00:00:00.000Z') }],
+        });
+      }
+      if (sql.includes('INSERT INTO subscription_event')) {
+        db.eventExists = true;
+        return Promise.resolve({ rowCount: 1, rows: [] });
+      }
+      if (sql.includes('INSERT INTO audit_event')) return Promise.resolve({ rowCount: 1, rows: [] });
+      return Promise.resolve({ rowCount: 0, rows: [] });
+    });
   });
 
   it('emails the owner once per outbox row when a payment is approved', async () => {
@@ -56,6 +107,43 @@ describe('subscription payment reviewed email', () => {
     const email = send.mock.calls[0]?.[0] as { subject: string; text: string };
     expect(email.subject).toBe('Your Drezivo payment could not be approved');
     expect(email.text).toContain('Reason: Amount was 200, not 300');
+  });
+
+  it('activates an approved Free upgrade once and names the selected plan', async () => {
+    db.currentPlanId = 'free-plan-id';
+    db.currentPlanCode = 'free';
+    db.payment = reviewed({
+      current_plan_code: 'free',
+      target_plan_id: 'starter-plan-id',
+      target_plan_code: 'starter',
+      current_period_end: null,
+    });
+    const send = vi.fn().mockResolvedValue(undefined);
+    const handler = createSubscriptionPaymentReviewedHandler({ send });
+    const event = row({ payment_id: paymentId, outcome: 'approved' });
+
+    await handler(event);
+    await handler(event);
+
+    const activationUpdates = db.query.mock.calls.filter(([sql]) =>
+      String(sql).includes('UPDATE subscription'),
+    );
+    expect(activationUpdates).toHaveLength(1);
+    expect(db.eventExists).toBe(true);
+    expect(send).toHaveBeenCalledTimes(2);
+    const email = send.mock.calls[0]?.[0] as { text: string };
+    expect(email.text).toContain('Your Starter plan is active');
+    expect(email.text).toContain('November 15, 2026');
+  });
+
+  it('does not treat a payment for an existing paid plan as a Free upgrade', async () => {
+    db.payment = reviewed({ target_plan_id: 'standard-plan-id', target_plan_code: 'standard' });
+    const send = vi.fn().mockResolvedValue(undefined);
+
+    await createSubscriptionPaymentReviewedHandler({ send })(row({ payment_id: paymentId, outcome: 'approved' }));
+
+    expect(db.query.mock.calls.some(([sql]) => String(sql).includes('UPDATE subscription'))).toBe(false);
+    expect(send).toHaveBeenCalledTimes(1);
   });
 
   it('sends nothing for a stale outcome, a business without email, or no email provider', async () => {

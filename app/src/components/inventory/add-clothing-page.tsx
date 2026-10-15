@@ -39,6 +39,7 @@ import {
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { useRequestPlanUpgrade } from "@/components/billing/plan-upgrade-dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -109,6 +110,7 @@ const EMPTY_MEASUREMENT_KINDS: Record<MeasurementField, MeasurementKind> = { bus
 
 export function AddClothingPage() {
   const { getToken, isLoaded, isSignedIn } = useAuth();
+  const requestUpgrade = useRequestPlanUpgrade();
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const photoPreviewUrlsRef = useRef(new Set<string>());
@@ -857,6 +859,7 @@ export function AddClothingPage() {
         setFormError(
           "Your workspace has reached its active clothing-piece limit. Archive unused clothing before adding more pieces."
         );
+        requestUpgrade("more active clothing pieces");
       } else {
         setFormError(errorMessage(error, "Could not add clothing. Check the form and try again."));
       }

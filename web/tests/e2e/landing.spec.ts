@@ -24,7 +24,7 @@ test.describe('marketing landing page', () => {
     await page.evaluate(() => window.scrollTo(0, 0));
     await expect(header).toHaveAttribute('data-state', 'overlay');
 
-    await expect(page.getByRole('link', { name: 'Get Started Free' }).first()).toHaveAttribute(
+    await expect(page.getByRole('link', { name: 'Start with Free' }).first()).toHaveAttribute(
       'href',
       'https://app.drezivo.com/sign-up',
     );
@@ -50,17 +50,19 @@ test.describe('marketing landing page', () => {
     }
   });
 
-  test('shows both subscription plans in the pricing section', async ({ page }) => {
+  test('shows Free and paid plans with their respective limits', async ({ page }) => {
     for (const route of ['/', '/pricing']) {
       await page.goto(route);
 
       const pricing = page.locator('#pricing');
       const cards = pricing.locator('[data-at-item]');
-      await expect(cards).toHaveCount(2);
-      await expect(cards.nth(0)).toContainText('Starter');
-      await expect(cards.nth(0)).toContainText('₱149');
-      await expect(cards.nth(0)).toContainText('Up to 125 active garments');
-      await expect(cards.nth(0)).toContainText('Owner-only access');
+      await expect(cards).toHaveCount(3);
+      await expect(cards.nth(0)).toContainText('Free');
+      await expect(cards.nth(0)).toContainText('₱0');
+      await expect(cards.nth(0)).toContainText('Free forever');
+      await expect(cards.nth(0)).toContainText('Up to 20 active garments');
+      await expect(cards.nth(0)).toContainText('Availability-only storefront with contact links');
+      await expect(cards.nth(0)).not.toContainText('14-day free trial');
       await expect(cards.nth(0)).not.toHaveClass(/bg-atelier-night/);
       await expect(cards.nth(1)).toContainText('Standard');
       await expect(cards.nth(1)).toContainText('₱299');

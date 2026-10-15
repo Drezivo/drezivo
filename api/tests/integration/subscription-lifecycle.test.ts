@@ -28,7 +28,7 @@ describe('TBF-033 subscription lifecycle and gates', async () => {
   const { changeTrialPlan, reconcileTenantLifecycle } =
     await import('../../src/modules/billing/billing.service.js');
   const { resolveActorContext } = await import('../../src/modules/tenancy/tenancy.repository.js');
-  const { createTestMembership, createTestTenant } = await import('./helpers/factories.js');
+  const { createTestMembership, createTestOwnerAccount, createTestTenant } = await import('./helpers/factories.js');
 
   beforeAll(async () => {
     await migrateTestDatabase(adminUrl);
@@ -134,6 +134,7 @@ describe('TBF-033 subscription lifecycle and gates', async () => {
     const tenant = await createTestTenant({ clerkOrgId: 'org_tbf033_plan_change' });
     const ownerId = 'user_tbf033_plan_change';
     const membershipId = await createTestMembership(tenant.id, ownerId, 'owner');
+    await createTestOwnerAccount(ownerId, tenant.id);
     await seedSubscription(tenant.id, 'standard', "now() + interval '6 days'");
 
     const result = await changeTrialPlan({

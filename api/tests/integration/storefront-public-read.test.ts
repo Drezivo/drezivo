@@ -82,6 +82,17 @@ describe('public storefront read API', async () => {
     return ws;
   }
 
+  async function setFreePlan(tenantId: string): Promise<void> {
+    const result = await admin.query(
+      `UPDATE subscription
+          SET plan_id = (SELECT id FROM plan WHERE code = 'free' AND version = 1),
+              current_period_start = now(), current_period_end = NULL
+        WHERE tenant_id = $1`,
+      [tenantId],
+    );
+    expect(result.rowCount).toBe(1);
+  }
+
   it('hides drafts and exposes only the allowlisted projection once published', async () => {
     const draft = await createStorefrontWorkspace('pub-draft');
     const app = createApp();
@@ -123,6 +134,30 @@ describe('public storefront read API', async () => {
     // Taking the store offline makes every public route a 404 again.
     await cms.unpublish(ws.owner, 'pub-live-off', 3);
     expect((await request(app).get(`/api/v1/public/stores/${ws.slug}/catalogue`)).status).toBe(404);
+  });
+
+  it('keeps a Free storefront available for browsing while omitting reservation-only options', async () => {
+    const ws = await publishedWorkspace('pub-free', (document) => {
+      document.checkout.requirements = { phone: 'required', social_handle: 'optional', event_date: 'required' };
+    });
+    await setFreePlan(ws.tenantId);
+    const app = createApp();
+    const response = await request(app).get(`/api/v1/public/stores/${ws.slug}`);
+    expect(response.status).toBe(200);
+    const store = dataOf<PublicStorefront>(response);
+    expect(store).toMatchObject({
+      contact: { email: 'hello@luna.test' },
+      reservations_open: false,
+      fulfillment: { pickup: true, delivery: false, delivery_fee_minor: '0' },
+      policy: { delivery_notes: null },
+      payment_methods: [],
+      checkout: { requirements: { phone: 'hidden', social_handle: 'hidden', event_date: 'hidden' } },
+      fitting: { enabled: false, duration_minutes: null, fee_minor: null },
+    });
+
+    const today = localDate(new Date(), 'Asia/Manila');
+    expect((await request(app).get(`/api/v1/public/stores/${ws.slug}/catalogue`)).status).toBe(200);
+    expect((await request(app).get(`/api/v1/public/stores/${ws.slug}/availability?variant_id=${ws.variantIds.m}&from=${today}&to=${addDays(today, 6)}`)).status).toBe(200);
   });
 
   it('publishes rental terms as images in page order and never shows the typed text kept for later', async () => {

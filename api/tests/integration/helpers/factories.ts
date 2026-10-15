@@ -47,6 +47,44 @@ export async function createTestTenant(overrides?: { clerkOrgId?: string }): Pro
   }
 }
 
+/**
+ * Give a factory tenant an active paid subscription. Plan-gated features (storefront payments,
+ * reservations, fittings) resolve the tenant's plan and fail closed without one, so tests that
+ * exercise those features must seed it. Paid plans carry a period end; a Free subscription must not.
+ */
+export async function createTestSubscription(
+  tenantId: string,
+  planCode: 'starter' | 'standard' = 'standard',
+): Promise<void> {
+  const admin = new Client({ connectionString: requireTestDatabaseUrl() });
+  await admin.connect();
+  try {
+    const inserted = await admin.query(
+      `INSERT INTO subscription (tenant_id, plan_id, status, current_period_start, current_period_end)
+       SELECT $1, id, 'active', statement_timestamp(), statement_timestamp() + interval '30 days'
+         FROM plan WHERE code = $2 AND active ORDER BY version DESC LIMIT 1`,
+      [tenantId, planCode],
+    );
+    if (inserted.rowCount !== 1) throw new Error(`createTestSubscription: no active ${planCode} plan`);
+  } finally {
+    await admin.end();
+  }
+}
+
+/** The account row bootstrap writes for a workspace owner (one current owned tenant per account). */
+export async function createTestOwnerAccount(clerkUserId: string, tenantId: string): Promise<void> {
+  const admin = new Client({ connectionString: requireTestDatabaseUrl() });
+  await admin.connect();
+  try {
+    await admin.query(
+      `INSERT INTO account (clerk_user_id, current_owned_tenant_id) VALUES ($1, $2)`,
+      [clerkUserId, tenantId],
+    );
+  } finally {
+    await admin.end();
+  }
+}
+
 export function createTestMembership(
   tenantId: string,
   clerkUserId: string,
