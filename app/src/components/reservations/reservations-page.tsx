@@ -533,7 +533,7 @@ function ReservationStatusTabs({
   return (
     <div className="border-b border-dashboard-border px-4 py-3">
       <div
-        className="flex gap-2 overflow-x-auto pb-1"
+        className="flex flex-wrap gap-2"
         role="tablist"
         aria-label="Reservation status"
       >
@@ -547,7 +547,7 @@ function ReservationStatusTabs({
               aria-selected={selected}
               onClick={() => onChange(option.value)}
               className={cn(
-                "shrink-0 rounded-lg border px-3 py-2 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dashboard-accent/30",
+                "min-h-11 shrink-0 rounded-lg border px-3 py-2 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dashboard-accent/30",
                 selected
                   ? "border-dashboard-accent bg-dashboard-active text-dashboard-accent"
                   : "border-dashboard-border bg-dashboard-surface text-dashboard-muted hover:bg-dashboard-active hover:text-dashboard-navy"
