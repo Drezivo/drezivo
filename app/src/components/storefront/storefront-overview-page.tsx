@@ -292,7 +292,7 @@ function PublishCard({ settings, storefrontReservations }: { settings: Storefron
 
 function ManageCard({ href, icon: Icon, title, text, onLocked }: { href: string; icon: React.ComponentType<{ className?: string }>; title: string; text: string; onLocked?: (() => void) | undefined }) {
   const card = (
-      <Card className="h-full gap-0 py-0 transition-colors group-hover:border-dashboard-accent/40">
+      <Card data-mobile-card="keep" className="h-full gap-0 py-0 transition-colors group-hover:border-dashboard-accent/40">
         <CardContent className="flex h-full flex-col p-5">
           <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-dashboard-active text-dashboard-accent">
             <Icon className="h-4.5 w-4.5" />

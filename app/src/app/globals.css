@@ -123,7 +123,6 @@ html {
   --ws-control: 2.75rem;
   --ws-gutter: 1rem;
   --ws-gap: 0.75rem;
-  --ws-scrollbar-thin: 0.375rem;
   --ws-radius-card: 1.125rem;
   --ws-header: 3.75rem;
   --ws-tabbar: 4.25rem;
@@ -722,28 +721,23 @@ html {
   scrollbar-color: color-mix(in srgb, var(--color-dashboard-accent) 55%, transparent) transparent;
 }
 
-.settings-nav-scrollbar {
-  scrollbar-width: thin;
-  scrollbar-color: color-mix(in srgb, var(--color-dashboard-accent) 55%, transparent) transparent;
-}
+/* Phones: page cards dissolve into the page. A bordered box inside a 16px gutter left too little room
+   for the content, so below 640px a card in the workspace <main> keeps only a hairline above it and
+   gives its full width to its content. Sheets and dialogs render in portals outside <main> and keep
+   their boxes; a card that must stay a tile (tappable KPI tiles, alerts) opts out with
+   data-mobile-card="keep". Tablets and up are unchanged. */
+@media (max-width: 639.98px) {
+  [data-ws-main] [data-slot="card"]:not([data-mobile-card="keep"]) {
+    overflow: visible;
+    border-width: 1px 0 0;
+    border-radius: 0;
+    background: transparent;
+  }
 
-.settings-nav-scrollbar::-webkit-scrollbar {
-  height: var(--ws-scrollbar-thin);
-}
-
-.settings-nav-scrollbar::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.settings-nav-scrollbar::-webkit-scrollbar-thumb {
-  border-radius: 9999px;
-  background-color: color-mix(in srgb, var(--color-dashboard-accent) 55%, transparent);
-}
-
-.settings-nav-scrollbar::-webkit-scrollbar-button {
-  width: 0;
-  height: 0;
-  display: none;
+  [data-ws-main] [data-slot="card"]:not([data-mobile-card="keep"])
+    > :is([data-slot="card-header"], [data-slot="card-content"], [data-slot="card-footer"]) {
+    padding-inline: 0;
+  }
 }
 
 * {

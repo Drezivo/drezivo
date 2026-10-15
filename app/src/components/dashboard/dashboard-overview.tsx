@@ -151,7 +151,7 @@ export function DashboardOverview() {
           : (error?.message ?? "The dashboard could not be loaded.");
     return (
       <div className="min-h-[calc(100svh-72px)] px-10 py-5 sm:py-6">
-        <Card role="alert" className="mx-auto max-w-2xl">
+        <Card role="alert" data-mobile-card="keep" className="mx-auto max-w-2xl">
           <CardContent className="flex flex-col items-start gap-4 p-6">
             <div className="flex items-center gap-2 text-dashboard-navy">
               <CircleAlert className="h-5 w-5 text-dashboard-accent" aria-hidden="true" />
@@ -224,7 +224,7 @@ export function DashboardOverview() {
                 aria-label={`View ${metric.label}`}
                 className="group block h-full rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dashboard-accent focus-visible:ring-offset-2 focus-visible:ring-offset-dashboard-canvas"
               >
-                <Card className="min-h-36 justify-between py-4 sm:min-h-[166px] sm:py-5 transition-colors group-hover:border-dashboard-accent/50 group-focus-visible:border-dashboard-accent">
+                <Card data-mobile-card="keep" className="min-h-36 justify-between py-4 sm:min-h-[166px] sm:py-5 transition-colors group-hover:border-dashboard-accent/50 group-focus-visible:border-dashboard-accent">
                   <CardContent className="flex h-full flex-col justify-between px-4 sm:px-5">
                     <div className="flex items-center justify-between">
                       <div
