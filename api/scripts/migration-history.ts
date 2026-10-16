@@ -14,10 +14,13 @@ export class MigrationHistoryError extends Error {
 
 export const OUT_OF_ORDER_SAFE_MIGRATION = '0070_webhook_invitation_resolution.sql';
 export const OUT_OF_ORDER_SAFE_IMAGE_VARIANTS_MIGRATION = '0080_file_image_variants_backfill.sql';
+export const OUT_OF_ORDER_SAFE_OPERATOR_SESSION_MIGRATION =
+  '0084_session_audit_uniqueness_repair.sql';
 
 const OUT_OF_ORDER_SAFE_MIGRATIONS = new Set([
   OUT_OF_ORDER_SAFE_MIGRATION,
   OUT_OF_ORDER_SAFE_IMAGE_VARIANTS_MIGRATION,
+  OUT_OF_ORDER_SAFE_OPERATOR_SESSION_MIGRATION,
 ]);
 
 export interface MigrationArguments {

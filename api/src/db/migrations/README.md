@@ -78,11 +78,15 @@ only for these reviewed, additive migrations when an environment has already rec
   migration is recorded and simulating the target leaves no other gap. The migration only queues
   deduplicated image-variant outbox jobs, so it is safe after the separately named shared renter
   steps migration that some ledgers already record as applied.
+- `--through 0084_session_audit_uniqueness_repair.sql` may close its one ledger gap when every
+  earlier migration is recorded and simulating the target leaves no other gap. The migration keeps
+  every legacy operator-session audit row, marks one canonical row per event, and replaces the
+  session idempotency index with the same definition in environments that already applied 0085.
 
-For the second exception, CI first reports status with the exact target, applies through that
+For the later exceptions, CI first reports status with the exact target, applies through that
 target only when the migration workflow is authorized to apply, and then runs the normal full
 migration and status checks. `npm run db:migrate:status -- --through <exact-filename.sql>` is
-read-only; without `--through`, status checks continue to reject any ledger gap. The exception
+read-only; without `--through`, status checks continue to reject any ledger gap. An exception
 does not rename migrations, edit ledger rows, or authorize skipping any other migration. Never
 insert a ledger row without successfully applying its SQL.
 

@@ -7,6 +7,7 @@ import {
   MigrationHistoryError,
   OUT_OF_ORDER_SAFE_IMAGE_VARIANTS_MIGRATION,
   OUT_OF_ORDER_SAFE_MIGRATION,
+  OUT_OF_ORDER_SAFE_OPERATOR_SESSION_MIGRATION,
   parseMigrationArguments,
   selectPendingMigrations,
 } from '../../scripts/migration-history.js';
@@ -176,6 +177,34 @@ describe('migration history inspection', () => {
     expect(() =>
       inspectMigrationHistory(files, applied, '0081_storefront_media_cache_invalidation.sql'),
     ).toThrow(/history gap/);
+  });
+
+  it('allows the operator-session repair to converge preview after 0085 and 0086', () => {
+    const files = [
+      '0084_reservation_renter_steps_version_snapshot.sql',
+      OUT_OF_ORDER_SAFE_OPERATOR_SESSION_MIGRATION,
+      '0085_operator_console_projection.sql',
+      '0086_operator_workspace_repair.sql',
+    ];
+    const applied = [
+      '0084_reservation_renter_steps_version_snapshot.sql',
+      '0085_operator_console_projection.sql',
+      '0086_operator_workspace_repair.sql',
+    ];
+
+    expect(() => inspectMigrationHistory(files, applied)).toThrow(/history gap/);
+    const status = inspectMigrationHistory(
+      files,
+      applied,
+      OUT_OF_ORDER_SAFE_OPERATOR_SESSION_MIGRATION,
+    );
+    expect(status).toEqual({
+      appliedFiles: applied,
+      pendingFiles: [OUT_OF_ORDER_SAFE_OPERATOR_SESSION_MIGRATION],
+    });
+    expect(
+      selectPendingMigrations(status, files, OUT_OF_ORDER_SAFE_OPERATOR_SESSION_MIGRATION),
+    ).toEqual([OUT_OF_ORDER_SAFE_OPERATOR_SESSION_MIGRATION]);
   });
 
   it('rejects unknown ledger entries when the image variants backfill is explicitly targeted', () => {
