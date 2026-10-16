@@ -1283,6 +1283,26 @@ describe("NewReservationSheet", () => {
     expect(screen.queryByText(/This is a 3-day rental\./)).not.toBeInTheDocument();
   });
 
+  it("holds a Pickup booking without times from opening on the pickup date to closing on the return date", async () => {
+    renderSheet();
+    fireEvent.click(await screen.findByRole("button", { name: /Emerald Gown/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /M · Emerald/i }));
+    fireEvent.click(await screen.findByRole("button", { name: "Select Oct 10 to Oct 13" }));
+
+    expect(screen.getByText(/Pickup time \(optional\)/)).toBeVisible();
+    expect(await screen.findByText(/No exact time needed\. The garment is held from 8:00\sAM on .+ until 8:00\sPM on/i)).toBeVisible();
+    // Branch hours 08:00–20:00 in Asia/Manila (UTC+8).
+    await waitFor(() =>
+      expect(api.getStaffReservationAvailabilityCheck).toHaveBeenCalledWith(
+        expect.objectContaining({ pickup_at: "2026-10-10T00:00:00.000Z", due_at: "2026-10-13T12:00:00.000Z" })
+      )
+    );
+
+    fireEvent.change(screen.getByRole("combobox", { name: "Fulfillment" }), { target: { value: "delivery" } });
+    expect(screen.queryByText(/No exact time needed/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Pickup time \(optional\)/)).not.toBeInTheDocument();
+  });
+
   it("bounds event date to the selected rental dates and clears it when the range changes", async () => {
     renderSheet();
     await fillDatesAndSelectProduct();
@@ -1328,12 +1348,6 @@ describe("NewReservationSheet", () => {
     fireEvent.change(screen.getByLabelText("Full name"), { target: { value: "Walk-in Customer" } });
     fireEvent.change(screen.getByLabelText("Phone"), { target: { value: "09171234567" } });
     fireEvent.change(screen.getByLabelText("Address"), { target: { value: "123 Test Street" } });
-    fireEvent.click(
-      screen.getByRole("checkbox", {
-        name: /Customer has reviewed and accepted the business rental terms/i,
-      })
-    );
-    fireEvent.click(screen.getAllByRole("checkbox", { name: "Cash received" })[0]!);
     const confirm = screen.getByRole("button", { name: "Confirm Reservation" });
     expect(confirm).toBeDisabled();
     fireEvent.change(screen.getByLabelText("Email"), { target: { value: "invalid-email" } });
@@ -1370,7 +1384,7 @@ describe("NewReservationSheet", () => {
     expect(props.onReservationChanged).toHaveBeenCalledWith(ids.reservation);
   });
 
-  it("requires cash confirmation before recording an unpaid past cash booking as Completed", async () => {
+  it("requires the full cash tendered before recording an unpaid past cash booking as Completed", async () => {
     api.createStaffReservation.mockResolvedValueOnce({
       data: staffReservationCreateResponse.parse({
         ...heldResponse,
@@ -1405,12 +1419,11 @@ describe("NewReservationSheet", () => {
     fireEvent.change(screen.getByLabelText("Phone"), { target: { value: "09171234567" } });
     fireEvent.change(screen.getByLabelText("Email"), { target: { value: "past@example.test" } });
     fireEvent.change(screen.getByLabelText("Address"), { target: { value: "123 Past Street" } });
-    fireEvent.click(screen.getByRole("checkbox", { name: /Customer has reviewed and accepted/i }));
+    // No separate tick boxes: confirming records the terms and the cash tendered.
+    expect(screen.queryByRole("checkbox", { name: /accepted|Cash received/i })).not.toBeInTheDocument();
+    expect(screen.getByText(/Enter the cash tendered before recording this past booking/i)).toBeVisible();
+    fireEvent.change(screen.getByLabelText("Cash tendered"), { target: { value: "" } });
     expect(screen.getByRole("button", { name: "Record as Completed" })).toBeDisabled();
-    expect(
-      screen.getByText(/Confirm that the cash was received and enter the amount tendered/i)
-    ).toBeVisible();
-    fireEvent.click(screen.getAllByRole("checkbox", { name: "Cash received" })[0]!);
     fireEvent.change(screen.getByLabelText("Cash tendered"), { target: { value: "1000" } });
     expect(screen.getByRole("button", { name: "Record as Completed" })).toBeDisabled();
     fireEvent.change(screen.getByLabelText("Cash tendered"), { target: { value: "2000" } });
@@ -1507,11 +1520,6 @@ describe("NewReservationSheet", () => {
       target: { value: "walkin-gcash@example.test" },
     });
     fireEvent.change(screen.getByLabelText("Address"), { target: { value: "123 Test Street" } });
-    fireEvent.click(
-      screen.getByRole("checkbox", {
-        name: /Customer has reviewed and accepted the business rental terms/i,
-      })
-    );
 
     const submit = screen.getByRole("button", { name: "Submit for Verification" });
     expect(submit).toBeEnabled();
@@ -1648,12 +1656,6 @@ describe("NewReservationSheet", () => {
     fireEvent.change(screen.getByLabelText("Address"), { target: { value: "2 Updated Street" } });
     fireEvent.change(screen.getByLabelText("Social media (optional)"), { target: { value: "" } });
     fireEvent.change(screen.getByLabelText("Customer notes (optional)"), { target: { value: "" } });
-    fireEvent.click(
-      screen.getByRole("checkbox", {
-        name: /Customer has reviewed and accepted the business rental terms/i,
-      })
-    );
-    fireEvent.click(screen.getAllByRole("checkbox", { name: "Cash received" })[0]!);
     fireEvent.click(screen.getByRole("button", { name: "Confirm Reservation" }));
 
     await waitFor(() =>
@@ -1726,12 +1728,6 @@ describe("NewReservationSheet", () => {
       expect(screen.getByLabelText("Email")).toHaveValue("addressless@example.test")
     );
     expect(screen.getByLabelText("Address")).toBeVisible();
-    fireEvent.click(
-      screen.getByRole("checkbox", {
-        name: /Customer has reviewed and accepted the business rental terms/i,
-      })
-    );
-    fireEvent.click(screen.getAllByRole("checkbox", { name: "Cash received" })[0]!);
     expect(complete).toBeDisabled();
 
     fireEvent.change(screen.getByLabelText("Address"), {
@@ -1850,10 +1846,6 @@ describe("NewReservationSheet", () => {
 
       expect(await screen.findByLabelText(missing)).toBeVisible();
       expect(screen.getByLabelText("Address")).toBeVisible();
-      fireEvent.click(
-        screen.getByRole("checkbox", { name: /Customer has reviewed and accepted/i })
-      );
-      fireEvent.click(screen.getAllByRole("checkbox", { name: "Cash received" })[0]!);
       const confirm = screen.getByRole("button", { name: "Confirm Reservation" });
       expect(confirm).toBeDisabled();
       fireEvent.change(screen.getByLabelText(missing), { target: { value: fill } });
@@ -1921,12 +1913,6 @@ describe("NewReservationSheet", () => {
     fireEvent.change(screen.getByLabelText("Phone"), { target: { value: "09171234567" } });
     fireEvent.change(screen.getByLabelText("Email"), { target: { value: "walkin@example.test" } });
     fireEvent.change(screen.getByLabelText("Address"), { target: { value: "123 Test Street" } });
-    fireEvent.click(
-      screen.getByRole("checkbox", {
-        name: /Customer has reviewed and accepted the business rental terms/i,
-      })
-    );
-    fireEvent.click(screen.getAllByRole("checkbox", { name: "Cash received" })[0]!);
     fireEvent.click(screen.getByRole("button", { name: "Confirm Reservation" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(/hold (has )?expired/i);

@@ -223,7 +223,6 @@ export function NewReservationSheet({
   const [heldLines, setHeldLines] = useState<ReservationDetail["lines"] | null>(null);
   const [heldLinesError, setHeldLinesError] = useState<string | null>(null);
   const [cashAmountReceived, setCashAmountReceived] = useState("");
-  const [cashReceived, setCashReceived] = useState(false);
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
   const [receiptAttached, setReceiptAttached] = useState(false);
   const [completionNextAction, setCompletionNextAction] = useState<
@@ -252,7 +251,6 @@ export function NewReservationSheet({
   const [address, setAddress] = useState("");
   const [socialMedia, setSocialMedia] = useState("");
   const [notes, setNotes] = useState("");
-  const [termsAccepted, setTermsAccepted] = useState(false);
 
   const canCreate = permissionCodes.includes("reservations.manage");
   const activeVariant =
@@ -341,9 +339,17 @@ export function NewReservationSheet({
         !customerProfileLoading &&
         !customerProfileError))
   );
+  // Pickup customers rarely give an exact time, so with Pickup both times are optional: a blank
+  // pickup time holds the garment from opening on the pickup date, a blank return time until
+  // closing on the return date. Delivery is scheduled, so it still needs both times.
+  const timesOptional = fulfillmentMethod === "pickup";
+  const opensLocal = businessHours?.opens_local ?? "08:00";
+  const closesLocal = businessHours?.closes_local ?? "20:00";
+  const effectivePickupTime = pickupTime || (timesOptional ? opensLocal : "");
+  const effectiveDueTime = dueTime || (timesOptional ? closesLocal : "");
   const requestedInterval = useMemo(
-    () => toRequestedInterval(pickupDate, pickupTime, dueDate, dueTime, timeZone),
-    [dueDate, dueTime, pickupDate, pickupTime, timeZone]
+    () => toRequestedInterval(pickupDate, effectivePickupTime, dueDate, effectiveDueTime, timeZone),
+    [dueDate, effectiveDueTime, pickupDate, effectivePickupTime, timeZone]
   );
   const minimumDurationIssue = useMemo(
     () => minimumRentalDurationIssue(rentalVariant, requestedInterval, timeZone),
@@ -1021,7 +1027,6 @@ export function NewReservationSheet({
     setHeldLines(null);
     setHeldLinesError(null);
     setCashAmountReceived("");
-    setCashReceived(false);
     setReceiptFile(null);
     setReceiptAttached(false);
     setCompletionNextAction(null);
@@ -1039,7 +1044,6 @@ export function NewReservationSheet({
     setAddress("");
     setSocialMedia("");
     setNotes("");
-    setTermsAccepted(false);
   };
 
   const makeSelectedGarment = (
@@ -1279,7 +1283,6 @@ export function NewReservationSheet({
     setCashAmountReceived(
       minorUnitsToMajorInput(result.data.reservation.price_snapshot.due_now_minor)
     );
-    setCashReceived(false);
     setReceiptFile(null);
     setReceiptAttached(false);
     setCompletionNextAction(null);
@@ -1376,25 +1379,13 @@ export function NewReservationSheet({
       });
       return;
     }
-    if (!termsAccepted) {
-      setNotice({
-        tone: "attention",
-        text: "Confirm that the customer accepted the rental terms.",
-      });
-      return;
-    }
-
     const paymentDue = BigInt(held.reservation.price_snapshot.due_now_minor) > 0n;
     const isCash = held.paymentInstructions.rail === "cash";
     const cashCollectionAuthorized = permissionCodes.includes("payments.manage");
     const cashTenderedMinor = majorInputToMinorUnits(cashAmountReceived);
     const cashCollectionSubmitted =
-      paymentDue && isCash && cashReceived && cashTenderedMinor !== null;
+      paymentDue && isCash && cashTenderedMinor !== null;
     if (paymentDue && isCash) {
-      if (!cashReceived) {
-        setNotice({ tone: "attention", text: "Confirm that the cash payment was received." });
-        return;
-      }
       if (
         cashTenderedMinor === null ||
         BigInt(cashTenderedMinor) < BigInt(held.reservation.price_snapshot.due_now_minor)
@@ -1415,6 +1406,8 @@ export function NewReservationSheet({
         held.reservation.id,
         {
           version: held.reservation.version,
+          // Staff book in person under the shop's posted rental terms, so confirming records
+          // their acceptance (the owner removed the separate tick box, 2026-10-15).
           terms_accepted: true,
           customer,
           ...(cashCollectionSubmitted && cashTenderedMinor
@@ -2018,7 +2011,7 @@ export function NewReservationSheet({
                   {pickupDate && dueDate ? (
                     <div className="mt-4 space-y-3">
                       <div className="grid gap-3 sm:grid-cols-2">
-                        <Field label={`Pickup time · ${formatIsoDateForDisplay(pickupDate)}`}>
+                        <Field label={`Pickup time${timesOptional ? " (optional)" : ""} · ${formatIsoDateForDisplay(pickupDate)}`}>
                           <TimePickerField
                             ariaLabel="Pickup time"
                             mode="input"
@@ -2032,7 +2025,7 @@ export function NewReservationSheet({
                             }}
                           />
                         </Field>
-                        <Field label={`Return time · ${formatIsoDateForDisplay(dueDate)}`}>
+                        <Field label={`Return time${timesOptional ? " (optional)" : ""} · ${formatIsoDateForDisplay(dueDate)}`}>
                           <TimePickerField
                             ariaLabel="Return time"
                             mode="input"
@@ -2095,7 +2088,15 @@ export function NewReservationSheet({
                           only after its return time has passed.
                         </p>
                       ) : null}
-                      {!requestedInterval && pickupTime && dueTime && !minimumDurationIssue ? (
+                      {timesOptional && (!pickupTime || !dueTime) && requestedInterval ? (
+                        <p className="text-xs text-dashboard-muted" role="status">
+                          No exact time needed. The garment is held from{" "}
+                          {formatLocalClock(effectivePickupTime)} on{" "}
+                          {formatIsoDateForDisplay(pickupDate)} until{" "}
+                          {formatLocalClock(effectiveDueTime)} on {formatIsoDateForDisplay(dueDate)}.
+                        </p>
+                      ) : null}
+                      {!requestedInterval && effectivePickupTime && effectiveDueTime && !minimumDurationIssue ? (
                         <p className="text-xs text-warning-500" role="alert">
                           Return must be after pickup and the rental period cannot exceed 31 days.
                           Times use the selected branch timezone.
@@ -2404,19 +2405,6 @@ export function NewReservationSheet({
                       </a>
                     ) : null}
                   </div>
-                  {held.paymentInstructions.rail === "cash" && step === "held" ? (
-                    <label className="hidden items-center gap-2 rounded-md border border-dashboard-border px-3 py-2 text-sm text-dashboard-navy sm:flex">
-                      <input
-                        type="checkbox"
-                        checked={cashReceived}
-                        onChange={(event) => {
-                          setCashReceived(event.target.checked);
-                          completeGuard.resetIntent();
-                        }}
-                      />
-                      Cash received
-                    </label>
-                  ) : null}
                 </div>
 
                 {held.paymentInstructions.rail === "cash" ? (
@@ -2448,17 +2436,9 @@ export function NewReservationSheet({
                       ) : null}
                     </Field>
                     {step === "held" ? (
-                      <label className="flex h-10 items-center gap-2 rounded-md border border-dashboard-border px-3 text-sm text-dashboard-navy sm:hidden">
-                        <input
-                          type="checkbox"
-                          checked={cashReceived}
-                          onChange={(event) => {
-                            setCashReceived(event.target.checked);
-                            completeGuard.resetIntent();
-                          }}
-                        />
-                        Cash received
-                      </label>
+                      <p className="text-xs text-dashboard-muted">
+                        Confirming records this cash as received.
+                      </p>
                     ) : null}
                   </div>
                 ) : (
@@ -2915,25 +2895,9 @@ export function NewReservationSheet({
                 held.paymentInstructions.rail === "cash" &&
                 BigInt(held.reservation.price_snapshot.due_now_minor) > 0n ? (
                   <p className="text-xs text-dashboard-muted">
-                    Confirm that the cash was received and enter the amount tendered before
-                    recording this past booking as Completed.
+                    Enter the cash tendered before recording this past booking as Completed.
                   </p>
                 ) : null}
-
-                <label className="flex items-start gap-3 rounded-lg border border-dashboard-border p-3 text-sm">
-                  <input
-                    type="checkbox"
-                    className="mt-1"
-                    checked={termsAccepted}
-                    onChange={(event) => {
-                      setTermsAccepted(event.target.checked);
-                      completeGuard.resetIntent();
-                    }}
-                  />
-                  <span className="text-dashboard-navy">
-                    Customer has reviewed and accepted the business rental terms.
-                  </span>
-                </label>
 
                 <div className="flex flex-wrap justify-between gap-2 border-t border-dashboard-border pt-4">
                   <Button
@@ -2953,12 +2917,10 @@ export function NewReservationSheet({
                       completeGuard.isSubmitting ||
                       cancelGuard.isSubmitting ||
                       receiptGuard.isSubmitting ||
-                      !termsAccepted ||
                       !customerReady ||
                       (BigInt(held.reservation.price_snapshot.due_now_minor) > 0n &&
                         (held.paymentInstructions.rail === "cash"
-                          ? !cashReceived ||
-                            cashTenderedMinor === null ||
+                          ? cashTenderedMinor === null ||
                             BigInt(cashTenderedMinor) <
                               BigInt(held.reservation.price_snapshot.due_now_minor)
                           : false))
@@ -3178,6 +3140,14 @@ function buildCancellationCustomerInput(input: {
       ...(notes ? { notes } : {}),
     },
   };
+}
+
+/** "08:00" -> "8:00 AM": a branch-local wall-clock time, so no timezone conversion applies. */
+function formatLocalClock(time: string): string {
+  const [hours = 0, minutes = 0] = time.split(":").map(Number);
+  return new Intl.DateTimeFormat("en-PH", { hour: "numeric", minute: "2-digit", timeZone: "UTC" }).format(
+    new Date(Date.UTC(2000, 0, 1, hours, minutes))
+  );
 }
 
 function toRequestedInterval(

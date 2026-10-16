@@ -47,12 +47,21 @@ type Load =
   | { kind: "error"; message: string }
   | { kind: "ready"; billing: BillingOverview; catalog: PublicPlanCatalogResponse };
 
-function planDescription(billing: BillingOverview): string {
+type CatalogPlan = PublicPlanCatalogResponse["plans"][number];
+
+function planDescription(plan: CatalogPlan): string {
   const staffSeats =
-    billing.plan.frontdesk_seats_max > 0
-      ? ` and ${billing.plan.frontdesk_seats_max} Front Desk staff`
-      : "";
-  return `${billing.plan.name} plan: ${peso(billing.plan.monthly_minor)} a month, up to ${billing.plan.physical_assets_max} active garments${staffSeats}.`;
+    plan.limits.frontdesk_seats > 0 ? ` and ${plan.limits.frontdesk_seats} Front Desk staff` : "";
+  return `${plan.name} plan: ${peso(plan.monthly_price_minor)} a month, up to ${plan.limits.active_garments} active garments${staffSeats}.`;
+}
+
+/**
+ * The plan this dialog pays for: the one the caller chose, else the plan a waiting payment is for,
+ * else the workspace's current plan (a renewal).
+ */
+function payablePlanCode(billing: BillingOverview, requested: PlanCode | null | undefined): PlanCode {
+  const pending = billing.payments.find((payment) => payment.status === "pending");
+  return requested ?? pending?.target_plan_code ?? billing.plan.code;
 }
 
 /**
@@ -101,6 +110,17 @@ export function SubscribeDialog({
     };
   }, [getToken, open, reloadKey]);
 
+  const payable =
+    load.kind === "ready"
+      ? load.catalog.plans.find((plan) => plan.code === payablePlanCode(load.billing, targetPlanCode))
+      : undefined;
+  const description =
+    load.kind !== "ready"
+      ? "Review the current price and payment details for the plan selected for this workspace."
+      : payable && payable.code !== "free"
+        ? planDescription(payable)
+        : "Choose Starter or Standard to upgrade from Free.";
+
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
@@ -110,9 +130,7 @@ export function SubscribeDialog({
             <div>
               <Dialog.Title className="font-display text-2xl">Subscribe to Drezivo</Dialog.Title>
               <Dialog.Description className="mt-1 text-sm text-dashboard-muted">
-                {load.kind === "ready"
-                  ? planDescription(load.billing)
-                  : "Review the current price and payment details for the plan selected for this workspace."}
+                {description}
               </Dialog.Description>
             </div>
             <Dialog.Close
@@ -145,7 +163,7 @@ export function SubscribeDialog({
             <SubscribeBody
               billing={load.billing}
               catalog={load.catalog}
-              targetPlanCode={targetPlanCode ?? load.billing.plan.code}
+              targetPlanCode={payablePlanCode(load.billing, targetPlanCode)}
               onSubmitted={() => {
                 onSubmitted();
                 setReloadKey((value) => value + 1);
@@ -193,7 +211,11 @@ function SubscribeBody({
       {!pending ? (
         billing.can_pay ? (
           billing.payment_methods.length > 0 ? (
-            targetPlan ? (
+            targetPlan?.code === "free" ? (
+              <p className="text-sm text-dashboard-muted">
+                Free needs no payment. Open Settings, Plan &amp; billing to choose Starter or Standard.
+              </p>
+            ) : targetPlan ? (
               <PaymentForm billing={billing} targetPlan={targetPlan} onSubmitted={onSubmitted} />
             ) : (
               <p role="alert" className="text-sm text-red-500">The selected plan is unavailable.</p>
@@ -210,7 +232,7 @@ function SubscribeBody({
         )
       ) : null}
 
-      {billing.payments.length > 0 ? <History payments={billing.payments} /> : null}
+      {billing.payments.length > 0 ? <PaymentHistory payments={billing.payments} /> : null}
     </div>
   );
 }
@@ -368,7 +390,10 @@ function PaymentForm({
 
       <div className="flex flex-wrap items-center justify-between gap-3 border-t border-dashboard-border pt-4">
         <p className="text-xs text-dashboard-muted" role={message ? "alert" : undefined}>
-          {message ?? "Full access returns as soon as Drezivo approves your payment."}
+          {message ??
+            (billing.plan.code === "free"
+              ? `${targetPlan.name} opens as soon as Drezivo approves your payment.`
+              : "Full access returns as soon as Drezivo approves your payment.")}
         </p>
         <Button type="submit" disabled={busy}>
           {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
@@ -475,7 +500,8 @@ function StatusNote({
   );
 }
 
-function History({ payments }: { payments: SubscriptionPaymentView[] }) {
+/** Submitted payments, newest first. Also shown on Settings, Plan & billing. */
+export function PaymentHistory({ payments }: { payments: SubscriptionPaymentView[] }) {
   const label = {
     pending: "Waiting for approval",
     verified: "Approved",

@@ -1,6 +1,6 @@
 "use client";
 
-import { Bell, Building2, CreditCard, Ruler, ShieldCheck, UserRound, Users } from "lucide-react";
+import { Bell, Building2, CreditCard, Receipt, Ruler, ShieldCheck, UserRound, Users } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -27,6 +27,7 @@ const GROUPS: { label: string; items: NavItem[] }[] = [
     label: "Business",
     items: [
       { href: "/settings", label: "Business information", icon: Building2 },
+      { href: "/settings/billing", label: "Plan & billing", icon: Receipt },
       { href: "/settings/payment-methods", label: "Payment methods", icon: CreditCard },
       { href: "/settings/measurement-guide", label: "Measurement guide", icon: Ruler },
     ],
