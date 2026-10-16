@@ -57,7 +57,7 @@ export function createSubscriptionPaymentReviewedHandler(sender: EmailSender | n
     if (!parsed.success) throw new PermanentOutboxError('Payment review payload is invalid.');
     const { payment_id: paymentId, outcome } = parsed.data;
 
-    // The plan switch already happened when the payment was verified (migration 0085's trigger,
+    // The plan switch already happened when the payment was verified (migration 0087's trigger,
     // in the approving transaction), so this reads the workspace's current plan and paid-through date.
     const payment = await withSystemTenantTransaction(row.tenant_id, 'system:subscription-review-email', (client) =>
       readReviewedPayment(client, row.tenant_id, paymentId),
