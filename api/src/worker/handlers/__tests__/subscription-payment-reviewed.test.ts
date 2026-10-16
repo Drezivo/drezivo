@@ -66,7 +66,7 @@ describe('subscription payment reviewed email', () => {
   });
 
   it('names the plan an approved Free upgrade moved the workspace to, and only reads', async () => {
-    // The approval's own transaction already switched the plan (migration 0087), so the worker sees Starter.
+    // The approval's own transaction already switched the plan (migration 0088), so the worker sees Starter.
     db.payment = reviewed({ current_plan_code: 'starter', current_period_end: new Date('2026-11-15T00:00:00.000Z') });
     const send = vi.fn().mockResolvedValue(undefined);
 

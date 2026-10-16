@@ -336,7 +336,7 @@ describe('Free plan upgrade', async () => {
       .set('Idempotency-Key', 'fu-repair-pay-1')
       .send({ plan_code: 'standard', reference: 'GC-3', ...(await paymentInputs(ws.tenantId)) });
     const paymentId = (bodyOf(submitted).data as { payment: { id: string } }).payment.id;
-    // The state production reached before migration 0087: verified, extended, still on Free.
+    // The state production reached before migration 0088: verified, extended, still on Free.
     await admin.query('ALTER TABLE subscription_payment DISABLE TRIGGER subscription_payment_activate_target_plan');
     try {
       await approveAsOperator(ws.tenantId, paymentId);
@@ -348,7 +348,7 @@ describe('Free plan upgrade', async () => {
     expect(stuck.access.level).toBe('locked');
 
     const migration = readFileSync(
-      new URL('../../src/db/migrations/0087_approved_payment_activates_target_plan.sql', import.meta.url),
+      new URL('../../src/db/migrations/0088_approved_payment_activates_target_plan.sql', import.meta.url),
       'utf8',
     );
     const repair = migration.slice(migration.indexOf('WITH stuck AS'), migration.indexOf('COMMENT ON FUNCTION'));
