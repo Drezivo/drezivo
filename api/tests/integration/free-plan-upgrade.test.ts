@@ -16,10 +16,13 @@ import {
 
 /**
  * Free → paid, end to end over HTTP against PostgreSQL: the 14-day trial, paying for a plan once
- * the trial is used, and the operator console's approval. `approveAsOperator` replays the SQL of
- * the operator API's reviewPayment (Drezivo/drezivo-operator, tenant-admin-db) statement for
- * statement, because that service, not this one, approves payments: it extends the period and
- * never reads the payment's target plan.
+ * the trial is used, the operator console's approval, and the business worker that activates it.
+ *
+ * Payments are approved by the operator API (Drezivo/drezivo-operator, tenant-admin-db
+ * reviewPayment), not by this service. `approveAsOperator` replays its SQL statement for statement
+ * as of operator 4e875e9: a Free workspace's subscription is left untouched and the outbox row
+ * hands activation to this repository's worker; a paid plan's payment extends its period.
+ * `approveAsLegacyOperator` replays the release before it, which extended a Free subscription.
  */
 const clerk = vi.hoisted(() => ({ getAuth: vi.fn() }));
 vi.mock('@clerk/express', () => ({
@@ -35,6 +38,16 @@ type Envelope = { success: boolean; data?: Record<string, unknown>; error?: { co
 const bodyOf = (response: { body: unknown }): Envelope => response.body as Envelope;
 const PNG = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(32, 3)]);
 const DAY_MS = 24 * 60 * 60 * 1000;
+const EXTEND_PERIOD = `UPDATE subscription
+    SET current_period_start = CASE WHEN status = 'active' AND current_period_end > now() THEN current_period_start ELSE now() END,
+        current_period_end = GREATEST(
+          now(),
+          CASE WHEN status = 'trialing' THEN COALESCE(trial_ends_at, now()) ELSE now() END,
+          CASE WHEN status = 'active' THEN current_period_end ELSE now() END
+        ) + interval '1 month',
+        status = 'active',
+        grace_ends_at = NULL
+  WHERE id = $1`;
 
 describe('Free plan upgrade', async () => {
   const { createApp } = await import('../../src/app.js');
@@ -44,6 +57,7 @@ describe('Free plan upgrade', async () => {
   const { createSubscriptionPaymentReviewedHandler } = await import(
     '../../src/worker/handlers/subscription-payment-reviewed.js'
   );
+  const { PermanentOutboxError } = await import('../../src/worker/runner.js');
   const admin = new pg.Pool({ connectionString: adminUrl, max: 3 });
   const methodIds: string[] = [];
 
@@ -79,6 +93,10 @@ describe('Free plan upgrade', async () => {
         ws.owner.principalId,
       ]);
     }
+    await admin.query(
+      "INSERT INTO tenant_settings (tenant_id, business_email) VALUES ($1, 'owner@fu.test') ON CONFLICT (tenant_id) DO UPDATE SET business_email = EXCLUDED.business_email",
+      [ws.tenantId],
+    );
     clerk.getAuth.mockReturnValue({ userId: ws.owner.principalId, orgId: ws.clerkOrgId });
     return ws;
   }
@@ -100,47 +118,22 @@ describe('Free plan upgrade', async () => {
     return { payment_method_id: methodId, proof_file_id: proof.rows[0]?.id };
   }
 
-  /** The operator API's reviewPayment(approve), verbatim apart from its idempotency bookkeeping. */
-  async function approveAsOperator(tenantId: string, paymentId: string): Promise<void> {
+  async function submitPayment(label: string, planCode: 'starter' | 'standard' | undefined, tenantId: string): Promise<string> {
+    const response = await request(createApp())
+      .post('/api/v1/billing/payments')
+      .set('Idempotency-Key', `${label}-payment`)
+      .send({ ...(planCode ? { plan_code: planCode } : {}), reference: 'GC-445566', ...(await paymentInputs(tenantId)) });
+    expect(response.status).toBe(201);
+    return (bodyOf(response).data as { payment: { id: string } }).payment.id;
+  }
+
+  async function inOperatorTransaction(tenantId: string, work: (client: pg.PoolClient) => Promise<void>): Promise<void> {
     const client = await admin.connect();
     try {
       await client.query('BEGIN');
       await client.query("SELECT set_config('app.tenant_id', $1, true), set_config('app.principal_id', 'operator:test', true)", [tenantId]);
       await client.query('SELECT id FROM tenant WHERE id = $1 FOR UPDATE', [tenantId]);
-      await client.query('SELECT status FROM subscription_payment WHERE tenant_id = $1 AND id = $2 FOR UPDATE', [tenantId, paymentId]);
-      await client.query(
-        `UPDATE subscription_payment
-            SET status = 'verified', reviewed_at = now(), reviewed_by = 'operator:test', review_note = NULL
-          WHERE tenant_id = $1 AND id = $2 AND status = 'pending'`,
-        [tenantId, paymentId],
-      );
-      const subscription = (
-        await client.query<{ id: string; plan_id: string; status: string }>(
-          `SELECT s.id, s.plan_id, s.status FROM subscription s WHERE s.tenant_id = $1
-            ORDER BY s.created_at DESC LIMIT 1 FOR UPDATE OF s`,
-          [tenantId],
-        )
-      ).rows[0];
-      if (!subscription) throw new Error('no subscription');
-      await client.query(
-        `UPDATE subscription
-            SET current_period_start = CASE WHEN status = 'active' AND current_period_end > now() THEN current_period_start ELSE now() END,
-                current_period_end = GREATEST(
-                  now(),
-                  CASE WHEN status = 'trialing' THEN COALESCE(trial_ends_at, now()) ELSE now() END,
-                  CASE WHEN status = 'active' THEN current_period_end ELSE now() END
-                ) + interval '1 month',
-                status = 'active',
-                grace_ends_at = NULL
-          WHERE id = $1`,
-        [subscription.id],
-      );
-      await client.query(
-        `INSERT INTO subscription_event (tenant_id, subscription_id, prior_plan_id, next_plan_id, event_type, effective_at, business_key)
-         VALUES ($1, $2, $3, $3, $4, now(), $5)
-         ON CONFLICT (tenant_id, business_key) DO NOTHING`,
-        [tenantId, subscription.id, subscription.plan_id, subscription.status === 'active' ? 'renewed' : 'converted', `payment:${paymentId}`],
-      );
+      await work(client);
       await client.query('COMMIT');
     } catch (error) {
       await client.query('ROLLBACK');
@@ -148,6 +141,72 @@ describe('Free plan upgrade', async () => {
     } finally {
       client.release();
     }
+  }
+
+  /** Operator 4e875e9 reviewPayment(approve), apart from its idempotency bookkeeping. */
+  async function approveAsOperator(tenantId: string, paymentId: string): Promise<void> {
+    await inOperatorTransaction(tenantId, async (client) => {
+      await client.query('SELECT status FROM subscription_payment WHERE tenant_id = $1 AND id = $2 FOR UPDATE', [tenantId, paymentId]);
+      await client.query(
+        `UPDATE subscription_payment SET status = 'verified', reviewed_at = now(), reviewed_by = 'operator:test', review_note = NULL
+          WHERE tenant_id = $1 AND id = $2 AND status = 'pending'`,
+        [tenantId, paymentId],
+      );
+      const subscription = (
+        await client.query<{ id: string; plan_id: string; plan_code: string; status: string }>(
+          `SELECT s.id, s.plan_id, p.code AS plan_code, s.status FROM subscription s JOIN plan p ON p.id = s.plan_id
+            WHERE s.tenant_id = $1 ORDER BY s.created_at DESC LIMIT 1 FOR UPDATE OF s`,
+          [tenantId],
+        )
+      ).rows[0];
+      if (!subscription) throw new Error('no subscription');
+      if (subscription.plan_code !== 'free') {
+        await client.query(EXTEND_PERIOD, [subscription.id]);
+        await client.query(
+          `INSERT INTO subscription_event (tenant_id, subscription_id, prior_plan_id, next_plan_id, event_type, effective_at, business_key)
+           VALUES ($1, $2, $3, $3, $4, now(), $5) ON CONFLICT (tenant_id, business_key) DO NOTHING`,
+          [tenantId, subscription.id, subscription.plan_id, subscription.status === 'active' ? 'renewed' : 'converted', `payment:${paymentId}`],
+        );
+      }
+      await client.query(
+        `INSERT INTO outbox_event (tenant_id, dedupe_key, event_type, payload)
+         VALUES ($1, $2, 'subscription.payment_reviewed', $3::jsonb) ON CONFLICT DO NOTHING`,
+        [tenantId, `subscription.payment_reviewed:${paymentId}:approved`, JSON.stringify({ payment_id: paymentId, outcome: 'approved' })],
+      );
+    });
+  }
+
+  /** The operator release before 4e875e9: it extended every approved subscription, Free included. */
+  async function approveAsLegacyOperator(tenantId: string, paymentId: string): Promise<void> {
+    await inOperatorTransaction(tenantId, async (client) => {
+      await client.query(
+        `UPDATE subscription_payment SET status = 'verified', reviewed_at = now(), reviewed_by = 'operator:test'
+          WHERE tenant_id = $1 AND id = $2 AND status = 'pending'`,
+        [tenantId, paymentId],
+      );
+      const id = (await client.query<{ id: string }>('SELECT id FROM subscription WHERE tenant_id = $1', [tenantId])).rows[0]?.id;
+      await client.query(EXTEND_PERIOD, [id]);
+    });
+  }
+
+  /** Runs the business worker on the approval's outbox row, as the outbox runner would. */
+  async function runApprovalJob(tenantId: string, paymentId: string, send = vi.fn().mockResolvedValue(undefined)) {
+    const outbox = await admin.query<{ id: string; dedupe_key: string }>(
+      "SELECT id, dedupe_key FROM outbox_event WHERE tenant_id = $1 AND payload->>'payment_id' = $2",
+      [tenantId, paymentId],
+    );
+    const row = outbox.rows[0];
+    if (!row) throw new Error('no approval outbox row');
+    await createSubscriptionPaymentReviewedHandler({ send })({
+      id: row.id,
+      tenant_id: tenantId,
+      dedupe_key: row.dedupe_key,
+      event_type: 'subscription.payment_reviewed',
+      payload: { payment_id: paymentId, outcome: 'approved' },
+      attempts: 0,
+      max_attempts: 8,
+    });
+    return send;
   }
 
   async function subscriptionOf(tenantId: string) {
@@ -159,6 +218,13 @@ describe('Free plan upgrade', async () => {
     const row = result.rows[0];
     if (!row) throw new Error('no subscription');
     return row;
+  }
+
+  async function accessOf() {
+    return (bodyOf(await request(createApp()).get('/api/v1/actor-context')).data as {
+      access: { level: string; reason: string };
+      entitlements: { physical_assets_max: number; features: { fittings: boolean; storefront_reservations: boolean } };
+    });
   }
 
   it('starts the 14-day trial once for concurrent double-fire, opening paid features immediately', async () => {
@@ -183,10 +249,7 @@ describe('Free plan upgrade', async () => {
     );
     expect(events.rows[0]?.n).toBe(1);
 
-    const context = bodyOf(await request(app).get('/api/v1/actor-context')).data as {
-      access: { level: string; reason: string };
-      entitlements: { features: { fittings: boolean; storefront_reservations: boolean } };
-    };
+    const context = await accessOf();
     expect(context.access).toMatchObject({ level: 'full', reason: 'trial' });
     expect(context.entitlements.features).toMatchObject({ fittings: true, storefront_reservations: true });
 
@@ -214,54 +277,34 @@ describe('Free plan upgrade', async () => {
     expect(bodyOf(refused).error?.message).toContain('Submit a plan payment');
   });
 
-  it('moves a Free workspace onto the plan it paid for when the operator console approves it', async () => {
+  it('activates a paid upgrade once when the worker runs the operator approval, and emails the owner', async () => {
     const ws = await freeWorkspace('fu-paid', true);
-    const app = createApp();
-    const submitted = await request(app)
-      .post('/api/v1/billing/payments')
-      .set('Idempotency-Key', 'fu-paid-pay-1')
-      .send({ plan_code: 'starter', reference: 'GC-445566', ...(await paymentInputs(ws.tenantId)) });
-    expect(submitted.status).toBe(201);
-    expect(bodyOf(submitted).data).toMatchObject({ payment: { target_plan_code: 'starter', amount_minor: '14900' } });
-    const paymentId = (bodyOf(submitted).data as { payment: { id: string } }).payment.id;
+    const paymentId = await submitPayment('fu-paid', 'starter', ws.tenantId);
 
     await approveAsOperator(ws.tenantId, paymentId);
+    // The operator only records the decision; the workspace stays fully open on Free until the job runs.
+    expect(await subscriptionOf(ws.tenantId)).toMatchObject({ plan_code: 'free', current_period_end: null });
+    expect((await accessOf()).access).toMatchObject({ level: 'full', reason: 'free' });
 
+    const send = await runApprovalJob(ws.tenantId, paymentId);
     const subscription = await subscriptionOf(ws.tenantId);
     expect(subscription).toMatchObject({ plan_code: 'starter', status: 'active' });
     const periodMs = (subscription.current_period_end?.getTime() ?? 0) - Date.now();
     expect(periodMs).toBeGreaterThan(27 * DAY_MS);
     expect(periodMs).toBeLessThan(32 * DAY_MS);
-
-    const context = bodyOf(await request(app).get('/api/v1/actor-context')).data as {
-      access: { level: string; reason: string };
-      entitlements: { physical_assets_max: number; features: { fittings: boolean } };
-    };
+    const context = await accessOf();
     expect(context.access).toMatchObject({ level: 'full', reason: 'paid' });
     expect(context.entitlements).toMatchObject({ physical_assets_max: 125, features: { fittings: true } });
+    expect((send.mock.calls[0]?.[0] as { text: string }).text).toContain('Your Starter plan is active until');
 
-    const activation = await admin.query<{ n: number }>(
+    // A redelivered job does not start a second month.
+    await runApprovalJob(ws.tenantId, paymentId);
+    expect((await subscriptionOf(ws.tenantId)).current_period_end).toEqual(subscription.current_period_end);
+    const activations = await admin.query<{ n: number }>(
       'SELECT count(*)::int AS n FROM subscription_event WHERE tenant_id = $1 AND business_key = $2',
       [ws.tenantId, `subscription-payment-approved:${paymentId}`],
     );
-    expect(activation.rows[0]?.n).toBe(1);
-
-    // The owner's email names the new plan; the worker only reads.
-    const send = vi.fn().mockResolvedValue(undefined);
-    await admin.query(
-      "INSERT INTO tenant_settings (tenant_id, business_email) VALUES ($1, 'owner@fu.test') ON CONFLICT (tenant_id) DO UPDATE SET business_email = EXCLUDED.business_email",
-      [ws.tenantId],
-    );
-    await createSubscriptionPaymentReviewedHandler({ send })({
-      id: `outbox-${paymentId}`,
-      tenant_id: ws.tenantId,
-      dedupe_key: `subscription.payment_reviewed:${paymentId}:approved`,
-      event_type: 'subscription.payment_reviewed',
-      payload: { payment_id: paymentId, outcome: 'approved' },
-      attempts: 0,
-      max_attempts: 8,
-    });
-    expect((send.mock.calls[0]?.[0] as { text: string }).text).toContain('Your Starter plan is active until');
+    expect(activations.rows[0]?.n).toBe(1);
   });
 
   it('converts a trial started from Free when its payment is approved, after the trial days', async () => {
@@ -271,92 +314,81 @@ describe('Free plan upgrade', async () => {
       (await request(app).post('/api/v1/subscription/plan').set('Idempotency-Key', 'fu-convert-trial').send({ plan_code: 'standard' })).status,
     ).toBe(200);
     const { trial_ends_at: trialEndsAt } = await subscriptionOf(ws.tenantId);
+    const paymentId = await submitPayment('fu-convert', undefined, ws.tenantId);
 
-    const submitted = await request(app)
-      .post('/api/v1/billing/payments')
-      .set('Idempotency-Key', 'fu-convert-pay-1')
-      .send({ reference: 'GC-778800', ...(await paymentInputs(ws.tenantId)) });
-    expect(submitted.status).toBe(201);
-    const paymentId = (bodyOf(submitted).data as { payment: { id: string } }).payment.id;
     await approveAsOperator(ws.tenantId, paymentId);
+    await runApprovalJob(ws.tenantId, paymentId);
 
     const subscription = await subscriptionOf(ws.tenantId);
     expect(subscription).toMatchObject({ plan_code: 'standard', status: 'active' });
-    // The paid month starts where the trial ends, so no trial day is lost.
-    const expectedEnd = new Date(trialEndsAt ?? 0);
-    expectedEnd.setMonth(expectedEnd.getMonth() + 1);
-    expect(Math.abs((subscription.current_period_end?.getTime() ?? 0) - expectedEnd.getTime())).toBeLessThan(DAY_MS);
+    // The paid month starts where the trial ends, so no trial day is lost. Postgres computes the
+    // month (Oct 31 + 1 month is Nov 30), as the operator's approval does.
+    const expected = await admin.query<{ end: Date }>("SELECT $1::timestamptz + interval '1 month' AS end", [trialEndsAt]);
+    expect(Math.abs((subscription.current_period_end?.getTime() ?? 0) - (expected.rows[0]?.end.getTime() ?? 0))).toBeLessThan(60_000);
   });
 
   it('leaves a rejected Free upgrade on Free with full access', async () => {
     const ws = await freeWorkspace('fu-rejected', true);
-    const app = createApp();
-    const submitted = await request(app)
-      .post('/api/v1/billing/payments')
-      .set('Idempotency-Key', 'fu-rejected-pay')
-      .send({ plan_code: 'standard', reference: 'GC-1', ...(await paymentInputs(ws.tenantId)) });
-    const paymentId = (bodyOf(submitted).data as { payment: { id: string } }).payment.id;
+    const paymentId = await submitPayment('fu-rejected', 'standard', ws.tenantId);
     await admin.query(
       "UPDATE subscription_payment SET status = 'failed', reviewed_at = now(), review_note = 'No match' WHERE tenant_id = $1 AND id = $2",
       [ws.tenantId, paymentId],
     );
 
     expect(await subscriptionOf(ws.tenantId)).toMatchObject({ plan_code: 'free', status: 'active', current_period_end: null });
-    const context = bodyOf(await request(app).get('/api/v1/actor-context')).data as { access: { level: string; reason: string } };
-    expect(context.access).toMatchObject({ level: 'full', reason: 'free' });
+    expect((await accessOf()).access).toMatchObject({ level: 'full', reason: 'free' });
   });
 
-  it('refuses to approve a payment for a plan that is no longer offered', async () => {
+  it('refuses to activate a plan that is no longer offered and leaves the workspace on Free', async () => {
     const ws = await freeWorkspace('fu-retired', true);
-    const app = createApp();
-    const submitted = await request(app)
-      .post('/api/v1/billing/payments')
-      .set('Idempotency-Key', 'fu-retired-pay-1')
-      .send({ plan_code: 'starter', reference: 'GC-2', ...(await paymentInputs(ws.tenantId)) });
-    const paymentId = (bodyOf(submitted).data as { payment: { id: string } }).payment.id;
-    const client = await admin.connect();
+    const paymentId = await submitPayment('fu-retired', 'starter', ws.tenantId);
+    await approveAsOperator(ws.tenantId, paymentId);
+    await admin.query("UPDATE plan SET active = false WHERE code = 'starter' AND version = 1");
     try {
-      await client.query('BEGIN');
-      await client.query("UPDATE plan SET active = false WHERE code = 'starter' AND version = 1");
-      await expect(
-        client.query("UPDATE subscription_payment SET status = 'verified' WHERE tenant_id = $1 AND id = $2", [ws.tenantId, paymentId]),
-      ).rejects.toMatchObject({ code: '23514' });
+      await expect(runApprovalJob(ws.tenantId, paymentId)).rejects.toBeInstanceOf(PermanentOutboxError);
+      expect(await subscriptionOf(ws.tenantId)).toMatchObject({ plan_code: 'free', current_period_end: null });
     } finally {
-      await client.query('ROLLBACK');
-      client.release();
+      await admin.query("UPDATE plan SET active = true WHERE code = 'starter' AND version = 1");
     }
-    expect(await subscriptionOf(ws.tenantId)).toMatchObject({ plan_code: 'free' });
   });
 
-  it("repairs a Free workspace an earlier approval left on Free with a paid end date", async () => {
-    const ws = await freeWorkspace('fu-repair', true);
-    const app = createApp();
-    const submitted = await request(app)
-      .post('/api/v1/billing/payments')
-      .set('Idempotency-Key', 'fu-repair-pay-1')
-      .send({ plan_code: 'standard', reference: 'GC-3', ...(await paymentInputs(ws.tenantId)) });
-    const paymentId = (bodyOf(submitted).data as { payment: { id: string } }).payment.id;
-    // The state production reached before migration 0088: verified, extended, still on Free.
-    await admin.query('ALTER TABLE subscription_payment DISABLE TRIGGER subscription_payment_activate_target_plan');
-    try {
-      await approveAsOperator(ws.tenantId, paymentId);
-    } finally {
-      await admin.query('ALTER TABLE subscription_payment ENABLE TRIGGER subscription_payment_activate_target_plan');
-    }
-    expect(await subscriptionOf(ws.tenantId)).toMatchObject({ plan_code: 'free' });
-    const stuck = bodyOf(await request(app).get('/api/v1/actor-context')).data as { access: { level: string } };
-    expect(stuck.access.level).toBe('locked');
-
-    const migration = readFileSync(
-      new URL('../../src/db/migrations/0088_approved_payment_activates_target_plan.sql', import.meta.url),
+  describe('migration 0088 repairs approvals made while activation was broken', () => {
+    const repair = readFileSync(
+      new URL('../../src/db/migrations/0088_free_upgrade_approval_repair.sql', import.meta.url),
       'utf8',
     );
-    const repair = migration.slice(migration.indexOf('WITH stuck AS'), migration.indexOf('COMMENT ON FUNCTION'));
-    await admin.query(repair);
-    await admin.query(repair);
 
-    expect(await subscriptionOf(ws.tenantId)).toMatchObject({ plan_code: 'standard', status: 'active' });
-    const repaired = bodyOf(await request(app).get('/api/v1/actor-context')).data as { access: { level: string; reason: string } };
-    expect(repaired.access).toMatchObject({ level: 'full', reason: 'paid' });
+    it('moves a Free workspace an earlier operator release extended onto the plan it paid for', async () => {
+      const ws = await freeWorkspace('fu-repair-legacy', true);
+      const paymentId = await submitPayment('fu-repair-legacy', 'standard', ws.tenantId);
+      await approveAsLegacyOperator(ws.tenantId, paymentId);
+      expect((await accessOf()).access.level).toBe('locked');
+
+      await admin.query(repair);
+      await admin.query(repair);
+
+      expect(await subscriptionOf(ws.tenantId)).toMatchObject({ plan_code: 'standard', status: 'active' });
+      expect((await accessOf()).access).toMatchObject({ level: 'full', reason: 'paid' });
+    });
+
+    it('re-queues a dead approval job so the fixed worker activates it', async () => {
+      const ws = await freeWorkspace('fu-repair-dead', true);
+      const paymentId = await submitPayment('fu-repair-dead', 'starter', ws.tenantId);
+      await approveAsOperator(ws.tenantId, paymentId);
+      await admin.query(
+        "UPDATE outbox_event SET status = 'dead', attempts = 8, safe_last_error = 'column updated_at does not exist' WHERE tenant_id = $1 AND event_type = 'subscription.payment_reviewed'",
+        [ws.tenantId],
+      );
+
+      await admin.query(repair);
+
+      const queued = await admin.query<{ status: string; attempts: number }>(
+        "SELECT status, attempts FROM outbox_event WHERE tenant_id = $1 AND event_type = 'subscription.payment_reviewed'",
+        [ws.tenantId],
+      );
+      expect(queued.rows).toEqual([{ status: 'pending', attempts: 0 }]);
+      await runApprovalJob(ws.tenantId, paymentId);
+      expect(await subscriptionOf(ws.tenantId)).toMatchObject({ plan_code: 'starter', status: 'active' });
+    });
   });
 });
