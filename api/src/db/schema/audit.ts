@@ -46,6 +46,7 @@ export const operatorCommand = pgTable('operator_command', {
   resourceKind: text('resource_kind').notNull(),
   resourceId: uuid('resource_id').notNull(),
   intentKey: text('intent_key').notNull(),
+  requestFingerprint: text('request_fingerprint'),
   reason: text('reason').notNull(),
   status: operatorCommandStatusEnum('status').notNull(),
   requestId: text('request_id').notNull(),

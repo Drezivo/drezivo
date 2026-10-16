@@ -7,6 +7,8 @@ import {
   MigrationHistoryError,
   OUT_OF_ORDER_SAFE_IMAGE_VARIANTS_MIGRATION,
   OUT_OF_ORDER_SAFE_MIGRATION,
+  OUT_OF_ORDER_SAFE_OPERATOR_FUNCTIONS_MIGRATION,
+  OUT_OF_ORDER_SAFE_OPERATOR_SESSION_MIGRATION,
   parseMigrationArguments,
   selectPendingMigrations,
 } from '../../scripts/migration-history.js';
@@ -195,6 +197,46 @@ describe('migration history inspection', () => {
         OUT_OF_ORDER_SAFE_IMAGE_VARIANTS_MIGRATION,
       ),
     ).toThrow(/files missing from this checkout: 0082_missing_from_checkout\.sql/);
+  });
+
+  it('allows the operator migration closure to converge staging or preview after 0085 and 0086', () => {
+    const files = [
+      '0084_reservation_renter_steps_version_snapshot.sql',
+      OUT_OF_ORDER_SAFE_OPERATOR_SESSION_MIGRATION,
+      '0085_operator_console_projection.sql',
+      '0086_operator_workspace_repair.sql',
+      OUT_OF_ORDER_SAFE_OPERATOR_FUNCTIONS_MIGRATION,
+      '0088_free_upgrade_approval_repair.sql',
+    ];
+    const applied = [
+      '0084_reservation_renter_steps_version_snapshot.sql',
+      '0085_operator_console_projection.sql',
+      '0086_operator_workspace_repair.sql',
+      '0088_free_upgrade_approval_repair.sql',
+    ];
+
+    expect(() => inspectMigrationHistory(files, applied)).toThrow(/history gap/);
+    expect(() =>
+      inspectMigrationHistory(files, applied, OUT_OF_ORDER_SAFE_OPERATOR_SESSION_MIGRATION),
+    ).toThrow(/history gap/);
+    const status = inspectMigrationHistory(
+      files,
+      applied,
+      OUT_OF_ORDER_SAFE_OPERATOR_FUNCTIONS_MIGRATION,
+    );
+    expect(status).toEqual({
+      appliedFiles: applied,
+      pendingFiles: [
+        OUT_OF_ORDER_SAFE_OPERATOR_SESSION_MIGRATION,
+        OUT_OF_ORDER_SAFE_OPERATOR_FUNCTIONS_MIGRATION,
+      ],
+    });
+    expect(
+      selectPendingMigrations(status, files, OUT_OF_ORDER_SAFE_OPERATOR_FUNCTIONS_MIGRATION),
+    ).toEqual([
+      OUT_OF_ORDER_SAFE_OPERATOR_SESSION_MIGRATION,
+      OUT_OF_ORDER_SAFE_OPERATOR_FUNCTIONS_MIGRATION,
+    ]);
   });
 
   it('does not allow the image variants backfill to hide another gap or an earlier pending migration', () => {
