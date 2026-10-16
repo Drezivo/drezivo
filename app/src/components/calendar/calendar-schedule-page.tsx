@@ -10,6 +10,7 @@ import {
   Clock3,
   RotateCcw,
   Ruler,
+  SlidersHorizontal,
 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
@@ -31,6 +32,7 @@ import { cn } from "@/lib/utils";
 
 import { FittingDetailsSheet } from "@/components/fittings/fitting-details-sheet";
 import { ReservationDetailsSheet } from "@/components/reservations/reservation-details-sheet";
+import { PhoneDayAgenda, PhoneWeekStrip } from "@/components/calendar/calendar-phone-agenda";
 
 import {
   addCalendarDays,
@@ -141,6 +143,10 @@ export function CalendarSchedulePage() {
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
   const [selectedDateKey, setSelectedDateKey] = useState<string | null>(requestedDateKey);
+  // Phones show one day's agenda under a week strip instead of the week grid.
+  const [agendaDateKey, setAgendaDateKey] = useState(
+    () => requestedDateKey ?? calendarTodayDateKey(fallbackTimeZone)
+  );
   const [selectedReservationId, setSelectedReservationId] = useState<string | null>(null);
   const [selectedReservation, setSelectedReservation] = useState<ReservationDetail | null>(null);
   const [reservationDetailLoading, setReservationDetailLoading] = useState(false);
@@ -414,14 +420,35 @@ export function CalendarSchedulePage() {
       return;
     }
     setWeekStart((current) => addCalendarDays(current, direction * 7));
+    setAgendaDateKey((current) => addCalendarDays(current, direction * 7));
   };
 
   const goToday = () => {
     const today = calendarTodayDateKey(timeZone);
     setWeekStart(startOfCalendarWeek(today));
     setMonthStart(`${today.slice(0, 7)}-01`);
+    setAgendaDateKey(today);
     setView("week");
   };
+
+  const selectAgendaDay = (dateKey: string) => {
+    setAgendaDateKey(dateKey);
+    setWeekStart(startOfCalendarWeek(dateKey));
+    setMonthStart(`${dateKey.slice(0, 7)}-01`);
+  };
+  // On phones a day picked in the month view opens its agenda in place; larger screens keep the sheet.
+  const openMonthDay = (dateKey: string) => {
+    if (window.matchMedia?.("(max-width: 639.98px)").matches) {
+      selectAgendaDay(dateKey);
+      setView("week");
+      return;
+    }
+    openDayAgenda(dateKey);
+  };
+  const activityCountByDate = new Map<string, number>();
+  for (const activity of visibleActivities) {
+    activityCountByDate.set(activity.dateKey, (activityCountByDate.get(activity.dateKey) ?? 0) + 1);
+  }
 
   const openDayAgenda = (dateKey: string) => setSelectedDateKey(dateKey);
   const openActivityDetails = (activity: CalendarActivity) => {
@@ -479,6 +506,7 @@ export function CalendarSchedulePage() {
           onToday={goToday}
           onViewChange={setView}
           showTodayAction={!currentPeriodContainsToday}
+          statusFilter={statusFilter}
           statusFilterLabel={statusFilterLabel}
           statusOptions={statusOptions}
           view={view}
@@ -549,15 +577,38 @@ export function CalendarSchedulePage() {
         ) : null}
         {contextState === "ready" && calendarState === "ready" && businessHours ? (
           view === "week" ? (
-            <ScheduleGrid
-              activities={visibleActivities}
-              businessHours={businessHours}
-              dateKeys={weekDateKeys}
-              timeZone={timeZone}
-              todayKey={todayKey}
-              onOpenDay={openDayAgenda}
-              onOpenActivity={openActivityDetails}
-            />
+            <>
+              <div className="space-y-5 sm:hidden">
+                <PhoneWeekStrip
+                  dateKeys={weekDateKeys}
+                  selectedKey={agendaDateKey}
+                  todayKey={todayKey}
+                  activityCountByDate={activityCountByDate}
+                  businessHours={businessHours}
+                  onSelect={selectAgendaDay}
+                  onSwipeWeek={navigate}
+                />
+                <PhoneDayAgenda
+                  dateKey={agendaDateKey}
+                  activities={visibleActivities.filter((activity) => activity.dateKey === agendaDateKey)}
+                  businessHours={businessHours}
+                  timeZone={timeZone}
+                  onOpenActivity={openActivityDetails}
+                  onSwipeDay={(direction) => selectAgendaDay(addCalendarDays(agendaDateKey, direction))}
+                />
+              </div>
+              <div className="hidden sm:block">
+                <ScheduleGrid
+                  activities={visibleActivities}
+                  businessHours={businessHours}
+                  dateKeys={weekDateKeys}
+                  timeZone={timeZone}
+                  todayKey={todayKey}
+                  onOpenDay={openDayAgenda}
+                  onOpenActivity={openActivityDetails}
+                />
+              </div>
+            </>
           ) : (
             <MonthGrid
               activities={visibleActivities}
@@ -566,7 +617,7 @@ export function CalendarSchedulePage() {
               dateKeys={getCalendarMonthGridDateKeys(monthStart)}
               timeZone={timeZone}
               todayKey={todayKey}
-              onOpenDay={openDayAgenda}
+              onOpenDay={openMonthDay}
               onOpenActivity={openActivityDetails}
             />
           )
@@ -708,15 +759,15 @@ function CalendarSummaryCards({ activities }: { activities: CalendarActivity[] }
   ] as const;
 
   return (
-    <div className="grid grid-cols-1 gap-2 sm:grid-cols-3" aria-label="Calendar activity summary">
+    <div className="grid grid-cols-3 gap-2" aria-label="Calendar activity summary">
       {metrics.map((metric) => {
         const Icon = metric.icon;
         return (
           <Card key={metric.label} className="gap-0 py-0">
-            <CardContent className="flex min-h-16 items-center gap-3 p-3">
+            <CardContent className="flex min-h-14 items-center gap-3 p-2.5 sm:min-h-16 sm:p-3">
               <span
                 className={cn(
-                  "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl",
+                  "hidden h-9 w-9 shrink-0 items-center justify-center rounded-xl sm:flex",
                   metric.tone
                 )}
               >
@@ -747,6 +798,7 @@ function CalendarControls({
   onToday,
   onViewChange,
   showTodayAction,
+  statusFilter,
   statusFilterLabel,
   statusOptions,
   view,
@@ -762,6 +814,7 @@ function CalendarControls({
   onToday: () => void;
   onViewChange: (nextView: CalendarView) => void;
   showTodayAction: boolean;
+  statusFilter: string | null;
   statusFilterLabel: string;
   statusOptions: CalendarStatusOption[];
   view: CalendarView;
@@ -798,7 +851,7 @@ function CalendarControls({
               <Button
                 variant="ghost"
                 disabled={disabled}
-                className="min-h-11 border border-dashboard-border bg-dashboard-surface text-dashboard-navy hover:bg-dashboard-active"
+                className="min-h-11 border border-dashboard-border bg-dashboard-surface text-dashboard-navy hover:bg-dashboard-active max-sm:hidden"
               >
                 {activityFilter}
               </Button>
@@ -820,7 +873,7 @@ function CalendarControls({
               <Button
                 variant="ghost"
                 disabled={disabled}
-                className="min-h-11 max-w-52 truncate border border-dashboard-border bg-dashboard-surface text-dashboard-navy hover:bg-dashboard-active"
+                className="min-h-11 max-w-52 truncate border border-dashboard-border bg-dashboard-surface text-dashboard-navy hover:bg-dashboard-active max-sm:hidden"
               >
                 {selectedCategory ? calendarCategoryLabel(selectedCategory) : "All Categories"}
               </Button>
@@ -845,7 +898,7 @@ function CalendarControls({
               <Button
                 variant="ghost"
                 disabled={disabled}
-                className="min-h-11 max-w-52 truncate border border-dashboard-border bg-dashboard-surface text-dashboard-navy hover:bg-dashboard-active"
+                className="min-h-11 max-w-52 truncate border border-dashboard-border bg-dashboard-surface text-dashboard-navy hover:bg-dashboard-active max-sm:hidden"
               >
                 {statusFilterLabel}
               </Button>
@@ -865,6 +918,17 @@ function CalendarControls({
               ))}
             </DropdownMenuContent>
           </DropdownMenu>
+          <PhoneCalendarFilters
+            activityFilter={activityFilter}
+            categoryFilter={categoryFilter}
+            categories={categories}
+            statusFilter={statusFilter}
+            statusOptions={statusOptions}
+            disabled={disabled}
+            onActivityFilterChange={onActivityFilterChange}
+            onCategoryFilterChange={onCategoryFilterChange}
+            onStatusFilterChange={onStatusFilterChange}
+          />
         </div>
         <div className="flex w-full items-center gap-2 lg:w-auto">
           {showTodayAction ? (
@@ -891,7 +955,14 @@ function CalendarControls({
                   view === option && "bg-dashboard-active text-dashboard-accent"
                 )}
               >
-                {option}
+                {option === "week" ? (
+                  <>
+                    <span className="sm:hidden">Agenda</span>
+                    <span className="hidden sm:inline">Week</span>
+                  </>
+                ) : (
+                  "Month"
+                )}
               </Button>
             ))}
           </div>
@@ -932,7 +1003,7 @@ function CalendarMessage({
   onRetry?: () => void;
 }) {
   return (
-    <Card role={role} aria-live={role === "alert" ? "assertive" : "polite"}>
+    <Card role={role} data-mobile-card="keep" aria-live={role === "alert" ? "assertive" : "polite"}>
       <CardContent className="flex min-h-40 flex-col items-center justify-center gap-2 p-6 text-center">
         <CircleAlert className="h-5 w-5 text-dashboard-accent" aria-hidden="true" />
         <h2 className="font-semibold text-dashboard-navy">{title}</h2>
@@ -1299,18 +1370,21 @@ function MonthGrid({
   return (
     <Card
       role="region"
-      aria-label="Monthly schedule grid, horizontally scrollable on narrow screens"
+      aria-label="Monthly schedule grid"
       tabIndex={0}
-      className="gap-0 overflow-x-auto py-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dashboard-accent"
+      className="gap-0 py-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dashboard-accent sm:overflow-x-auto"
     >
-      <div className="min-w-[700px]">
+      {/* Phones see the whole month at once (date + activity dots, tap opens the day); the chip
+          previews and the minimum width that needs sideways scrolling start at tablet width. */}
+      <div className="sm:min-w-[700px]">
         <div className="border-b border-dashboard-border bg-dashboard-surface px-3 py-2 text-sm font-semibold text-dashboard-navy">
           {formatCalendarDate(cursor, { month: "long", year: "numeric" })}
         </div>
         <div className="grid grid-cols-7 border-b border-dashboard-border bg-dashboard-surface">
           {weekdays.map((day) => (
             <div key={day} className="p-2 text-center text-xs font-semibold text-dashboard-muted">
-              {day}
+              <span className="sm:hidden" aria-hidden="true">{day.slice(0, 1)}</span>
+              <span className="hidden sm:inline">{day}</span>
             </div>
           ))}
         </div>
@@ -1325,7 +1399,7 @@ function MonthGrid({
               <div
                 key={dateKey}
                 className={cn(
-                  "min-h-32 border-b border-r border-dashboard-border p-1.5 sm:min-h-36 sm:p-2",
+                  "min-h-14 border-b border-r border-dashboard-border p-0.5 sm:min-h-36 sm:p-2",
                   !inMonth && "bg-dashboard-canvas/50",
                   dateKey === todayKey && "bg-dashboard-active/40",
                   closedReason && "bg-dashboard-canvas/75"
@@ -1335,20 +1409,25 @@ function MonthGrid({
                   type="button"
                   onClick={() => onOpenDay(dateKey)}
                   className={cn(
-                    "mb-1 flex h-11 min-w-11 items-center justify-center rounded-full px-1 text-xs font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dashboard-accent",
+                    "mx-auto flex h-11 w-full min-w-11 flex-col items-center justify-center gap-1 rounded-xl px-1 text-sm font-medium tabular-nums focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dashboard-accent sm:mx-0 sm:mb-1 sm:w-auto sm:flex-row sm:rounded-full sm:text-xs",
                     dateKey === todayKey ? "bg-dashboard-primary text-dashboard-primary-ink" : "text-dashboard-navy",
                     !inMonth && "text-dashboard-muted"
                   )}
                   aria-label={`Open ${formatCalendarDate(dateKey, { month: "long", day: "numeric", year: "numeric" })} agenda`}
                 >
                   {formatCalendarDate(dateKey, { day: "numeric" })}
+                  <span aria-hidden="true" className="flex h-1 items-center gap-0.5 sm:hidden">
+                    {dayActivities.slice(0, 3).map((activity) => (
+                      <span key={activity.id} className={cn("h-1 w-1 rounded-full", dateKey === todayKey ? "bg-current" : "bg-dashboard-accent")} />
+                    ))}
+                  </span>
                 </button>
                 {closedReason ? (
-                  <div className="mb-1 rounded border border-dashboard-border bg-dashboard-canvas px-1.5 py-1 text-[10px] font-semibold text-dashboard-muted">
+                  <div className="mb-1 hidden rounded border border-dashboard-border bg-dashboard-canvas px-1.5 py-1 sm:block text-[10px] font-semibold text-dashboard-muted">
                     Closed{businessHours.specialClosedDates[dateKey] ? ` · ${businessHours.specialClosedDates[dateKey]}` : ""}
                   </div>
                 ) : null}
-                <div className="space-y-1">
+                <div className="hidden space-y-1 sm:block">
                   {preview.map((activity) => (
                     <button
                       key={activity.id}
@@ -1487,7 +1566,7 @@ function DayAgendaSheet({
         </div>
         <div className="border-b border-dashboard-border px-5 py-3">
           <div
-            className="flex gap-2 overflow-x-auto pb-1"
+            className="grid grid-cols-4 gap-2"
             role="group"
             aria-label="Filter day agenda activity"
           >
@@ -1500,7 +1579,7 @@ function DayAgendaSheet({
                   aria-pressed={selected}
                   onClick={() => onActivityFilterChange(tab.label)}
                   className={cn(
-                    "min-h-11 shrink-0 rounded-lg border px-3 py-2 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dashboard-accent/30",
+                    "min-h-11 rounded-lg border px-2 py-2 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dashboard-accent/30",
                     selected
                       ? "border-dashboard-accent bg-dashboard-active text-dashboard-accent"
                       : "border-dashboard-border bg-dashboard-surface text-dashboard-muted hover:bg-dashboard-active hover:text-dashboard-navy"
@@ -1590,5 +1669,139 @@ function DayAgendaSheet({
         </div>
       </SheetContent>
     </Sheet>
+  );
+}
+
+/** Phones: one Filters button and a bottom sheet instead of three dropdown pills that wrap. */
+function PhoneCalendarFilters({
+  activityFilter,
+  categoryFilter,
+  categories,
+  statusFilter,
+  statusOptions,
+  disabled,
+  onActivityFilterChange,
+  onCategoryFilterChange,
+  onStatusFilterChange,
+}: {
+  activityFilter: ActivityFilter;
+  categoryFilter: string | null;
+  categories: CalendarCategory[];
+  statusFilter: string | null;
+  statusOptions: CalendarStatusOption[];
+  disabled: boolean;
+  onActivityFilterChange: (value: ActivityFilter) => void;
+  onCategoryFilterChange: (value: string | null) => void;
+  onStatusFilterChange: (value: string | null) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const activeCount =
+    Number(activityFilter !== "All Activity") + Number(categoryFilter !== null) + Number(statusFilter !== null);
+
+  return (
+    <Sheet open={open} onOpenChange={setOpen}>
+      <Button
+        variant="ghost"
+        disabled={disabled}
+        onClick={() => setOpen(true)}
+        className="min-h-11 border border-dashboard-border bg-dashboard-surface text-dashboard-navy hover:bg-dashboard-active sm:hidden"
+      >
+        <SlidersHorizontal className="h-4 w-4" aria-hidden="true" />
+        {activeCount > 0 ? `Filters · ${activeCount}` : "Filters"}
+      </Button>
+      <SheetContent
+        side="bottom"
+        className="max-h-[85svh] gap-0 overflow-y-auto rounded-t-2xl border-t border-dashboard-border bg-dashboard-canvas p-0 pb-[env(safe-area-inset-bottom)] text-dashboard-navy"
+      >
+        <div className="flex items-center justify-between px-5 pb-2 pt-1">
+          <SheetTitle className="text-base text-dashboard-navy">Filter the calendar</SheetTitle>
+          {activeCount > 0 ? (
+            <button
+              type="button"
+              className="min-h-11 px-2 text-sm font-medium text-dashboard-accent"
+              onClick={() => {
+                onActivityFilterChange("All Activity");
+                onCategoryFilterChange(null);
+                onStatusFilterChange(null);
+              }}
+            >
+              Clear all
+            </button>
+          ) : null}
+        </div>
+        <SheetDescription className="sr-only">Choose which activities the calendar shows.</SheetDescription>
+        <FilterGroup
+          label="Activity"
+          options={(["All Activity", "Pickup", "Return", "Fitting"] as const).map((value) => ({
+            key: value,
+            label: value === "All Activity" ? "All" : value,
+          }))}
+          selected={activityFilter}
+          onSelect={(key) => onActivityFilterChange(key as ActivityFilter)}
+        />
+        <FilterGroup
+          label="Category"
+          options={[
+            { key: "", label: "All" },
+            ...categories.map((category) => ({ key: category.id, label: calendarCategoryLabel(category) })),
+          ]}
+          selected={categoryFilter ?? ""}
+          onSelect={(key) => onCategoryFilterChange(key || null)}
+        />
+        <FilterGroup
+          label="Status"
+          options={[
+            { key: "", label: "All" },
+            ...statusOptions.map((option) => ({ key: option.key, label: calendarStatusLabel(option) })),
+          ]}
+          selected={statusFilter ?? ""}
+          onSelect={(key) => onStatusFilterChange(key || null)}
+        />
+        <div className="px-5 pb-5 pt-2">
+          <Button className="min-h-12 w-full" onClick={() => setOpen(false)}>
+            Show results
+          </Button>
+        </div>
+      </SheetContent>
+    </Sheet>
+  );
+}
+
+function FilterGroup({
+  label,
+  options,
+  selected,
+  onSelect,
+}: {
+  label: string;
+  options: { key: string; label: string }[];
+  selected: string;
+  onSelect: (key: string) => void;
+}) {
+  return (
+    <fieldset className="border-t border-dashboard-border px-5 py-4">
+      <legend className="mb-3 text-xs font-medium uppercase tracking-[0.12em] text-dashboard-muted">{label}</legend>
+      <div className="flex flex-wrap gap-2">
+        {options.map((option) => {
+          const active = option.key === selected;
+          return (
+            <button
+              key={option.key || "all"}
+              type="button"
+              aria-pressed={active}
+              onClick={() => onSelect(option.key)}
+              className={cn(
+                "min-h-11 rounded-full border px-4 text-sm transition-[background-color,color,transform] duration-150 active:scale-[0.97]",
+                active
+                  ? "border-dashboard-navy bg-dashboard-navy text-dashboard-canvas"
+                  : "border-dashboard-border bg-dashboard-surface text-dashboard-navy"
+              )}
+            >
+              {option.label}
+            </button>
+          );
+        })}
+      </div>
+    </fieldset>
   );
 }

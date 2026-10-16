@@ -11,6 +11,7 @@ import {
   CreditCard,
   HelpCircle,
   Loader2,
+  Receipt,
   Store,
 } from "lucide-react";
 import { useState } from "react";
@@ -35,6 +36,7 @@ import { WORKSPACE_HOME } from "@/lib/workspace-routes";
 import { useRequestPlanUpgrade } from "@/components/billing/plan-upgrade-dialog";
 const WORKSPACE_LINKS = [
   { href: "/settings", label: "Business information", icon: Building2 },
+  { href: "/settings/billing", label: "Plan & billing", icon: Receipt },
   { href: "/settings/payment-methods", label: "Payment methods", icon: CreditCard },
   { href: "/storefront", label: "Storefront", icon: Store },
 ] as const;

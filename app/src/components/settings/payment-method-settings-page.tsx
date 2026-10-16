@@ -254,7 +254,7 @@ function SharedRenterStepsCard({ setting, onSaved }: { setting: PaymentRenterSte
   }
 
   return (
-    <Card className="mt-8 gap-0 border-dashboard-accent/30 py-0">
+    <Card data-mobile-card="keep" className="mt-8 gap-0 border-dashboard-accent/30 py-0">
       <CardContent className="p-5">
         <h2 className="text-base font-semibold text-dashboard-navy">Steps for renters</h2>
         <p className="mt-1 text-sm text-dashboard-muted">One guide is shown with every online payment method in your storefront.</p>
@@ -384,7 +384,7 @@ function AddPaymentMethodCard({ storefrontLocked, onCancel, onCreated }: { store
   }
 
   return (
-    <Card className="mb-4 gap-0 border-dashboard-accent/40 py-0">
+    <Card data-mobile-card="keep" className="mb-4 gap-0 border-dashboard-accent/40 py-0">
       <CardContent className="p-5">
         <p className="text-base font-semibold text-dashboard-navy">New payment method</p>
         <div className="mt-4 grid gap-3 sm:grid-cols-2">

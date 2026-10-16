@@ -609,7 +609,7 @@ function AvailabilityControls({
 
         <div className="flex flex-col gap-2.5 xl:flex-row xl:items-end xl:justify-between">
           <div className="min-w-0 flex-1">
-            <div className="-mx-0.5 flex items-center gap-2 overflow-x-auto px-0.5 pb-1 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 sm:pb-0">
+            <div className="flex flex-wrap items-center gap-2">
               <FilterMenu label={categoryFilter} options={categories} onSelect={onCategoryChange} />
               <FilterMenu label={sizeFilter} options={sizes} onSelect={onSizeChange} />
               <FilterMenu
