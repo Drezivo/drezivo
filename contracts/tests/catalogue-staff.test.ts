@@ -15,6 +15,7 @@ import {
   replaceClothingImagesResponse,
   physicalAssetLifecycle,
   physicalAssetReadiness,
+  publishClothingResponse,
   updateClothingProductRequest,
   updateClothingProductResponse,
   updateClothingVariantRequest,
@@ -35,6 +36,25 @@ const ids = {
 const instant = '2026-09-20T08:00:00.000Z';
 
 describe('catalogue staff contract', () => {
+  it('allows a publish response when no variant needed activation during the publish', () => {
+    expect(
+      publishClothingResponse.safeParse({
+        product_id: ids.product,
+        status: 'active',
+        activated_variant_count: 0,
+        updated_at: instant,
+      }).success,
+    ).toBe(true);
+    expect(
+      publishClothingResponse.safeParse({
+        product_id: ids.product,
+        status: 'active',
+        activated_variant_count: -1,
+        updated_at: instant,
+      }).success,
+    ).toBe(false);
+  });
+
   it('keeps lifecycle and readiness vocabularies closed', () => {
     expect(clothingProductLifecycle.parse('archived')).toBe('archived');
     expect(physicalAssetLifecycle.parse('retired')).toBe('retired');
