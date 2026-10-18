@@ -396,6 +396,8 @@ export async function createReservationGraph(
     eventDate: string | null;
     pickupAt: string;
     dueAt: string;
+    pickupTimeUnspecified?: boolean;
+    returnTimeUnspecified?: boolean;
     timezoneSnapshot: string;
     customerSnapshot: Record<string, unknown> | null;
     deliverySnapshot: Record<string, unknown>;
@@ -418,15 +420,16 @@ export async function createReservationGraph(
     `INSERT INTO reservation
        (id, tenant_id, branch_id, customer_id, storefront_id, policy_snapshot_id,
         payment_method_id, reference_code, status, event_date, pickup_at, due_at,
+        pickup_time_unspecified, return_time_unspecified,
         timezone_snapshot, customer_snapshot, delivery_snapshot, price_snapshot, currency,
         rental_total_minor, security_required_minor, due_now_minor, hold_acquired_at,
         hold_expires_at, version, renter_steps_text_snapshot, renter_steps_file_id_snapshot,
         renter_steps_version_snapshot)
      VALUES
        ($1, $2, $3, $4, $5, $6, $7, $8, 'held', $9::date, $10::timestamptz,
-        $11::timestamptz, $12, $13::jsonb, $14::jsonb, $15::jsonb, 'PHP',
-        $16, $17, $18, statement_timestamp(), statement_timestamp() + interval '15 minutes', 1,
-        $19, $20, $21)
+        $11::timestamptz, $12, $13, $14, $15::jsonb, $16::jsonb, $17::jsonb, 'PHP',
+        $18, $19, $20, statement_timestamp(), statement_timestamp() + interval '15 minutes', 1,
+        $21, $22, $23)
      RETURNING id, hold_expires_at, version, created_at`,
     [
       input.reservationId,
@@ -440,6 +443,8 @@ export async function createReservationGraph(
       input.eventDate,
       input.pickupAt,
       input.dueAt,
+      input.pickupTimeUnspecified ?? false,
+      input.returnTimeUnspecified ?? false,
       input.timezoneSnapshot,
       input.customerSnapshot === null ? null : JSON.stringify(input.customerSnapshot),
       JSON.stringify(input.deliverySnapshot),

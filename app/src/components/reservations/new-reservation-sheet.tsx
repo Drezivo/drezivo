@@ -1254,6 +1254,8 @@ export function NewReservationSheet({
       requested_interval: requestedInterval,
       ...(eventDate ? { event_date: eventDate } : {}),
       fulfillment_method: fulfillmentMethod,
+      pickup_time_unspecified: timesOptional && !pickupTime,
+      return_time_unspecified: timesOptional && !dueTime,
       payment_method_id: paymentMethodId,
     };
     const result = await reserveGuard.submit((idempotencyKey) =>
@@ -2090,7 +2092,12 @@ export function NewReservationSheet({
                       ) : null}
                       {timesOptional && (!pickupTime || !dueTime) && requestedInterval ? (
                         <p className="text-xs text-dashboard-muted" role="status">
-                          No exact time needed. The garment is held from{" "}
+                          {!pickupTime && !dueTime
+                            ? "Pickup and return times are not set. "
+                            : !pickupTime
+                              ? "Pickup time is not set. "
+                              : "Return time is not set. "}
+                          Availability still blocks the garment from{" "}
                           {formatLocalClock(effectivePickupTime)} on{" "}
                           {formatIsoDateForDisplay(pickupDate)} until{" "}
                           {formatLocalClock(effectiveDueTime)} on {formatIsoDateForDisplay(dueDate)}.

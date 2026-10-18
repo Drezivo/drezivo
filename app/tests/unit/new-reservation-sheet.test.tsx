@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { useState } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   clothingDetail,
@@ -449,8 +449,12 @@ function setPickerTime(label: string, hour: string, minute: string, period: "AM"
 const fillDatesAndSelectProduct = selectProductVariantAndRentalPeriod;
 
 describe("NewReservationSheet", () => {
+  afterEach(() => vi.useRealTimers());
+
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-01T00:00:00.000Z"));
     clerk.getToken.mockResolvedValue("clerk-token");
     clerk.useAuth.mockReturnValue({ getToken: clerk.getToken });
     api.getStaffReservationIntakeOptions.mockResolvedValue({
@@ -1290,7 +1294,7 @@ describe("NewReservationSheet", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Select Oct 10 to Oct 13" }));
 
     expect(screen.getByText(/Pickup time \(optional\)/)).toBeVisible();
-    expect(await screen.findByText(/No exact time needed\. The garment is held from 8:00\sAM on .+ until 8:00\sPM on/i)).toBeVisible();
+    expect(await screen.findByText(/Pickup and return times are not set\. Availability still blocks the garment from 8:00\sAM on .+ until 8:00\sPM on/i)).toBeVisible();
     // Branch hours 08:00–20:00 in Asia/Manila (UTC+8).
     await waitFor(() =>
       expect(api.getStaffReservationAvailabilityCheck).toHaveBeenCalledWith(
@@ -1335,6 +1339,8 @@ describe("NewReservationSheet", () => {
           },
           event_date: "2026-10-11",
           fulfillment_method: "pickup",
+          pickup_time_unspecified: false,
+          return_time_unspecified: false,
           payment_method_id: ids.paymentMethod,
         },
         expect.any(String)
@@ -1382,6 +1388,47 @@ describe("NewReservationSheet", () => {
     ).toBeVisible();
     expect(screen.queryByRole("checkbox", { name: "Cash received" })).not.toBeInTheDocument();
     expect(props.onReservationChanged).toHaveBeenCalledWith(ids.reservation);
+  });
+
+  it("marks only the blank Pickup milestone as time-unspecified", async () => {
+    api.getStaffReservationAvailabilityCheck.mockImplementation(
+      ({
+        variant_id,
+        pickup_at,
+        due_at,
+      }: {
+        variant_id: string;
+        pickup_at: string;
+        due_at: string;
+      }) =>
+        Promise.resolve({
+          data: {
+            ...exactResponse,
+            variant_id,
+            requested_interval: { start: pickup_at, end: due_at },
+          },
+          requestId: "req-partial-time-availability",
+        })
+    );
+    renderSheet();
+    fireEvent.click(await screen.findByRole("button", { name: /Emerald Gown/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /M · Emerald/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Select Oct 10 to Oct 13" }));
+    setPickerTime("Pickup time", "10", "00", "AM");
+    await waitFor(() => expect(api.getStaffReservationAvailabilityCheck).toHaveBeenCalled());
+    await waitFor(() => expect(screen.getByRole("button", { name: "Reserve" })).toBeEnabled());
+
+    fireEvent.click(screen.getByRole("button", { name: "Reserve" }));
+    await waitFor(() =>
+      expect(api.createStaffReservation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          fulfillment_method: "pickup",
+          pickup_time_unspecified: false,
+          return_time_unspecified: true,
+        }),
+        expect.any(String)
+      )
+    );
   });
 
   it("requires the full cash tendered before recording an unpaid past cash booking as Completed", async () => {

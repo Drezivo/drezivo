@@ -158,6 +158,8 @@ export function PhoneDayAgenda({
 }) {
   const swipe = useHorizontalSwipe(onSwipeDay);
   const sorted = [...activities].sort((left, right) => Date.parse(left.startAt) - Date.parse(right.startAt));
+  const untimed = sorted.filter((activity) => activity.timeUnspecified);
+  const timed = sorted.filter((activity) => !activity.timeUnspecified);
   const closedReason = businessHours ? calendarClosedReason(dateKey, businessHours) : null;
 
   return (
@@ -176,12 +178,47 @@ export function PhoneDayAgenda({
             {closedReason ? `Closed · ${closedReason}` : "Nothing scheduled. Swipe for another day."}
           </p>
         ) : (
-          <ol className="divide-y divide-dashboard-border border-y border-dashboard-border">
-            {sorted.map((activity) => {
+          <div className="space-y-4">
+            {untimed.length > 0 ? (
+              <section aria-labelledby="phone-agenda-untimed-heading">
+                <h3 id="phone-agenda-untimed-heading" className="mb-1 text-sm font-semibold text-dashboard-muted">
+                  No specific time
+                </h3>
+                <ol className="divide-y divide-dashboard-border border-y border-dashboard-border">
+                  {untimed.map((activity) => {
+                    const who = activity.customerName;
+                    const what = activity.itemNames.join(", ") || "Scheduled activity";
+                    return (
+                      <li key={activity.id}>
+                        <button
+                          type="button"
+                          onClick={() => onOpenActivity(activity)}
+                          aria-label={`Open ${activity.type.toLowerCase()} with no specific time: ${who ?? what}`}
+                          className="flex w-full items-center gap-3 py-3.5 text-left transition-colors active:bg-dashboard-active focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-dashboard-accent"
+                        >
+                          <span aria-hidden="true" className={cn("h-8 w-[3px] shrink-0 rounded-full", activityTone[activity.type])} />
+                          <span className="min-w-0">
+                            <span className="flex flex-wrap items-baseline gap-x-2 text-sm">
+                              <span className="font-semibold text-dashboard-navy">{activity.type}</span>
+                              <span className="capitalize text-dashboard-muted">{activity.status.replaceAll("_", " ")}</span>
+                            </span>
+                            <span className="mt-0.5 block truncate text-sm text-dashboard-navy">{what}</span>
+                            {who ? <span className="block truncate text-sm text-dashboard-muted">{who}</span> : null}
+                          </span>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ol>
+              </section>
+            ) : null}
+            {timed.length > 0 ? (
+              <ol aria-label="Timed activity" className="divide-y divide-dashboard-border border-y border-dashboard-border">
+                {timed.map((activity) => {
               const who = activity.customerName;
               const what = activity.itemNames.join(", ") || "Scheduled activity";
               const outside =
-                activity.source === "reservation" && businessHours
+                activity.source === "reservation" && businessHours && !activity.timeUnspecified
                   ? isActivityOutsideBusinessHours(activity, businessHours)
                   : false;
               return (
@@ -211,8 +248,10 @@ export function PhoneDayAgenda({
                   </button>
                 </li>
               );
-            })}
-          </ol>
+                })}
+              </ol>
+            ) : null}
+          </div>
         )}
       </div>
     </section>

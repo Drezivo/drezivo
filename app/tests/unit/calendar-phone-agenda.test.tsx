@@ -12,6 +12,7 @@ function activity(overrides: Partial<CalendarActivity>): CalendarActivity {
     source: "reservation",
     sourceId: "r1",
     eventType: "pickup",
+    timeUnspecified: false,
     status: "confirmed",
     type: "Pickup",
     dateKey: "2026-10-15",
@@ -103,6 +104,41 @@ describe("PhoneDayAgenda", () => {
 
     fireEvent.click(rows[1]!);
     expect(onOpenActivity).toHaveBeenCalledWith(later);
+  });
+
+  it("shows untimed milestones before the timed agenda without displaying fallback times", () => {
+    const onOpenActivity = vi.fn();
+    const untimedPickup = activity({
+      id: "untimed",
+      timeUnspecified: true,
+      startAt: "2026-10-15T01:00:00.000Z",
+      endAt: "2026-10-15T01:30:00.000Z",
+    });
+    const timedReturn = activity({
+      id: "timed",
+      type: "Return",
+      eventType: "return",
+      timeUnspecified: false,
+      startAt: "2026-10-15T08:00:00.000Z",
+      endAt: "2026-10-15T08:30:00.000Z",
+    });
+    render(
+      <PhoneDayAgenda
+        dateKey="2026-10-15"
+        activities={[timedReturn, untimedPickup]}
+        businessHours={null}
+        timeZone="Asia/Manila"
+        onOpenActivity={onOpenActivity}
+        onSwipeDay={vi.fn()}
+      />
+    );
+
+    const untimedSection = screen.getByRole("region", { name: "No specific time" });
+    expect(within(untimedSection).getByRole("button", { name: /pickup with no specific time/i })).toBeVisible();
+    expect(untimedSection).not.toHaveTextContent("9:00 AM");
+    expect(screen.getByRole("list", { name: "Timed activity" })).toHaveTextContent("Return");
+    fireEvent.click(within(untimedSection).getByRole("button"));
+    expect(onOpenActivity).toHaveBeenCalledWith(untimedPickup);
   });
 
   it("says when a day is empty and swipes to the next day", () => {

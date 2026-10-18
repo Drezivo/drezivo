@@ -1041,6 +1041,7 @@ function ScheduleGrid({
 }) {
   const timeTicks = calendarTimeTicks(businessHours);
   const totalHeight = calendarGridHeight(businessHours);
+  const hasUntimedActivities = activities.some((activity) => activity.timeUnspecified);
   return (
     <Card
       role="region"
@@ -1087,7 +1088,68 @@ function ScheduleGrid({
             </button>
           );
         })}
+        {hasUntimedActivities ? (
+          <>
+            <div
+              data-testid="calendar-untimed-row-label"
+              className="border-b border-r border-dashboard-border bg-dashboard-canvas/60 px-1 py-2 text-center text-[9px] font-semibold leading-tight text-dashboard-muted sm:px-2 sm:text-[10px]"
+            >
+              <span className="hidden sm:inline">No specific time</span>
+              <span className="sm:hidden">No time</span>
+            </div>
+            {dateKeys.map((dateKey) => {
+              const dayUntimedActivities = activities
+                .filter((activity) => activity.dateKey === dateKey && activity.timeUnspecified)
+                .sort(
+                  (left, right) =>
+                    left.startAt.localeCompare(right.startAt) || left.id.localeCompare(right.id)
+                );
+              const preview = dayUntimedActivities.slice(0, 2);
+              const moreCount = dayUntimedActivities.length - preview.length;
+              return (
+                <div
+                  key={`${dateKey}-untimed`}
+                  className="min-w-0 border-b border-r border-dashboard-border bg-dashboard-canvas/30 p-1"
+                >
+                  <div className="flex h-full min-w-0 flex-col gap-1">
+                    {preview.map((activity) => {
+                      const label =
+                        activity.customerName ?? (activity.itemNames.join(", ") || "Scheduled activity");
+                      return (
+                        <button
+                          key={activity.id}
+                          type="button"
+                          onClick={() => onOpenActivity(activity)}
+                          aria-label={`Open ${activity.type.toLowerCase()} with no specific time: ${label}`}
+                          title={`${activity.type}: ${label}`}
+                          className={cn(
+                            "flex min-h-7 w-full min-w-0 flex-1 items-center gap-1 truncate rounded border px-1 text-left text-[9px] leading-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dashboard-accent sm:px-1.5 sm:text-[10px]",
+                            activityTone[activity.type]
+                          )}
+                        >
+                          <span className="shrink-0 font-semibold">{activity.type}</span>
+                          <span className="truncate">{label}</span>
+                        </button>
+                      );
+                    })}
+                    {moreCount > 0 ? (
+                      <button
+                        type="button"
+                        onClick={() => onOpenDay(dateKey)}
+                        aria-label={`Show ${moreCount} more no-specific-time events for ${formatCalendarDate(dateKey, { weekday: "long", month: "long", day: "numeric" })}`}
+                        className="h-5 max-w-full shrink-0 truncate px-1 text-left text-[9px] font-medium text-dashboard-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dashboard-accent"
+                      >
+                        + {moreCount} more
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+              );
+            })}
+          </>
+        ) : null}
         <div
+          data-testid="calendar-hour-gutter"
           className="relative border-r border-dashboard-border"
           style={{ height: totalHeight }}
         >
@@ -1155,6 +1217,7 @@ function ScheduleDayColumn({
   const closedReason = calendarClosedReason(dateKey, businessHours);
   const onGrid = activities.filter(
     (activity) =>
+      !activity.timeUnspecified &&
       activity.startMinute >= startMinute &&
       activity.startMinute < endMinute &&
       activity.startMinute + activity.durationMinutes <= endMinute
@@ -1273,8 +1336,9 @@ function OutsideHoursList({
   onOpenActivity: (activity: CalendarActivity) => void;
   timeZone: string;
 }) {
-  const outsideHours = activities.filter((activity) =>
-    isActivityOutsideBusinessHours(activity, businessHours)
+  const outsideHours = activities.filter(
+    (activity) =>
+      !activity.timeUnspecified && isActivityOutsideBusinessHours(activity, businessHours)
   );
   return (
     <div
@@ -1393,8 +1457,10 @@ function MonthGrid({
             const inMonth = dateKey.slice(0, 7) === cursor.slice(0, 7);
             const dayActivities = activities.filter((activity) => activity.dateKey === dateKey);
             const closedReason = calendarClosedReason(dateKey, businessHours);
-            const preview = dayActivities.slice(0, 2);
-            const moreCount = Math.max(0, dayActivities.length - preview.length);
+            const timedActivities = dayActivities.filter((activity) => !activity.timeUnspecified);
+            const untimedCount = dayActivities.filter((activity) => activity.timeUnspecified).length;
+            const preview = timedActivities.slice(0, 2);
+            const moreCount = Math.max(0, timedActivities.length - preview.length);
             return (
               <div
                 key={dateKey}
@@ -1422,6 +1488,17 @@ function MonthGrid({
                     ))}
                   </span>
                 </button>
+                {untimedCount > 0 ? (
+                  <div
+                    role="note"
+                    aria-label={`${untimedCount} events with no specific time`}
+                    title={`${untimedCount} events with no specific time`}
+                    className="mx-auto mb-1 w-fit rounded border border-dashboard-gold-text/30 bg-dashboard-gold-soft px-1 text-[9px] font-medium leading-4 text-dashboard-gold-text sm:mx-0 sm:text-[10px]"
+                  >
+                    <span className="sm:hidden">{untimedCount}</span>
+                    <span className="hidden sm:inline">No time · {untimedCount}</span>
+                  </div>
+                ) : null}
                 {closedReason ? (
                   <div className="mb-1 hidden rounded border border-dashboard-border bg-dashboard-canvas px-1.5 py-1 sm:block text-[10px] font-semibold text-dashboard-muted">
                     Closed{businessHours.specialClosedDates[dateKey] ? ` · ${businessHours.specialClosedDates[dateKey]}` : ""}
@@ -1440,7 +1517,7 @@ function MonthGrid({
                       )}
                       title={`${activity.type}: ${activity.itemNames.join(", ")}`}
                     >
-                      {activity.source === "reservation" && isActivityOutsideBusinessHours(activity, businessHours) ? (
+                      {activity.source === "reservation" && !activity.timeUnspecified && isActivityOutsideBusinessHours(activity, businessHours) ? (
                         <span className="mb-0.5 block text-[9px] font-semibold uppercase tracking-wide">Outside business hours</span>
                       ) : null}
                       <span className="font-semibold">
@@ -1458,7 +1535,7 @@ function MonthGrid({
                     >
                       +{moreCount} more
                     </button>
-                  ) : dayActivities.length === 0 ? (
+                  ) : timedActivities.length === 0 && dayActivities.length === 0 ? (
                     <span className="px-1 text-[10px] text-dashboard-muted">{closedReason ? "Closed" : "No activity"}</span>
                   ) : null}
                 </div>
@@ -1514,6 +1591,8 @@ function DayAgendaSheet({
     activityFilter === "All Activity"
       ? sortedActivities
       : sortedActivities.filter((activity) => activity.type === activityFilter);
+  const untimedActivities = filteredActivities.filter((activity) => activity.timeUnspecified);
+  const timedActivities = filteredActivities.filter((activity) => !activity.timeUnspecified);
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -1620,7 +1699,39 @@ function DayAgendaSheet({
               filters.
             </div>
           ) : (
-            filteredActivities.map((activity) => {
+            <>
+              {untimedActivities.length > 0 ? (
+                <section aria-labelledby="day-untimed-heading" className="space-y-2">
+                  <h3 id="day-untimed-heading" className="text-sm font-semibold text-dashboard-muted">
+                    No specific time
+                  </h3>
+                  {untimedActivities.map((activity) => (
+                    <button
+                      key={activity.id}
+                      type="button"
+                      onClick={() => onOpenActivity(activity)}
+                      aria-label={`Open ${activity.type.toLowerCase()} with no specific time: ${(activity.customerName ?? activity.itemNames.join(", ")) || "Scheduled activity"}`}
+                      className={cn(
+                        "flex min-h-14 w-full items-center gap-3 rounded-lg border border-dashboard-border p-3 text-left transition-colors hover:bg-dashboard-active focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dashboard-accent",
+                        activityTone[activity.type]
+                      )}
+                    >
+                      <span className="min-w-0 flex-1">
+                        <span className="flex flex-wrap items-center gap-2">
+                          <span className="font-semibold">{activity.type}</span>
+                          <Badge variant="outline" className="capitalize">
+                            {activity.status.replaceAll("_", " ")}
+                          </Badge>
+                        </span>
+                        <span className="block truncate text-sm">{activity.itemNames.join(", ") || "Scheduled activity"}</span>
+                        {activity.customerName ? <span className="block text-sm text-dashboard-muted">{activity.customerName}</span> : null}
+                      </span>
+                      <span className="shrink-0 text-xs font-medium text-dashboard-muted">No specific time</span>
+                    </button>
+                  ))}
+                </section>
+              ) : null}
+              {timedActivities.map((activity) => {
               const Icon = activityIcon[activity.type];
               return (
                 <button
@@ -1644,7 +1755,7 @@ function DayAgendaSheet({
                       <Badge variant="outline" className="capitalize">
                         {activity.status.replaceAll("_", " ")}
                       </Badge>
-                      {activity.source === "reservation" && businessHours && isActivityOutsideBusinessHours(activity, businessHours) ? (
+                      {activity.source === "reservation" && businessHours && !activity.timeUnspecified && isActivityOutsideBusinessHours(activity, businessHours) ? (
                         <Badge variant="outline">Outside business hours</Badge>
                       ) : null}
                     </span>
@@ -1664,7 +1775,8 @@ function DayAgendaSheet({
                   </span>
                 </button>
               );
-            })
+            })}
+            </>
           )}
         </div>
       </SheetContent>
