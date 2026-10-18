@@ -160,7 +160,11 @@ describe("DashboardOverview", () => {
     for (const [name, href] of metricLinks) {
       expect(within(metrics).getByRole("link", { name })).toHaveAttribute("href", href);
     }
-    expect(metrics).toHaveClass("grid-cols-2", "md:grid-cols-3", "min-[1440px]:grid-cols-6");
+    expect(metrics).toHaveClass(
+      "grid-cols-2",
+      "md:grid-cols-3",
+      "min-[1440px]:grid-cols-6"
+    );
     expect(metrics).not.toHaveClass("[&>*:last-child]:col-span-2");
 
     expect(screen.getByText("₱48,500.00")).toBeVisible();
@@ -230,6 +234,9 @@ describe("DashboardOverview", () => {
   it("renders API-backed schedule, rental, and three-day fitting rows with real channel labels", async () => {
     render(<DashboardOverview />);
 
+    const scheduleHeading = await screen.findByRole("heading", { name: "Today's Schedule" });
+    const scheduleCard = scheduleHeading.closest('[data-slot="card"]');
+    expect(scheduleCard).toHaveAttribute("data-mobile-card", "keep");
     const schedule = await screen.findByRole("table", { name: "Today's schedule" });
     expect(
       within(schedule)
@@ -252,7 +259,11 @@ describe("DashboardOverview", () => {
     expect(within(fittingRow).getByText("Wedding Dress")).toBeVisible();
     expect(within(fittingRow).queryByText(/\d+ day/)).not.toBeInTheDocument();
 
-    expect(screen.getByRole("heading", { name: "Upcoming Rentals" })).toBeVisible();
+    const rentalsHeading = screen.getByRole("heading", { name: "Upcoming Rentals" });
+    expect(rentalsHeading.closest('[data-slot="card"]')).toHaveAttribute(
+      "data-mobile-card",
+      "keep"
+    );
     const rentalsTable = screen
       .getAllByRole("table")
       .find((table) => within(table).queryByRole("columnheader", { name: "Rental Period" }));

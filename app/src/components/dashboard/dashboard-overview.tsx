@@ -20,7 +20,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { PageHero } from "@/components/shell/page-hero";
-import { calendarDateKeyAt } from "@/components/calendar/calendar-schedule-data";
+import { addCalendarDays, calendarDateKeyAt } from "@/components/calendar/calendar-schedule-data";
 import { createDrezivoApiClient, DrezivoApiError } from "@/lib/drezivo-api";
 import { cn } from "@/lib/utils";
 
@@ -224,8 +224,8 @@ export function DashboardOverview() {
                 aria-label={`View ${metric.label}`}
                 className="group block h-full rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dashboard-accent focus-visible:ring-offset-2 focus-visible:ring-offset-dashboard-canvas"
               >
-                <Card data-mobile-card="keep" className="min-h-36 justify-between py-4 sm:min-h-[166px] sm:py-5 transition-colors group-hover:border-dashboard-accent/50 group-focus-visible:border-dashboard-accent">
-                  <CardContent className="flex h-full flex-col justify-between px-4 sm:px-5">
+                <Card data-mobile-card="keep" className="min-h-36 justify-between py-4 transition-colors group-hover:border-dashboard-accent/50 group-focus-visible:border-dashboard-accent max-xl:h-full sm:min-h-[166px] sm:py-5">
+                  <CardContent className="flex h-full flex-col justify-between px-4 sm:px-5 max-xl:h-auto max-xl:justify-start max-xl:gap-4">
                     <div className="flex items-center justify-between">
                       <div
                         className={cn(
@@ -240,14 +240,13 @@ export function DashboardOverview() {
                         aria-hidden="true"
                       />
                     </div>
-                    <div className="mt-5">
-                      <CardTitle as="h2" className="text-sm font-medium text-dashboard-navy/80">
+                    <div className="mt-5 max-xl:mt-0">
+                      <CardTitle as="h2" className="text-3xl tabular-nums text-dashboard-navy">
+                        {value.toLocaleString("en-PH")}
+                      </CardTitle>
+                      <CardTitle as="h3" className="mt-1 text-sm font-medium text-dashboard-navy/80">
                         {metric.label}
                       </CardTitle>
-                      <p className="mt-1 text-ws-kpi font-semibold tabular-nums tracking-tight leading-none text-dashboard-navy">
-                        {value.toLocaleString("en-PH")}
-                      </p>
-                      <p className="mt-1.5 text-sm text-dashboard-muted">{metric.description}</p>
                     </div>
                   </CardContent>
                 </Card>
@@ -257,7 +256,7 @@ export function DashboardOverview() {
         </section>
 
         <section aria-label="Dashboard activity" className="grid gap-5 xl:grid-cols-[1.05fr_1fr]">
-          <Card className="py-0">
+          <Card data-mobile-card="keep" className="py-0">
             <CardHeader className="border-b border-dashboard-border px-5 py-5">
               <CardTitle as="h2" className="text-base text-dashboard-navy">
                 Today&apos;s Schedule
@@ -277,26 +276,92 @@ export function DashboardOverview() {
                   No schedule activity today.
                 </p>
               ) : (
-                <Table aria-label="Today's schedule" className="min-w-[680px]">
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Time</TableHead>
-                      <TableHead>Activity</TableHead>
-                      <TableHead>Name</TableHead>
-                      <TableHead>Gown</TableHead>
-                      <TableHead>Status</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {overview.today_schedule.items.map((event) => (
-                      <ScheduleRow
-                        key={event.id}
-                        event={event}
-                        timezone={overview.window.timezone}
-                      />
-                    ))}
-                  </TableBody>
-                </Table>
+                <>
+                  <div className="divide-y divide-dashboard-border sm:hidden">
+                    {overview.today_schedule.items.map((event) => {
+                      const type = scheduleEventType(event);
+                      const items =
+                        event.source === "reservation"
+                          ? event.rental_items.map((item, index) => (
+                              <p
+                                className="break-words text-xs text-dashboard-muted"
+                                key={`${item.name}-${index}`}
+                              >
+                                {item.name} · {formatRentalItemPrice(item.rental_minor, item.currency)}
+                                {" / "}
+                                {event.rental_days} {event.rental_days === 1 ? "day" : "days"}
+                              </p>
+                            ))
+                          : event.item_names.map((name, index) => (
+                              <p
+                                className="break-words text-xs text-dashboard-muted"
+                                key={`${name}-${index}`}
+                              >
+                                {name}
+                              </p>
+                            ));
+
+                      return (
+                        <div key={event.id} className="px-5 py-2">
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex min-w-0 items-center gap-2">
+                              <Clock3
+                                className="h-4 w-4 shrink-0 text-dashboard-navy"
+                                aria-hidden="true"
+                              />
+                              <span className="whitespace-nowrap text-xs font-medium text-dashboard-muted">
+                                {formatTime(event.period.start, overview.window.timezone)}
+                              </span>
+                            </div>
+                            <EventBadge type={type} />
+                          </div>
+                          <div className="mt-1 grid grid-cols-[minmax(0,1fr)_auto] gap-x-2 gap-y-0.5">
+                            <p className="break-words text-sm font-semibold text-dashboard-navy">
+                              {event.customer_name}
+                            </p>
+                            <div className="row-span-2 self-center">
+                              <StatusBadge status={event.status} />
+                            </div>
+                            <p className="break-all text-xs text-dashboard-muted">
+                              {event.customer_phone ?? "No phone on file"}
+                            </p>
+                            <div className="col-span-2 min-w-0">
+                              {items.length > 0 ? (
+                                items
+                              ) : (
+                                <p className="text-xs text-dashboard-muted">
+                                  {event.source === "reservation" ? "Rental" : "Fitting appointment"}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div className="hidden sm:block">
+                    <Table aria-label="Today's schedule" className="min-w-[680px]">
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Time</TableHead>
+                          <TableHead>Activity</TableHead>
+                          <TableHead>Name</TableHead>
+                          <TableHead>Gown</TableHead>
+                          <TableHead>Status</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {overview.today_schedule.items.map((event) => (
+                          <ScheduleRow
+                            key={event.id}
+                            event={event}
+                            timezone={overview.window.timezone}
+                          />
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </>
               )}
               {overview.today_schedule.truncated && (
                 <p className="border-t border-dashboard-border px-5 py-3 text-xs text-dashboard-muted">
@@ -307,7 +372,7 @@ export function DashboardOverview() {
             </CardContent>
           </Card>
 
-          <Card className="py-0">
+          <Card data-mobile-card="keep" className="py-0">
             <CardHeader className="border-b border-dashboard-border px-5 py-5">
               <CardTitle as="h2" className="text-base text-dashboard-navy">
                 Upcoming Rentals
@@ -322,8 +387,37 @@ export function DashboardOverview() {
               </CardAction>
             </CardHeader>
             <CardContent className="p-0">
+              <div className="divide-y divide-dashboard-border sm:hidden">
+                {overview.upcoming_rentals.items.map((rental) => (
+                  <div key={rental.id} className="px-5 py-2">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <span className="min-w-0 flex-1 break-words text-sm font-medium text-dashboard-navy">
+                        {rental.customer_name}
+                      </span>
+                      <StatusBadge status={rental.status} />
+                      <ChevronRight
+                        className="h-4 w-4 shrink-0 text-dashboard-navy"
+                        aria-hidden="true"
+                      />
+                    </div>
+                    <div className="mt-1 flex min-w-0 justify-between gap-2">
+                      <p className="min-w-0 break-words text-xs font-medium text-dashboard-navy">
+                        {rental.item_names.join(", ") || "—"}
+                      </p>
+                      <p className="shrink-0 text-right text-xs text-dashboard-muted">
+                        {formatDateRange(rental.pickup_at, rental.due_at, overview.window.timezone)}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+                {overview.upcoming_rentals.items.length === 0 && (
+                  <p className="px-5 py-8 text-center text-sm text-dashboard-muted">
+                    No upcoming rentals in this window.
+                  </p>
+                )}
+              </div>
               <div className="w-full sm:overflow-x-auto">
-                <Table>
+                <Table className="hidden sm:table">
                   <TableHeader>
                     <TableRow className="hover:bg-transparent">
                       <TableHead className="pl-5">Customer</TableHead>
@@ -394,29 +488,70 @@ export function DashboardOverview() {
           aria-label="Fitting appointments and business performance"
           className="grid gap-5 xl:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)]"
         >
-          <Card className="py-0">
-            <CardHeader className="border-b border-dashboard-border px-5 py-5">
+          <Card data-mobile-card="keep" className="py-0">
+            <CardHeader className="border-b border-dashboard-border px-5 py-5 max-sm:flex max-sm:min-h-[46px] max-sm:items-center max-sm:justify-between max-sm:!px-[15px] max-sm:!py-0">
               <div>
-                <CardTitle as="h2" className="text-base text-dashboard-navy">
+                <CardTitle as="h2" className="text-base text-dashboard-navy max-sm:text-[13px] max-sm:font-medium">
                   Upcoming Fitting Appointments
                 </CardTitle>
-                <p className="mt-1 text-xs text-dashboard-muted">
+                <p className="mt-1 text-xs text-dashboard-muted max-sm:hidden">
                   Today and the next two days · {overview.window.timezone}
                 </p>
               </div>
-              <CardAction>
+              <CardAction className="max-sm:self-center">
                 <Link
                   href="/fittings"
                   aria-label="View all fitting appointments"
-                  className="flex items-center gap-1 whitespace-nowrap text-sm font-semibold text-dashboard-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-dashboard-accent"
+                  className="flex items-center gap-1 whitespace-nowrap text-sm font-semibold text-dashboard-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-dashboard-accent max-sm:text-[11px]"
                 >
-                  View all <ArrowRight className="h-4 w-4" aria-hidden="true" />
+                  View all <ArrowRight className="h-4 w-4 max-sm:h-[13px] max-sm:w-[13px]" aria-hidden="true" />
                 </Link>
               </CardAction>
             </CardHeader>
             <CardContent className="p-0">
+              <div className="divide-y divide-dashboard-border sm:hidden">
+                {overview.upcoming_fitting_appointments.items.map((appointment) => (
+                  <div key={appointment.id} className="px-[15px] py-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="min-w-0 whitespace-nowrap text-xs font-medium text-dashboard-muted">
+                        {formatCompactDateTime(
+                          appointment.starts_at,
+                          today,
+                          overview.window.timezone
+                        )}
+                      </span>
+                      <StatusBadge status={appointment.status} />
+                    </div>
+                    <div className="mt-[9px] space-y-2">
+                      <div className="min-w-0">
+                        <p className="mb-0.5 text-[11px] leading-[1.2] text-dashboard-muted">Customer</p>
+                        <p className="break-words text-xs font-medium leading-[1.3] text-dashboard-navy">
+                          {appointment.customer_name}
+                        </p>
+                        <p className="mt-1 break-words text-[11px] leading-[1.2] text-dashboard-muted">
+                          Booked via ·{" "}
+                          <span className="font-medium text-dashboard-navy/80">
+                            {appointment.booking_channel === "staff" ? "Staff" : "Storefront"}
+                          </span>
+                        </p>
+                      </div>
+                      <div className="min-w-0">
+                        <p className="mb-0.5 text-[11px] leading-[1.2] text-dashboard-muted">Clothing</p>
+                        <p className="break-words text-xs font-medium leading-[1.3] text-dashboard-navy">
+                          {appointment.garment_names.join(", ") || "—"}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                {overview.upcoming_fitting_appointments.items.length === 0 && (
+                  <p className="px-5 py-8 text-center text-sm text-dashboard-muted">
+                    No upcoming fitting appointments in this window.
+                  </p>
+                )}
+              </div>
               <div className="w-full sm:overflow-x-auto">
-                <Table className="min-w-[680px]">
+                <Table className="hidden min-w-[680px] sm:table">
                   <TableHeader>
                     <TableRow className="hover:bg-transparent">
                       <TableHead className="pl-5">Time</TableHead>
@@ -546,6 +681,14 @@ export function DashboardOverview() {
   );
 }
 
+function scheduleEventType(event: DashboardOverviewScheduleEvent): ScheduleEventType {
+  return event.event_type === "fitting"
+    ? "Fitting"
+    : event.event_type === "pickup"
+      ? "Pickup"
+      : "Return";
+}
+
 function ScheduleRow({
   event,
   timezone,
@@ -553,12 +696,7 @@ function ScheduleRow({
   event: DashboardOverviewScheduleEvent;
   timezone: string;
 }) {
-  const type: ScheduleEventType =
-    event.event_type === "fitting"
-      ? "Fitting"
-      : event.event_type === "pickup"
-        ? "Pickup"
-        : "Return";
+  const type = scheduleEventType(event);
 
   return (
     <TableRow>
@@ -672,6 +810,27 @@ function formatDateTime(value: string, timezone: string): string {
     hour: "numeric",
     minute: "2-digit",
   }).format(new Date(value));
+}
+
+function formatCompactDateTime(value: string, today: string, timezone: string): string {
+  const date = new Date(value);
+  const dateKey = calendarDateKeyAt(date, timezone);
+  const dateLabel =
+    dateKey === today
+      ? "Today"
+      : dateKey === addCalendarDays(today, 1)
+        ? "Tomorrow"
+        : new Intl.DateTimeFormat("en-PH", {
+            timeZone: timezone,
+            month: "short",
+            day: "numeric",
+          }).format(date);
+  const timeLabel = new Intl.DateTimeFormat("en-PH", {
+    timeZone: timezone,
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(date);
+  return `${dateLabel} · ${timeLabel}`;
 }
 
 function formatDateRange(start: string, end: string, timezone: string): string {

@@ -13,7 +13,6 @@ export type ScheduleEventType = "Fitting" | "Pickup" | "Return";
 
 export interface DashboardMetricPresentation {
   label: string;
-  description: string;
   icon: LucideIcon;
   tone: DashboardTone;
 }
@@ -25,37 +24,31 @@ export const DASHBOARD_METRIC_PRESENTATION: Record<
 > = {
   active_rentals: {
     label: "Active Rentals",
-    description: "Currently with customers",
     icon: CalendarDays,
     tone: "purple",
   },
   confirmed_rental_items_current_month: {
     label: "Items Booked This Month",
-    description: "Confirmed pickups, past and upcoming",
     icon: Package,
     tone: "lavender",
   },
   pickups_today: {
     label: "Pickups Today",
-    description: "Scheduled for today",
     icon: Truck,
     tone: "mint",
   },
   returns_today: {
     label: "Returns Today",
-    description: "Due for return today",
     icon: Undo2,
     tone: "blue",
   },
   fittings_today: {
     label: "Fittings Today",
-    description: "Appointments scheduled today",
     icon: Shirt,
     tone: "orange",
   },
   payments_to_review: {
     label: "Payments to Review",
-    description: "Uploaded evidence needing review",
     icon: FileText,
     tone: "lavender",
   },
