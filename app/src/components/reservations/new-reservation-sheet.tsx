@@ -6,6 +6,7 @@ import {
   CalendarDays,
   Check,
   ChevronDown,
+  FileText,
   FileUp,
   Plus,
   Search,
@@ -224,12 +225,26 @@ export function NewReservationSheet({
   const [heldLinesError, setHeldLinesError] = useState<string | null>(null);
   const [cashAmountReceived, setCashAmountReceived] = useState("");
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
+  const [receiptPreviewUrl, setReceiptPreviewUrl] = useState<string | null>(null);
   const [receiptAttached, setReceiptAttached] = useState(false);
   const [completionNextAction, setCompletionNextAction] = useState<
     "none" | "merchant_review" | "payment_verification" | null
   >(null);
   const [serverExpired, setServerExpired] = useState(false);
   const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    if (!receiptPreviewUrl) return;
+    return () => URL.revokeObjectURL(receiptPreviewUrl);
+  }, [receiptPreviewUrl]);
+
+  const stageReceiptFile = (file: File | null) => {
+    setReceiptFile(file);
+    setReceiptPreviewUrl(file?.type.startsWith("image/") ? URL.createObjectURL(file) : null);
+    setReceiptAttached(false);
+    receiptGuard.resetIntent();
+    completeGuard.resetIntent();
+  };
 
   const [customerMode, setCustomerMode] = useState<CustomerMode>("new");
   const [customerSearch, setCustomerSearch] = useState("");
@@ -1028,6 +1043,7 @@ export function NewReservationSheet({
     setHeldLinesError(null);
     setCashAmountReceived("");
     setReceiptFile(null);
+    setReceiptPreviewUrl(null);
     setReceiptAttached(false);
     setCompletionNextAction(null);
     setServerExpired(false);
@@ -1286,6 +1302,7 @@ export function NewReservationSheet({
       minorUnitsToMajorInput(result.data.reservation.price_snapshot.due_now_minor)
     );
     setReceiptFile(null);
+    setReceiptPreviewUrl(null);
     setReceiptAttached(false);
     setCompletionNextAction(null);
     receiptGuard.resetIntent();
@@ -1303,8 +1320,8 @@ export function NewReservationSheet({
     onReservationChanged(result.data.reservation.id);
   };
 
-  const uploadPaymentReceipt = async () => {
-    if (!held || !receiptFile || holdExpired) return;
+  const uploadPaymentReceipt = async (): Promise<boolean> => {
+    if (!held || !receiptFile || receiptAttached || holdExpired) return false;
     setNotice(null);
 
     const result = await receiptGuard.submit(async (idempotencyKey) => {
@@ -1340,15 +1357,12 @@ export function NewReservationSheet({
         idempotencyKey
       );
     });
-    if (!result) return;
+    if (!result) return false;
 
     setReceiptAttached(true);
+    setReceiptPreviewUrl(null);
     receiptGuard.resetIntent();
-    completeGuard.resetIntent();
-    setNotice({
-      tone: "success",
-      text: "Payment receipt uploaded. Complete the reservation to send it for verification.",
-    });
+    return true;
   };
 
   const complete = async () => {
@@ -1403,6 +1417,14 @@ export function NewReservationSheet({
       }
     }
     setNotice(null);
+    if (receiptFile && !receiptAttached) {
+      try {
+        if (!(await uploadPaymentReceipt())) return;
+      } catch (error) {
+        handleFailure(error, receiptGuard);
+        return;
+      }
+    }
     const result = await completeGuard.submit((idempotencyKey) =>
       createDrezivoApiClient(getToken).completeStaffReservation(
         held.reservation.id,
@@ -2451,50 +2473,72 @@ export function NewReservationSheet({
                 ) : (
                   <div className="mt-3 space-y-2">
                     <p className="text-xs text-dashboard-muted">
-                      Payment evidence is optional for staff-created reservations. Upload a receipt
-                      only if you want to keep it with this reservation; staff can verify the
-                      payment manually after checking the merchant account or the customer&apos;s
-                      receipt in person.
+                      {receiptAttached
+                        ? "The receipt is attached to this reservation. Staff must still verify the payment."
+                        : step === "held"
+                          ? "Receipts are optional. A selected receipt stays on this device until you submit for verification. Staff can verify the payment manually without one."
+                          : "No receipt was attached. Receipts are optional; staff can verify the payment manually."}
                     </p>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <label className="inline-flex h-9 cursor-pointer items-center gap-2 rounded-md border border-dashboard-border px-3 text-sm font-medium text-dashboard-navy hover:bg-dashboard-active">
-                        <FileUp className="h-4 w-4" aria-hidden="true" />
-                        {receiptFile ? receiptFile.name : "Choose receipt"}
-                        <input
-                          type="file"
-                          className="sr-only"
-                          accept="image/jpeg,image/png,image/webp,application/pdf"
-                          onChange={(event) => {
-                            setReceiptFile(event.target.files?.[0] ?? null);
-                            setReceiptAttached(false);
-                            receiptGuard.resetIntent();
-                            completeGuard.resetIntent();
-                          }}
-                        />
-                      </label>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="secondary"
-                        disabled={!receiptFile || receiptAttached || receiptGuard.isSubmitting}
-                        onClick={() =>
-                          void uploadPaymentReceipt().catch((error) =>
-                            handleFailure(error, receiptGuard)
-                          )
-                        }
-                      >
-                        {receiptGuard.isSubmitting
-                          ? "Uploading…"
-                          : receiptAttached
-                            ? "Receipt uploaded"
-                            : "Upload receipt"}
-                      </Button>
-                    </div>
                     {receiptAttached ? (
-                      <p className="text-xs font-medium text-success-500">
-                        Receipt attached. Payment will still require staff verification before
-                        confirmation.
+                      <p role="status" className="text-xs font-medium text-success-500">
+                        Receipt attached{receiptFile ? <>: {receiptFile.name}</> : null}. Payment
+                        will still require staff verification before confirmation.
                       </p>
+                    ) : step === "held" ? (
+                      <div className="flex flex-wrap items-center gap-3">
+                        {receiptFile ? (
+                          <div className="flex flex-col items-start gap-1">
+                            <div className="relative h-24 w-24 overflow-hidden rounded-md border border-dashboard-border bg-dashboard-canvas">
+                              {receiptPreviewUrl ? (
+                                // eslint-disable-next-line @next/next/no-img-element -- local receipt preview
+                                <img
+                                  src={receiptPreviewUrl}
+                                  alt={receiptFile.name}
+                                  className="h-full w-full object-contain"
+                                />
+                              ) : (
+                                <div className="flex h-full w-full flex-col items-center justify-center gap-1 p-2 text-dashboard-muted">
+                                  <FileText className="h-6 w-6" aria-hidden="true" />
+                                  <span className="line-clamp-2 text-center text-[10px]">
+                                    {receiptFile.name}
+                                  </span>
+                                </div>
+                              )}
+                              <button
+                                type="button"
+                                aria-label="Remove receipt"
+                                disabled={receiptGuard.isSubmitting || completeGuard.isSubmitting}
+                                onClick={() => stageReceiptFile(null)}
+                                className="absolute right-1 top-1 inline-flex h-6 w-6 items-center justify-center rounded-full bg-white/95 text-dashboard-danger shadow-sm hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dashboard-accent/50 disabled:cursor-not-allowed disabled:opacity-50"
+                              >
+                                <X className="h-4 w-4" aria-hidden="true" />
+                              </button>
+                            </div>
+                            {receiptPreviewUrl ? (
+                              <span
+                                className="max-w-24 truncate text-[10px] text-dashboard-muted"
+                                title={receiptFile.name}
+                              >
+                                {receiptFile.name}
+                              </span>
+                            ) : null}
+                          </div>
+                        ) : null}
+                        <label className="inline-flex h-9 cursor-pointer items-center gap-2 rounded-md border border-dashboard-border px-3 text-sm font-medium text-dashboard-navy hover:bg-dashboard-active">
+                          <FileUp className="h-4 w-4" aria-hidden="true" />
+                          {receiptFile ? "Replace receipt" : "Choose receipt"}
+                          <input
+                            type="file"
+                            className="sr-only"
+                            accept="image/jpeg,image/png,image/webp,application/pdf"
+                            disabled={receiptGuard.isSubmitting || completeGuard.isSubmitting}
+                            onChange={(event) => {
+                              stageReceiptFile(event.currentTarget.files?.[0] ?? null);
+                              event.currentTarget.value = "";
+                            }}
+                          />
+                        </label>
+                      </div>
                     ) : null}
                   </div>
                 )}
@@ -2910,7 +2954,11 @@ export function NewReservationSheet({
                   <Button
                     type="button"
                     variant="danger"
-                    disabled={cancelGuard.isSubmitting || completeGuard.isSubmitting}
+                    disabled={
+                      cancelGuard.isSubmitting ||
+                      completeGuard.isSubmitting ||
+                      receiptGuard.isSubmitting
+                    }
                     onClick={() => {
                       setCancelDialogError(null);
                       setCancelDialogOpen(true);
@@ -2936,8 +2984,10 @@ export function NewReservationSheet({
                       void complete().catch((error) => handleFailure(error, completeGuard))
                     }
                   >
-                    {completeGuard.isSubmitting
-                      ? "Completing…"
+                    {receiptGuard.isSubmitting
+                      ? "Uploading receipt…"
+                      : completeGuard.isSubmitting
+                        ? "Completing…"
                       : pastDueBooking
                         ? "Record as Completed"
                         : held.paymentInstructions.rail === "cash"
