@@ -280,8 +280,8 @@ function ReservationDetails({
             {detail.lines.map((line, index) => (
               <div key={line.id}>
                 {index > 0 ? <Separator className="mb-4" /> : null}
-                <div className="flex items-start gap-3">
-                  <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-dashboard-active text-dashboard-accent">
+                <div className="grid grid-cols-[5rem_minmax(0,1fr)] gap-x-3">
+                  <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-dashboard-active text-dashboard-accent sm:row-span-2">
                     {line.variant.image_url && !failedImageLines.has(line.id) ? (
                       // eslint-disable-next-line @next/next/no-img-element -- API-provided signed URLs are short-lived and dynamic.
                       <img
@@ -302,29 +302,37 @@ function ReservationDetails({
                       <Shirt className="h-5 w-5" aria-hidden="true" />
                     )}
                   </div>
-                  <div className="min-w-0 flex-1">
+                  <div className="min-w-0">
                     <p className="font-semibold text-dashboard-navy">{line.name_snapshot}</p>
                     <p className="mt-1 text-xs text-dashboard-muted">Line {line.line_number}</p>
-                    <div className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
+                  </div>
+                  <div className="col-span-2 min-w-0 sm:col-span-1 sm:col-start-2">
+                    <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
                       <DetailValue
                         label="Variant"
                         value={`${displaySizeLabel(line.variant.size_label)}${line.variant.color_label ? ` · ${line.variant.color_label}` : ""}`}
                       />
-                      <DetailValue label="SKU" value={line.variant.sku} />
-                      <DetailValue
-                        label="Rental"
-                        value={formatMinorMoney(
-                          line.pricing_snapshot.rental_minor,
-                          line.pricing_snapshot.currency
-                        )}
-                      />
-                      <DetailValue
-                        label="Deposit"
-                        value={formatMinorMoney(
-                          line.pricing_snapshot.deposit_minor,
-                          line.pricing_snapshot.currency
-                        )}
-                      />
+                      <div className="sm:order-3">
+                        <DetailValue
+                          label="Rental"
+                          value={formatMinorMoney(
+                            line.pricing_snapshot.rental_minor,
+                            line.pricing_snapshot.currency
+                          )}
+                        />
+                      </div>
+                      <div className="sm:order-4">
+                        <DetailValue
+                          label="Deposit"
+                          value={formatMinorMoney(
+                            line.pricing_snapshot.deposit_minor,
+                            line.pricing_snapshot.currency
+                          )}
+                        />
+                      </div>
+                      <div className="col-span-2 sm:col-span-1 sm:order-2">
+                        <DetailValue label="SKU" value={line.variant.sku} />
+                      </div>
                     </div>
                     {line.fit_range_snapshot ||
                     Object.keys(line.measurements_snapshot).length > 0 ? (
@@ -385,7 +393,7 @@ function ReservationDetails({
         ) : null}
 
         <DetailCard title="Price and payment" icon={CreditCard}>
-          <dl className="grid gap-3 text-sm sm:grid-cols-3">
+          <dl className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-3">
             <DetailValue
               label="Rental total"
               value={formatMinorMoney(
@@ -400,13 +408,15 @@ function ReservationDetails({
                 detail.price_snapshot.currency
               )}
             />
-            <DetailValue
-              label="Due now"
-              value={formatMinorMoney(
-                detail.price_snapshot.due_now_minor,
-                detail.price_snapshot.currency
-              )}
-            />
+            <div className="col-span-2 sm:col-span-1">
+              <DetailValue
+                label="Due now"
+                value={formatMinorMoney(
+                  detail.price_snapshot.due_now_minor,
+                  detail.price_snapshot.currency
+                )}
+              />
+            </div>
           </dl>
 
           <PaymentDifferenceNote detail={detail} />
@@ -425,20 +435,22 @@ function ReservationDetails({
               ) : null}
               <div
                 className={cn(
-                  "grid gap-3 sm:grid-cols-2",
+                  "grid grid-cols-2 gap-3 sm:grid-cols-2",
                   !canViewPaymentReceipts && "sm:col-span-2"
                 )}
               >
-                <DetailValue
-                  label="Payment method"
-                  value={`${detail.payment.method_name}${
-                    detail.payment.rail === "cash"
-                      ? " · Cash"
-                      : detail.payment.rail === "manual_qr"
-                        ? " · Manual QR"
-                        : " · Manual transfer"
-                  }`}
-                />
+                <div className="col-span-2 sm:col-span-1">
+                  <DetailValue
+                    label="Payment method"
+                    value={`${detail.payment.method_name}${
+                      detail.payment.rail === "cash"
+                        ? " · Cash"
+                        : detail.payment.rail === "manual_qr"
+                          ? " · Manual QR"
+                          : " · Manual transfer"
+                    }`}
+                  />
+                </div>
                 <div>
                   <p className="text-xs text-dashboard-muted">Payment status</p>
                   <Badge
@@ -462,14 +474,16 @@ function ReservationDetails({
                       : PAYMENT_EVIDENCE_LABELS[detail.payment.evidence_status]
                   }
                 />
-                <DetailValue
-                  label="Verified at"
-                  value={
-                    detail.payment.verified_at
-                      ? formatDateTime(detail.payment.verified_at, effectiveTimeZone)
-                      : "Not verified"
-                  }
-                />
+                <div className="col-span-2 sm:col-span-1">
+                  <DetailValue
+                    label="Verified at"
+                    value={
+                      detail.payment.verified_at
+                        ? formatDateTime(detail.payment.verified_at, effectiveTimeZone)
+                        : "Not verified"
+                    }
+                  />
+                </div>
                 <DetailValue
                   label="Recorded amount"
                   value={formatMinorMoney(detail.payment.amount_minor, detail.payment.currency)}

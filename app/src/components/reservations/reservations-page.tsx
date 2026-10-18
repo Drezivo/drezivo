@@ -3,6 +3,7 @@
 import { useAuth } from "@clerk/nextjs";
 import {
   CalendarDays,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Plus,
@@ -25,6 +26,13 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { mediaImageSrcSet } from "@/lib/media-image-srcset";
 import { DateRangePickerField } from "@/components/ui/date-range-picker-field";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import {
   Table,
@@ -359,11 +367,20 @@ export function ReservationsPage() {
                   : {})}
               />
             ) : (
-              <ReservationTable
-                reservations={rows}
-                timeZone={timeZone}
-                onSelect={setSelectedReservationId}
-              />
+              <>
+                <MobileReservationList
+                  reservations={rows}
+                  timeZone={timeZone}
+                  onSelect={setSelectedReservationId}
+                />
+                <div className="hidden sm:block">
+                  <ReservationTable
+                    reservations={rows}
+                    timeZone={timeZone}
+                    onSelect={setSelectedReservationId}
+                  />
+                </div>
+              </>
             )}
 
             {!isLoading && !error && !dateRangeError && rows.length > 0 ? (
@@ -480,7 +497,7 @@ function ReservationToolbar({
   query: string;
 }) {
   return (
-    <div className="flex flex-col gap-3 border-b border-dashboard-border p-4 xl:flex-row xl:items-end">
+    <div className="flex flex-col gap-3 border-b-0 border-dashboard-border px-0 pb-0 pt-4 sm:border-b sm:p-4 xl:flex-row xl:items-end">
       <label className="relative min-w-0 flex-1 xl:max-w-xl">
         <span className="mb-1.5 block text-xs font-medium text-dashboard-muted">
           Search reservations
@@ -530,10 +547,58 @@ function ReservationStatusTabs({
   activeStatus: ReservationState | null;
   onChange: (status: ReservationState | null) => void;
 }) {
+  const selectedLabel =
+    RESERVATION_STATUS_FILTERS.find((option) => option.value === activeStatus)?.label ?? "All";
+
   return (
-    <div className="border-b border-dashboard-border px-4 py-3">
+    <div className="border-b border-dashboard-border px-0 py-3 sm:px-4">
+      <div className="sm:hidden">
+        <span className="mb-1.5 block text-xs font-medium text-dashboard-muted">Status</span>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              type="button"
+              variant="secondary"
+              aria-label={`Filter reservations by status. Current: ${selectedLabel}`}
+              className="group flex w-full items-center justify-between"
+            >
+              <span>{selectedLabel}</span>
+              <ChevronDown
+                className="h-4 w-4 shrink-0 text-dashboard-muted transition-transform group-data-[state=open]:rotate-180"
+                aria-hidden="true"
+              />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent
+            align="start"
+            className="max-h-[min(70vh,24rem)] w-[var(--radix-dropdown-menu-trigger-width)] overflow-y-auto"
+          >
+            <DropdownMenuRadioGroup
+              aria-label="Reservation status"
+              className="grid grid-cols-2 gap-1"
+              value={activeStatus ?? "all"}
+              onValueChange={(value: string) => {
+                const option = RESERVATION_STATUS_FILTERS.find(
+                  (item) => (item.value ?? "all") === value
+                );
+                if (option) onChange(option.value);
+              }}
+            >
+              {RESERVATION_STATUS_FILTERS.map((option) => (
+                <DropdownMenuRadioItem
+                  key={option.label}
+                  value={option.value ?? "all"}
+                  className="min-h-10 justify-center px-2 text-center data-[state=checked]:bg-dashboard-active [&>span:first-child]:hidden"
+                >
+                  {option.label}
+                </DropdownMenuRadioItem>
+              ))}
+            </DropdownMenuRadioGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
       <div
-        className="flex flex-wrap gap-2"
+        className="hidden flex-wrap gap-2 sm:flex"
         role="tablist"
         aria-label="Reservation status"
       >
@@ -558,6 +623,74 @@ function ReservationStatusTabs({
           );
         })}
       </div>
+    </div>
+  );
+}
+
+function MobileReservationList({
+  onSelect,
+  reservations,
+  timeZone,
+}: {
+  onSelect: (reservationId: string) => void;
+  reservations: readonly ReservationListItem[];
+  timeZone: string;
+}) {
+  return (
+    <div className="grid gap-3 sm:hidden">
+      {reservations.map((reservation) => (
+        <button
+          key={reservation.id}
+          type="button"
+          aria-label={`Open reservation ${reservation.reference_code}`}
+          onClick={() => onSelect(reservation.id)}
+          className="block w-full rounded-xl border border-dashboard-border bg-dashboard-surface p-4 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-dashboard-accent/30"
+        >
+          <div className="flex items-start gap-3">
+            <ReservationClothingThumbnail reservation={reservation} />
+            <div className="min-w-0 flex-1">
+              <div className="flex items-start justify-between gap-2">
+                <p className="min-w-0 font-medium text-dashboard-navy">
+                  {reservation.line.name_snapshot}
+                  {reservation.line_count && reservation.line_count > 1 ? (
+                    <span className="ml-1 text-xs font-normal text-dashboard-muted">
+                      +{reservation.line_count - 1} more
+                    </span>
+                  ) : null}
+                  {isPastBooking(reservation) ? (
+                    <span className="ml-1 text-xs font-normal text-dashboard-muted">
+                      · Past booking
+                    </span>
+                  ) : null}
+                </p>
+                <StatusBadge
+                  label={RESERVATION_STATUS_LABELS[reservation.status]}
+                  className={cn("shrink-0", RESERVATION_STATUS_CLASSES[reservation.status])}
+                />
+              </div>
+              <p className="mt-1 text-xs text-dashboard-muted">
+                {formatMinorMoney(reservation.line.rental_minor, reservation.line.currency)} rental
+              </p>
+              <p className="mt-1 text-xs text-dashboard-muted">
+                Pickup · {formatDateTime(reservation.pickup_at, timeZone)}
+              </p>
+              {reservation.fulfillment_method === "delivery" ? (
+                <p className="mt-1 text-xs font-medium text-dashboard-gold-text">Delivery</p>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="mt-4">
+            <p className="mb-1 text-xs font-medium text-dashboard-muted">Customer</p>
+            <CustomerCell reservation={reservation} />
+          </div>
+
+          <div className="mt-3">
+            <p className="mb-1 text-xs font-medium text-dashboard-muted">Payment</p>
+            <PaymentCell reservation={reservation} compact />
+          </div>
+        </button>
+      ))}
     </div>
   );
 }
@@ -708,29 +841,46 @@ function ReservationClothingThumbnail({ reservation }: { reservation: Reservatio
   );
 }
 
-function PaymentCell({ reservation }: { reservation: ReservationListItem }) {
+function PaymentCell({
+  compact = false,
+  reservation,
+}: {
+  compact?: boolean;
+  reservation: ReservationListItem;
+}) {
   const payment = reservation.payment;
   if (!payment) {
     return <span className="text-xs text-dashboard-muted">No payment yet</span>;
   }
 
-  return (
+  const evidenceLabel =
+    payment.rail !== "cash" &&
+    payment.status === "paid" &&
+    payment.verified_at &&
+    payment.evidence_status === "awaiting_upload"
+      ? "Not provided (optional)"
+      : PAYMENT_EVIDENCE_LABELS[payment.evidence_status];
+  const amount = formatMinorMoney(payment.amount_minor, payment.currency);
+
+  return compact ? (
+    <div>
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+        <StatusBadge
+          label={PAYMENT_STATUS_LABELS[payment.status]}
+          className={PAYMENT_STATUS_CLASSES[payment.status]}
+        />
+        <p className="text-xs font-medium text-dashboard-navy">{amount}</p>
+      </div>
+      <p className="mt-1 text-xs text-dashboard-muted">{evidenceLabel}</p>
+    </div>
+  ) : (
     <div className="space-y-1">
       <StatusBadge
         label={PAYMENT_STATUS_LABELS[payment.status]}
         className={PAYMENT_STATUS_CLASSES[payment.status]}
       />
-      <p className="text-xs text-dashboard-muted">
-        {payment.rail !== "cash" &&
-        payment.status === "paid" &&
-        payment.verified_at &&
-        payment.evidence_status === "awaiting_upload"
-          ? "Not provided (optional)"
-          : PAYMENT_EVIDENCE_LABELS[payment.evidence_status]}
-      </p>
-      <p className="text-xs font-medium text-dashboard-navy">
-        {formatMinorMoney(payment.amount_minor, payment.currency)}
-      </p>
+      <p className="text-xs text-dashboard-muted">{evidenceLabel}</p>
+      <p className="text-xs font-medium text-dashboard-navy">{amount}</p>
     </div>
   );
 }
