@@ -41,9 +41,15 @@ const api = vi.hoisted(() => ({
   getCustomerDetail: vi.fn(),
 }));
 
+const fileUpload = vi.hoisted(() => ({
+  uploadAuthorizedFile: vi.fn(),
+}));
+
 vi.mock("@clerk/nextjs", () => ({
   useAuth: clerk.useAuth,
 }));
+
+vi.mock("@/lib/authorized-file-upload", () => fileUpload);
 
 vi.mock("@/components/reservations/reservation-availability-calendar", () => ({
   ReservationAvailabilityCalendar: ({
@@ -453,6 +459,12 @@ describe("NewReservationSheet", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    let receiptPreviewCounter = 0;
+    Object.assign(URL, {
+      createObjectURL: vi.fn(() => `blob:receipt-${++receiptPreviewCounter}`),
+      revokeObjectURL: vi.fn(),
+    });
+    fileUpload.uploadAuthorizedFile.mockResolvedValue(undefined);
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-10-01T00:00:00.000Z"));
     clerk.getToken.mockResolvedValue("clerk-token");
@@ -1530,7 +1542,7 @@ describe("NewReservationSheet", () => {
     );
   });
 
-  it("lets staff submit manual QR for verification without uploading a receipt", async () => {
+  it("lets staff replace or remove an optional receipt locally, then submit without one", async () => {
     api.getStaffReservationIntakeOptions.mockResolvedValue({
       data: {
         payment_methods: [
@@ -1557,8 +1569,46 @@ describe("NewReservationSheet", () => {
     await screen.findByText("RSV-WALKIN-001");
 
     expect(
-      screen.getByText(/Payment evidence is optional for staff-created reservations/i)
+      screen.getByText(/Receipts are optional/i)
     ).toBeVisible();
+    const receiptInput = document.querySelector<HTMLInputElement>('input[type="file"]');
+    expect(receiptInput).not.toBeNull();
+    fireEvent.change(receiptInput!, {
+      target: { files: [new File(["first receipt"], "first.png", { type: "image/png" })] },
+    });
+    expect(screen.getByText("Replace receipt")).toBeVisible();
+    expect(screen.getByRole("img", { name: "first.png" })).toHaveAttribute(
+      "src",
+      "blob:receipt-1"
+    );
+    fireEvent.change(document.querySelector<HTMLInputElement>('input[type="file"]')!, {
+      target: {
+        files: [new File(["replacement receipt"], "replacement.png", { type: "image/png" })],
+      },
+    });
+    expect(screen.queryByRole("img", { name: "first.png" })).not.toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "replacement.png" })).toHaveAttribute(
+      "src",
+      "blob:receipt-2"
+    );
+    await waitFor(() => expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:receipt-1"));
+    fireEvent.click(screen.getByRole("button", { name: "Remove receipt" }));
+    expect(screen.queryByText("replacement.png")).not.toBeInTheDocument();
+    expect(screen.getByText("Choose receipt")).toBeVisible();
+    await waitFor(() => expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:receipt-2"));
+
+    fireEvent.change(document.querySelector<HTMLInputElement>('input[type="file"]')!, {
+      target: { files: [new File(["pdf receipt"], "receipt.pdf", { type: "application/pdf" })] },
+    });
+    expect(screen.getByText("receipt.pdf")).toBeVisible();
+    expect(screen.queryByRole("img", { name: "receipt.pdf" })).not.toBeInTheDocument();
+    expect(URL.createObjectURL).toHaveBeenCalledTimes(2);
+    fireEvent.click(screen.getByRole("button", { name: "Remove receipt" }));
+    expect(screen.getByText("Choose receipt")).toBeVisible();
+    expect(api.authorizeUpload).not.toHaveBeenCalled();
+    expect(fileUpload.uploadAuthorizedFile).not.toHaveBeenCalled();
+    expect(api.finalizeUpload).not.toHaveBeenCalled();
+    expect(api.attachReservationPaymentReceipt).not.toHaveBeenCalled();
     fireEvent.change(screen.getByLabelText("Full name"), {
       target: { value: "Walk-in GCash Customer" },
     });
@@ -1593,9 +1643,114 @@ describe("NewReservationSheet", () => {
     );
     expect(api.authorizeUpload).not.toHaveBeenCalled();
     expect(api.attachReservationPaymentReceipt).not.toHaveBeenCalled();
+    expect(fileUpload.uploadAuthorizedFile).not.toHaveBeenCalled();
     expect(
       await screen.findByText("Reservation saved. Payment verification required.")
     ).toBeVisible();
+  });
+
+  it("uploads a staged receipt on submit, keeps it after failures, and avoids duplicate uploads", async () => {
+    const fileId = "00000000-0000-4000-8000-000000000120";
+    api.getStaffReservationIntakeOptions.mockResolvedValue({
+      data: {
+        payment_methods: [
+          { id: ids.paymentMethod, name: "Cash", rail: "cash" },
+          { id: ids.gcashPaymentMethod, name: "GCash", rail: "manual_qr" },
+        ],
+        customers: [],
+      },
+      requestId: "req-intake",
+    });
+    api.createStaffReservation.mockResolvedValueOnce({
+      data: gcashHeldResponse,
+      requestId: "req-hold-gcash",
+    });
+    api.completeStaffReservation.mockRejectedValueOnce(new Error("Temporary completion failure"));
+    api.completeStaffReservation.mockResolvedValue({
+      data: gcashPendingResponse,
+      requestId: "req-complete-gcash",
+    });
+    api.authorizeUpload.mockResolvedValue({
+      data: {
+        file_id: fileId,
+        upload_url: "https://uploads.example.test/receipt",
+        upload_method: "PUT",
+        required_headers: {},
+        expires_at: "2026-10-01T00:10:00.000Z",
+      },
+      requestId: "req-authorize-receipt",
+    });
+    api.finalizeUpload.mockResolvedValue({
+      data: { file: { file_id: fileId } },
+      requestId: "req-finalize-receipt",
+    });
+    api.attachReservationPaymentReceipt.mockResolvedValue({
+      data: {},
+      requestId: "req-attach-receipt",
+    });
+    fileUpload.uploadAuthorizedFile.mockRejectedValueOnce(new Error("Upload interrupted"));
+
+    renderSheet();
+    await fillDatesAndSelectProduct();
+    fireEvent.click(screen.getByRole("button", { name: /GCash/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Reserve" }));
+    await screen.findByText("RSV-WALKIN-001");
+    fireEvent.change(screen.getByLabelText("Full name"), {
+      target: { value: "Walk-in GCash Customer" },
+    });
+    fireEvent.change(screen.getByLabelText("Phone"), { target: { value: "09171234567" } });
+    fireEvent.change(screen.getByLabelText("Email"), {
+      target: { value: "walkin-gcash@example.test" },
+    });
+    fireEvent.change(screen.getByLabelText("Address"), { target: { value: "123 Test Street" } });
+
+    const receiptInput = document.querySelector<HTMLInputElement>('input[type="file"]');
+    expect(receiptInput).not.toBeNull();
+    fireEvent.change(receiptInput!, {
+      target: { files: [new File(["receipt"], "receipt.png", { type: "image/png" })] },
+    });
+    expect(screen.getByText("receipt.png")).toBeVisible();
+    expect(api.authorizeUpload).not.toHaveBeenCalled();
+    expect(fileUpload.uploadAuthorizedFile).not.toHaveBeenCalled();
+
+    const submit = screen.getByRole("button", { name: "Submit for Verification" });
+    fireEvent.click(submit);
+    await waitFor(() =>
+      expect(fileUpload.uploadAuthorizedFile).toHaveBeenCalledTimes(1)
+    );
+    expect(screen.getByRole("alert")).toHaveTextContent("Could not complete this reservation action");
+    expect(api.completeStaffReservation).not.toHaveBeenCalled();
+    expect(screen.getByText("receipt.png")).toBeVisible();
+
+    fireEvent.click(submit);
+    await waitFor(() => expect(api.completeStaffReservation).toHaveBeenCalledTimes(1));
+    expect(screen.getByText(/Receipt attached: receipt\.png/)).toBeVisible();
+    expect(api.finalizeUpload).toHaveBeenCalledTimes(1);
+    expect(api.attachReservationPaymentReceipt).toHaveBeenCalledTimes(1);
+    expect(api.completeStaffReservation).toHaveBeenCalledTimes(1);
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:receipt-1");
+    expect(api.authorizeUpload.mock.invocationCallOrder[1]).toBeLessThan(
+      fileUpload.uploadAuthorizedFile.mock.invocationCallOrder[1] ?? Infinity
+    );
+    expect(fileUpload.uploadAuthorizedFile.mock.invocationCallOrder[1]).toBeLessThan(
+      api.finalizeUpload.mock.invocationCallOrder[0] ?? Infinity
+    );
+    expect(api.finalizeUpload.mock.invocationCallOrder[0]).toBeLessThan(
+      api.attachReservationPaymentReceipt.mock.invocationCallOrder[0] ?? Infinity
+    );
+    expect(api.attachReservationPaymentReceipt.mock.invocationCallOrder[0]).toBeLessThan(
+      api.completeStaffReservation.mock.invocationCallOrder[0] ?? Infinity
+    );
+
+    fireEvent.click(submit);
+    await waitFor(() => expect(api.completeStaffReservation).toHaveBeenCalledTimes(2));
+    expect(screen.getByText("Reservation saved. Payment verification required.")).toBeVisible();
+    expect(api.authorizeUpload).toHaveBeenCalledTimes(2);
+    expect(fileUpload.uploadAuthorizedFile).toHaveBeenCalledTimes(2);
+    expect(api.finalizeUpload).toHaveBeenCalledTimes(1);
+    expect(api.attachReservationPaymentReceipt).toHaveBeenCalledTimes(1);
+    expect(api.completeStaffReservation).toHaveBeenCalledTimes(2);
+    expect(screen.getByText(/Receipt attached: receipt\.png/)).toBeVisible();
   });
 
   it("stops before creating a reservation when no single physical piece is free for the exact times", async () => {

@@ -575,9 +575,8 @@ function ReservationTable({
     <Table aria-label="Reservations">
       <TableHeader>
         <TableRow className="bg-dashboard-surface hover:bg-dashboard-surface">
-          <TableHead className="pl-4">Reservation</TableHead>
+          <TableHead className="pl-4">Rental Item</TableHead>
           <TableHead>Customer</TableHead>
-          <TableHead>Clothing</TableHead>
           <TableHead className="hidden md:table-cell">Pickup</TableHead>
           <TableHead className="hidden lg:table-cell">Return</TableHead>
           <TableHead className="hidden lg:table-cell">Fulfillment</TableHead>
@@ -591,7 +590,9 @@ function ReservationTable({
             key={reservation.id}
             role="button"
             tabIndex={0}
-            aria-label={`Open reservation ${reservation.reference_code}`}
+            aria-label={`Open reservation details for ${
+              reservation.customer.snapshot?.full_name ?? "Customer not added yet"
+            } and ${reservation.line.name_snapshot}`}
             onClick={() => onSelect(reservation.id)}
             onKeyDown={(event) => {
               if (event.key === "Enter" || event.key === " ") {
@@ -602,15 +603,6 @@ function ReservationTable({
             className="cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-dashboard-accent/30"
           >
             <TableCell className="pl-4 align-top">
-              <p className="font-semibold text-dashboard-navy">{reservation.reference_code}</p>
-              <p className="mt-1 text-xs text-dashboard-muted">
-                Created {formatDateTime(reservation.created_at, timeZone)}
-              </p>
-            </TableCell>
-            <TableCell className="align-top">
-              <CustomerCell reservation={reservation} />
-            </TableCell>
-            <TableCell className="align-top">
               <div className="flex items-start gap-3">
                 <ReservationClothingThumbnail reservation={reservation} />
                 <div className="min-w-0">
@@ -637,6 +629,9 @@ function ReservationTable({
                   ) : null}
                 </div>
               </div>
+            </TableCell>
+            <TableCell className="align-top">
+              <CustomerCell reservation={reservation} />
             </TableCell>
             <TableCell className="hidden align-top md:table-cell">
               <DateCell value={reservation.pickup_at} timeZone={timeZone} />
@@ -695,19 +690,19 @@ function ReservationClothingThumbnail({ reservation }: { reservation: Reservatio
   const imageUrl = reservation.line.image_url;
 
   return (
-    <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-dashboard-active text-dashboard-accent">
+    <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-dashboard-active text-dashboard-accent">
       {imageUrl && !imageFailed ? (
         // eslint-disable-next-line @next/next/no-img-element -- API-provided signed URLs are short-lived and dynamic.
         <img
           src={imageUrl}
           srcSet={mediaImageSrcSet(imageUrl)}
-          sizes="40px"
+          sizes="56px"
           alt={`${reservation.line.name_snapshot} cover image`}
           className="h-full w-full object-cover"
           onError={() => setImageFailed(true)}
         />
       ) : (
-        <Shirt className="h-4 w-4" aria-hidden="true" />
+        <Shirt className="h-5 w-5" aria-hidden="true" />
       )}
     </div>
   );

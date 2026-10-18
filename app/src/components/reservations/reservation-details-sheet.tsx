@@ -151,11 +151,12 @@ function ReservationDetails({
   const [failedImageLines, setFailedImageLines] = useState<Set<string>>(() => new Set());
   const [editing, setEditing] = useState(false);
   const [paymentReceiptViewerOpen, setPaymentReceiptViewerOpen] = useState(false);
-  const canViewCompletedPaymentReceipts =
-    detail.status === "completed" &&
+  const canViewPaymentReceipts =
+    detail.payment !== null &&
+    detail.payment.rail !== "cash" &&
     permissionCodes.includes("payments.manage") &&
     permissionCodes.includes("evidence.verify");
-  const paymentProof = usePaymentProof(detail.id, canViewCompletedPaymentReceipts);
+  const paymentProof = usePaymentProof(detail.id, canViewPaymentReceipts);
   const canEdit =
     detail.status === "confirmed" &&
     customer !== null &&
@@ -413,84 +414,89 @@ function ReservationDetails({
           <Separator className="my-4" />
 
           {detail.payment ? (
-            <div className="grid gap-3 sm:grid-cols-2">
-              <DetailValue
-                label="Payment method"
-                value={`${detail.payment.method_name}${
-                  detail.payment.rail === "cash"
-                    ? " · Cash"
-                    : detail.payment.rail === "manual_qr"
-                      ? " · Manual QR"
-                      : " · Manual transfer"
-                }`}
-              />
-              <div>
-                <p className="text-xs text-dashboard-muted">Payment status</p>
-                <Badge
-                  variant="outline"
-                  className={cn(
-                    "mt-1.5 px-2 py-1 text-xs",
-                    PAYMENT_STATUS_CLASSES[detail.payment.status]
-                  )}
-                >
-                  {PAYMENT_STATUS_LABELS[detail.payment.status]}
-                </Badge>
+            <div className="grid gap-4 sm:grid-cols-[8rem_minmax(0,1fr)]">
+              {canViewPaymentReceipts ? (
+                <PaymentProof
+                  state={paymentProof}
+                  viewerOpen={paymentReceiptViewerOpen}
+                  onViewerOpenChange={setPaymentReceiptViewerOpen}
+                  heading="Payment receipt"
+                />
+              ) : null}
+              <div
+                className={cn(
+                  "grid gap-3 sm:grid-cols-2",
+                  !canViewPaymentReceipts && "sm:col-span-2"
+                )}
+              >
+                <DetailValue
+                  label="Payment method"
+                  value={`${detail.payment.method_name}${
+                    detail.payment.rail === "cash"
+                      ? " · Cash"
+                      : detail.payment.rail === "manual_qr"
+                        ? " · Manual QR"
+                        : " · Manual transfer"
+                  }`}
+                />
+                <div>
+                  <p className="text-xs text-dashboard-muted">Payment status</p>
+                  <Badge
+                    variant="outline"
+                    className={cn(
+                      "mt-1.5 px-2 py-1 text-xs",
+                      PAYMENT_STATUS_CLASSES[detail.payment.status]
+                    )}
+                  >
+                    {PAYMENT_STATUS_LABELS[detail.payment.status]}
+                  </Badge>
+                </div>
+                <DetailValue
+                  label="Evidence"
+                  value={
+                    detail.payment.rail !== "cash" &&
+                    detail.payment.status === "paid" &&
+                    detail.payment.verified_at &&
+                    detail.payment.evidence_status === "awaiting_upload"
+                      ? "Not provided (optional)"
+                      : PAYMENT_EVIDENCE_LABELS[detail.payment.evidence_status]
+                  }
+                />
+                <DetailValue
+                  label="Verified at"
+                  value={
+                    detail.payment.verified_at
+                      ? formatDateTime(detail.payment.verified_at, effectiveTimeZone)
+                      : "Not verified"
+                  }
+                />
+                <DetailValue
+                  label="Recorded amount"
+                  value={formatMinorMoney(detail.payment.amount_minor, detail.payment.currency)}
+                />
+                {detail.payment.rail === "cash" && detail.payment.cash_tendered_minor !== null ? (
+                  <DetailValue
+                    label="Cash tendered"
+                    value={formatMinorMoney(
+                      detail.payment.cash_tendered_minor,
+                      detail.payment.currency
+                    )}
+                  />
+                ) : null}
+                {detail.payment.rail === "cash" && detail.payment.change_due_minor !== null ? (
+                  <DetailValue
+                    label="Change due"
+                    value={formatMinorMoney(
+                      detail.payment.change_due_minor,
+                      detail.payment.currency
+                    )}
+                  />
+                ) : null}
               </div>
-              <DetailValue
-                label="Evidence"
-                value={
-                  detail.payment.rail !== "cash" &&
-                  detail.payment.status === "paid" &&
-                  detail.payment.verified_at &&
-                  detail.payment.evidence_status === "awaiting_upload"
-                    ? "Not provided (optional)"
-                    : PAYMENT_EVIDENCE_LABELS[detail.payment.evidence_status]
-                }
-              />
-              <DetailValue
-                label="Recorded amount"
-                value={formatMinorMoney(detail.payment.amount_minor, detail.payment.currency)}
-              />
-              {detail.payment.rail === "cash" && detail.payment.cash_tendered_minor !== null ? (
-                <DetailValue
-                  label="Cash tendered"
-                  value={formatMinorMoney(
-                    detail.payment.cash_tendered_minor,
-                    detail.payment.currency
-                  )}
-                />
-              ) : null}
-              {detail.payment.rail === "cash" && detail.payment.change_due_minor !== null ? (
-                <DetailValue
-                  label="Change due"
-                  value={formatMinorMoney(detail.payment.change_due_minor, detail.payment.currency)}
-                />
-              ) : null}
-              <DetailValue
-                label="Verified"
-                value={
-                  detail.payment.verified_at
-                    ? formatDateTime(detail.payment.verified_at, effectiveTimeZone)
-                    : "Not verified"
-                }
-              />
             </div>
           ) : (
             <p className="text-sm text-dashboard-muted">No payment intent is recorded yet.</p>
           )}
-          {canViewCompletedPaymentReceipts &&
-          detail.payment &&
-          !(paymentProof.kind === "ready" && paymentProof.receipts.length === 0) ? (
-            <>
-              <Separator className="my-4" />
-              <PaymentProof
-                state={paymentProof}
-                viewerOpen={paymentReceiptViewerOpen}
-                onViewerOpenChange={setPaymentReceiptViewerOpen}
-                heading="Payment receipt"
-              />
-            </>
-          ) : null}
         </DetailCard>
 
         <DetailCard title="Reservation lifecycle" icon={Clock3}>
