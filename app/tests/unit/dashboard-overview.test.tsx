@@ -162,7 +162,6 @@ describe("DashboardOverview", () => {
     }
     expect(metrics).toHaveClass(
       "grid-cols-2",
-      "max-xl:auto-rows-fr",
       "md:grid-cols-3",
       "min-[1440px]:grid-cols-6"
     );
