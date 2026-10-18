@@ -212,7 +212,7 @@ export function DashboardOverview() {
 
         <section
           aria-label="Dashboard metrics"
-          className="grid grid-cols-2 gap-ws-gap md:grid-cols-3 min-[1440px]:grid-cols-6"
+          className="grid grid-cols-2 gap-ws-gap max-xl:auto-rows-fr md:grid-cols-3 min-[1440px]:grid-cols-6"
         >
           {metricEntries.map(({ key, value }) => {
             const metric = DASHBOARD_METRIC_PRESENTATION[key];
@@ -257,7 +257,7 @@ export function DashboardOverview() {
         </section>
 
         <section aria-label="Dashboard activity" className="grid gap-5 xl:grid-cols-[1.05fr_1fr]">
-          <Card className="py-0">
+          <Card data-mobile-card="keep" className="py-0">
             <CardHeader className="border-b border-dashboard-border px-5 py-5">
               <CardTitle as="h2" className="text-base text-dashboard-navy">
                 Today&apos;s Schedule
@@ -307,7 +307,7 @@ export function DashboardOverview() {
             </CardContent>
           </Card>
 
-          <Card className="py-0">
+          <Card data-mobile-card="keep" className="py-0">
             <CardHeader className="border-b border-dashboard-border px-5 py-5">
               <CardTitle as="h2" className="text-base text-dashboard-navy">
                 Upcoming Rentals
