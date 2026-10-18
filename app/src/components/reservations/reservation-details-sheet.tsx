@@ -304,12 +304,11 @@ function ReservationDetails({
                   <div className="min-w-0 flex-1">
                     <p className="font-semibold text-dashboard-navy">{line.name_snapshot}</p>
                     <p className="mt-1 text-xs text-dashboard-muted">Line {line.line_number}</p>
-                    <div className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
+                    <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
                       <DetailValue
                         label="Variant"
                         value={`${displaySizeLabel(line.variant.size_label)}${line.variant.color_label ? ` · ${line.variant.color_label}` : ""}`}
                       />
-                      <DetailValue label="SKU" value={line.variant.sku} />
                       <DetailValue
                         label="Rental"
                         value={formatMinorMoney(

@@ -301,6 +301,7 @@ describe("CalendarSchedulePage production details and states", () => {
     expect(await screen.findByRole("region", { name: /Weekly schedule grid/ })).toBeVisible();
     expect(screen.getByRole("heading", { name: "Rental Calendar" })).toBeVisible();
     expect(screen.getByRole("link", { name: /Schedule/ })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("navigation", { name: "Calendar views" })).toHaveClass("grid-cols-2");
     expect(api.getOperationalCalendar).toHaveBeenCalledWith(
       expect.objectContaining({ start: expect.any(String), end: expect.any(String) })
     );
