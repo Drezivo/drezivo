@@ -339,7 +339,12 @@ describe("CalendarSchedulePage production details and states", () => {
     render(<CalendarSchedulePage />);
 
     const grid = await screen.findByRole("region", { name: /Weekly schedule grid/ });
-    expect(screen.queryByRole("region", { name: "No specific time" })).not.toBeInTheDocument();
+    const phoneAgendaUntimedSection = screen.getByRole("region", { name: "No specific time" });
+    expect(
+      within(phoneAgendaUntimedSection).getAllByRole("button", {
+        name: /pickup with no specific time/i,
+      })
+    ).toHaveLength(4);
     const rowLabel = within(grid).getByTestId("calendar-untimed-row-label");
     const hourGutter = within(grid).getByTestId("calendar-hour-gutter");
     const gridChildren = Array.from(grid.firstElementChild?.children ?? []);
