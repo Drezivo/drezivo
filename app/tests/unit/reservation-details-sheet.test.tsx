@@ -113,6 +113,18 @@ function renderSheet(detail: ReservationDetail, permissionCodes: PermissionCode[
 }
 
 describe("ReservationDetailsSheet", () => {
+  it("omits SKU and lays out the remaining rental details in two columns", () => {
+    renderSheet(detailWith({}));
+
+    expect(screen.queryByText("SKU")).not.toBeInTheDocument();
+    expect(screen.getAllByText("Variant")).toHaveLength(2);
+    expect(screen.getAllByText("Rental")).toHaveLength(2);
+    expect(screen.getAllByText("Deposit")).toHaveLength(2);
+
+    const detailsGrid = screen.getAllByText("Variant")[0]?.parentElement?.parentElement;
+    expect(detailsGrid).toHaveClass("grid", "grid-cols-2");
+  });
+
   it("starts a replacement reservation with every original line and the same available details", () => {
     const { onContinue } = renderSheet(detailWith({}));
 

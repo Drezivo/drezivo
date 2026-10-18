@@ -301,6 +301,7 @@ describe("CalendarSchedulePage production details and states", () => {
     expect(await screen.findByRole("region", { name: /Weekly schedule grid/ })).toBeVisible();
     expect(screen.getByRole("heading", { name: "Rental Calendar" })).toBeVisible();
     expect(screen.getByRole("link", { name: /Schedule/ })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("navigation", { name: "Calendar views" })).toHaveClass("grid-cols-2");
     expect(api.getOperationalCalendar).toHaveBeenCalledWith(
       expect.objectContaining({ start: expect.any(String), end: expect.any(String) })
     );
@@ -338,7 +339,12 @@ describe("CalendarSchedulePage production details and states", () => {
     render(<CalendarSchedulePage />);
 
     const grid = await screen.findByRole("region", { name: /Weekly schedule grid/ });
-    expect(screen.queryByRole("region", { name: "No specific time" })).not.toBeInTheDocument();
+    const phoneAgendaUntimedSection = screen.getByRole("region", { name: "No specific time" });
+    expect(
+      within(phoneAgendaUntimedSection).getAllByRole("button", {
+        name: /pickup with no specific time/i,
+      })
+    ).toHaveLength(4);
     const rowLabel = within(grid).getByTestId("calendar-untimed-row-label");
     const hourGutter = within(grid).getByTestId("calendar-hour-gutter");
     const gridChildren = Array.from(grid.firstElementChild?.children ?? []);

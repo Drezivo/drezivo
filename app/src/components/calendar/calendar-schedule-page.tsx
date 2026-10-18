@@ -714,21 +714,21 @@ function CalendarHeading() {
         </div>
         <nav
           aria-label="Calendar views"
-          className="grid w-full overflow-hidden rounded-lg border border-dashboard-border bg-dashboard-surface sm:w-auto sm:grid-cols-2"
+          className="grid w-full grid-cols-2 overflow-hidden rounded-lg border border-dashboard-border bg-dashboard-surface sm:w-auto"
         >
           <Link
             href="/calendar"
             aria-current="page"
-            className="flex min-h-11 min-w-44 items-center justify-center gap-2 bg-dashboard-active px-5 text-sm font-semibold text-dashboard-accent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-dashboard-accent/30"
+            className="flex min-h-11 min-w-0 items-center justify-center gap-1.5 bg-dashboard-active px-2 text-xs font-semibold text-dashboard-accent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-dashboard-accent/30 sm:min-w-44 sm:gap-2 sm:px-5 sm:text-sm"
           >
             <CalendarDays className="h-4 w-4" aria-hidden="true" />
             Schedule
           </Link>
           <Link
             href="/calendar/availability"
-            className="flex min-h-11 min-w-52 items-center justify-center gap-2 border-t border-dashboard-border px-5 text-sm font-medium text-dashboard-navy transition-colors hover:bg-dashboard-active focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-dashboard-accent/30 sm:border-l sm:border-t-0"
+            className="flex min-h-11 min-w-0 items-center justify-center gap-1.5 border-l border-dashboard-border px-2 text-center text-xs font-medium text-dashboard-navy transition-colors hover:bg-dashboard-active focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-dashboard-accent/30 sm:min-w-52 sm:gap-2 sm:px-5 sm:text-sm"
           >
-            Clothing Availability
+            <span className="truncate">Clothing Availability</span>
           </Link>
         </nav>
       </div>

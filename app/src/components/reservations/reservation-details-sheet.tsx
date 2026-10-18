@@ -312,27 +312,20 @@ function ReservationDetails({
                         label="Variant"
                         value={`${displaySizeLabel(line.variant.size_label)}${line.variant.color_label ? ` · ${line.variant.color_label}` : ""}`}
                       />
-                      <div className="sm:order-3">
-                        <DetailValue
-                          label="Rental"
-                          value={formatMinorMoney(
-                            line.pricing_snapshot.rental_minor,
-                            line.pricing_snapshot.currency
-                          )}
-                        />
-                      </div>
-                      <div className="sm:order-4">
-                        <DetailValue
-                          label="Deposit"
-                          value={formatMinorMoney(
-                            line.pricing_snapshot.deposit_minor,
-                            line.pricing_snapshot.currency
-                          )}
-                        />
-                      </div>
-                      <div className="col-span-2 sm:col-span-1 sm:order-2">
-                        <DetailValue label="SKU" value={line.variant.sku} />
-                      </div>
+                      <DetailValue
+                        label="Rental"
+                        value={formatMinorMoney(
+                          line.pricing_snapshot.rental_minor,
+                          line.pricing_snapshot.currency
+                        )}
+                      />
+                      <DetailValue
+                        label="Deposit"
+                        value={formatMinorMoney(
+                          line.pricing_snapshot.deposit_minor,
+                          line.pricing_snapshot.currency
+                        )}
+                      />
                     </div>
                     {line.fit_range_snapshot ||
                     Object.keys(line.measurements_snapshot).length > 0 ? (
