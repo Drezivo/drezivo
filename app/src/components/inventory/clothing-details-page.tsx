@@ -179,14 +179,17 @@ function DetailContent({
   const [failedImageUrls, setFailedImageUrls] = useState<Set<string>>(() => new Set());
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState(0);
+  const displayedVariants = item.status === "archived"
+    ? item.variants
+    : item.variants.filter((variant) => variant.status !== "archived");
   const allAssets = useMemo(() => item.variants.flatMap((variant) => variant.assets), [item.variants]);
   const activeAssets = allAssets.filter((asset) => asset.lifecycle_status === "active");
   const readyAssets = activeAssets.filter((asset) => asset.readiness === "ready");
   const sizes = displayProductSizes({
     hasFreeSize: item.sizing_mode === "free_size",
-    sizeLabels: [...new Set(item.variants.flatMap((variant) => (variant.size_label ? [variant.size_label] : [])))],
+    sizeLabels: [...new Set(displayedVariants.flatMap((variant) => (variant.size_label ? [variant.size_label] : [])))],
   });
-  const priceRange = formatPriceRange(item.variants);
+  const priceRange = formatPriceRange(displayedVariants);
   const usableImageUrls = imageUrls.filter((url) => !failedImageUrls.has(url));
   const primaryImage =
     selectedImageUrl && usableImageUrls.includes(selectedImageUrl)
@@ -372,7 +375,7 @@ function DetailContent({
                 </div>
                 <div className="mt-4">
                   <p className="text-xl font-semibold text-dashboard-navy">{priceRange}</p>
-                  <p className="mt-1 text-sm text-dashboard-muted">{formatHeroPricingSummary(item.variants)}</p>
+                  <p className="mt-1 text-sm text-dashboard-muted">{formatHeroPricingSummary(displayedVariants)}</p>
                 </div>
                 {item.description ? (
                   <p className="mt-5 max-w-3xl text-sm leading-6 text-dashboard-muted">{item.description}</p>
@@ -382,7 +385,7 @@ function DetailContent({
 
                 <div className="mt-5 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
                   <SummaryStat icon={Shirt} label="Sizes" value={sizes.length ? sizes.join(" · ") : "—"} />
-                  <SummaryStat icon={Layers3} label="Variants" value={String(item.variants.length)} />
+                  <SummaryStat icon={Layers3} label="Variants" value={String(displayedVariants.length)} />
                   <SummaryStat icon={Package} label="Active Pieces" value={String(activeAssets.length)} />
                   <SummaryStat icon={Ruler} label="Ready Pieces" value={String(readyAssets.length)} />
                 </div>
@@ -396,7 +399,7 @@ function DetailContent({
           title="Variants & Pricing"
           description="Each variant keeps its own size, color, pricing, and measurement source."
         >
-          {item.variants.length === 0 ? (
+          {displayedVariants.length === 0 ? (
             <EmptySection message="No variants are configured for this clothing style." />
           ) : (
             <div className="sm:overflow-x-auto sm:rounded-xl sm:border sm:border-dashboard-border">
@@ -415,7 +418,7 @@ function DetailContent({
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {item.variants.map((variant) => (
+                  {displayedVariants.map((variant) => (
                     <TableRow key={variant.id}>
                       <TableCell className="font-semibold text-dashboard-navy">{displaySizeLabel(variant.size_label)}</TableCell>
                       <TableCell className="text-dashboard-muted">{variant.color_label ?? "—"}</TableCell>

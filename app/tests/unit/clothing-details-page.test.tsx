@@ -349,6 +349,60 @@ describe("ClothingDetailsPage", () => {
     expect(within(row).getByText("—")).toBeVisible();
   });
 
+  it("hides archived variants from current summaries and pricing while retaining their physical-piece history", async () => {
+    const archivedVariant = {
+      ...detail.variants[0]!,
+      id: "00000000-0000-4000-8000-000000000030",
+      sku: "GWN-001-ARCHIVED-XS",
+      size_label: "XS",
+      rental_price_minor: "999999",
+      status: "archived" as const,
+      assets: [
+        {
+          ...detail.variants[0]!.assets[0]!,
+          id: "00000000-0000-4000-8000-000000000031",
+          variant_id: "00000000-0000-4000-8000-000000000030",
+          asset_code: "AST-GWN-001-ARCHIVED-XS-01",
+        },
+      ],
+    };
+    api.getCatalogueClothingDetail.mockResolvedValueOnce({
+      data: { ...detail, variants: [...detail.variants, archivedVariant] },
+      requestId: "req-detail-with-archived-variant",
+    });
+
+    render(<ClothingDetailsPage productId={productId} />);
+
+    expect(await screen.findByRole("heading", { name: "Emerald Evening Gown" })).toBeVisible();
+    expect(screen.getByText("GWN-001-M")).toBeVisible();
+    expect(screen.queryByText("GWN-001-ARCHIVED-XS")).not.toBeInTheDocument();
+    expect(screen.getByText("AST-GWN-001-ARCHIVED-XS-01")).toBeVisible();
+    expect(screen.getAllByText(/1,500/).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/9,999/)).not.toBeInTheDocument();
+
+    const summary = screen.getByText("Sizes").parentElement;
+    expect(summary).toHaveTextContent("M");
+    expect(summary).not.toHaveTextContent("XS");
+    expect(screen.getByText("Variants").parentElement).toHaveTextContent("1");
+  });
+
+  it("keeps archived variants and physical pieces visible in archived clothing history", async () => {
+    api.getCatalogueClothingDetail.mockResolvedValueOnce({
+      data: {
+        ...detail,
+        status: "archived" as const,
+        variants: [{ ...detail.variants[0]!, status: "archived" as const }],
+      },
+      requestId: "req-archived-product-history",
+    });
+
+    render(<ClothingDetailsPage productId={productId} />);
+
+    expect(await screen.findByLabelText("Clothing lifecycle: Archived")).toBeVisible();
+    expect(screen.getByText("GWN-001-M")).toBeVisible();
+    expect(screen.getByText("AST-GWN-001-M-01")).toBeVisible();
+  });
+
   it("surfaces CLT-031 readiness, custody, and blocking-allocation state", async () => {
     render(<ClothingDetailsPage productId={productId} />);
 
