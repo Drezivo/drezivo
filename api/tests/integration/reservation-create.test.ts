@@ -224,6 +224,45 @@ describe('RSV-021/022 staff reservation creation', async () => {
     expect(persisted.idempotency).toEqual({ status: 'succeeded', response_code: 201 });
   });
 
+  it('persists independent unspecified-time flags for a staff Pickup reservation', async () => {
+    const seed = await seedWorkspace('org_rsv021_untimed_pickup', 'user_rsv021_untimed_pickup', ['reservations.manage']);
+    const response = await createStaffReservation(
+      commandContext(seed, 'req-rsv021-untimed-pickup', 'idem-rsv021-untimed-pickup'),
+      {
+        ...createRequest(seed),
+        fulfillment_method: 'pickup',
+        pickup_time_unspecified: true,
+        return_time_unspecified: false,
+      },
+    );
+
+    expect(response.status).toBe(201);
+    const reservationId = successReservationId(response.body);
+    const persisted = await withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
+      const result = await client.query<{
+        pickup_time_unspecified: boolean;
+        return_time_unspecified: boolean;
+      }>(
+        `SELECT pickup_time_unspecified, return_time_unspecified
+           FROM reservation WHERE tenant_id = $1 AND id = $2`,
+        [seed.tenantId, reservationId],
+      );
+      return result.rows[0];
+    });
+    expect(persisted).toEqual({ pickup_time_unspecified: true, return_time_unspecified: false });
+
+    await expect(
+      createStaffReservation(
+        commandContext(seed, 'req-rsv021-untimed-delivery', 'idem-rsv021-untimed-delivery'),
+        {
+          ...createRequest(seed),
+          fulfillment_method: 'delivery',
+          pickup_time_unspecified: true,
+        },
+      ),
+    ).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
+  });
+
   it('rebooks every line at current prices and persists no partial hold when capacity is short', async () => {
     const seed = await seedWorkspace('org_rsv021_multi_line', 'user_rsv021_multi_line', ['reservations.manage']);
     await withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {

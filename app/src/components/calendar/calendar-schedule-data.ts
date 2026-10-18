@@ -16,6 +16,7 @@ export type CalendarActivity = {
   source: OperationalCalendarEvent["source"];
   sourceId: string;
   eventType: OperationalCalendarEvent["event_type"];
+  timeUnspecified: boolean;
   status: string;
   type: CalendarActivityType;
   dateKey: string;
@@ -198,6 +199,7 @@ export function mapOperationalCalendarEvents(
       source: event.source,
       sourceId: event.source_id,
       eventType: event.event_type,
+      timeUnspecified: event.source === "reservation" && event.time_unspecified === true,
       status: event.status,
       type: labelForEvent(event),
       dateKey: calendarDateKeyAt(new Date(event.period.start), timeZone),

@@ -1,5 +1,6 @@
 import { sql } from 'drizzle-orm';
 import {
+  boolean,
   date,
   foreignKey,
   index,
@@ -94,6 +95,8 @@ export const reservation = pgTable(
     eventDate: date('event_date', { mode: 'string' }),
     pickupAt: timestamp('pickup_at', { withTimezone: true }).notNull(),
     dueAt: timestamp('due_at', { withTimezone: true }).notNull(),
+    pickupTimeUnspecified: boolean('pickup_time_unspecified').notNull().default(false),
+    returnTimeUnspecified: boolean('return_time_unspecified').notNull().default(false),
     timezoneSnapshot: text('timezone_snapshot').notNull(),
     customerSnapshot: jsonb('customer_snapshot').$type<Record<string, unknown>>(),
     deliverySnapshot: jsonb('delivery_snapshot').$type<Record<string, unknown>>(),
