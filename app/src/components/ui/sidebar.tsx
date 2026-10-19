@@ -23,6 +23,7 @@ type SidebarContextValue = {
   toggleSidebar: () => void;
 };
 const SidebarContext = createContext<SidebarContextValue | null>(null);
+const SIDEBAR_OPEN_STORAGE_KEY = "drezivo:sidebar-open";
 
 function useIsMobile() {
   const [isMobile, setIsMobile] = useState(false);
@@ -51,7 +52,28 @@ function SidebarProvider({
   const isMobile = useIsMobile();
   // Desktop starts expanded so every section is visible on first load; the header trigger collapses it.
   const [open, setOpen] = useState(true);
+  const [sidebarPreferenceLoaded, setSidebarPreferenceLoaded] = useState(false);
   const [openMobile, setOpenMobile] = useState(false);
+
+  useEffect(() => {
+    try {
+      const savedOpen = window.localStorage.getItem(SIDEBAR_OPEN_STORAGE_KEY);
+      if (savedOpen === "true" || savedOpen === "false") setOpen(savedOpen === "true");
+    } catch {
+      // Storage can be unavailable; leave the desktop sidebar expanded for this session.
+    }
+    setSidebarPreferenceLoaded(true);
+  }, []);
+
+  useEffect(() => {
+    if (!sidebarPreferenceLoaded || isMobile) return;
+    try {
+      window.localStorage.setItem(SIDEBAR_OPEN_STORAGE_KEY, String(open));
+    } catch {
+      // The current session still works when browser storage is blocked.
+    }
+  }, [isMobile, open, sidebarPreferenceLoaded]);
+
   const state: SidebarContextValue["state"] = open ? "expanded" : "collapsed";
   const toggleSidebar = useCallback(() => {
     if (isMobile) setOpenMobile((current) => !current);

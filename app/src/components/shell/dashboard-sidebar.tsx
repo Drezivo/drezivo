@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuth, useClerk } from "@clerk/nextjs";
+import * as Tooltip from "@radix-ui/react-tooltip";
 import {
   Building2,
   Check,
@@ -14,7 +15,7 @@ import {
   Receipt,
   Store,
 } from "lucide-react";
-import { useState } from "react";
+import { useState, type ReactElement } from "react";
 
 import type { PlanFeatures } from "@drezivo/contracts";
 import type { DashboardIdentity } from "@/components/shell/dashboard-shell";
@@ -84,15 +85,31 @@ function BusinessTile({ identity }: { identity: DashboardIdentity }) {
   );
 }
 
-/** Collapsed-rail label, shown on hover and keyboard focus. */
-function RailTooltip({ label }: { label: string }) {
+/** Collapsed-rail label, portaled so the scrollable nav cannot clip it. */
+function RailTooltip({
+  children,
+  enabled,
+  label,
+}: {
+  children: ReactElement;
+  enabled: boolean;
+  label: string;
+}) {
+  if (!enabled) return children;
+
   return (
-    <span
-      role="tooltip"
-      className="pointer-events-none absolute left-[calc(100%+0.5rem)] top-1/2 z-50 -translate-y-1/2 whitespace-nowrap rounded-md border border-dashboard-border bg-dashboard-surface px-2.5 py-1.5 text-xs font-medium text-dashboard-navy opacity-0 shadow-lg transition-opacity group-hover/navitem:opacity-100 group-focus-within/navitem:opacity-100"
-    >
-      {label}
-    </span>
+    <Tooltip.Root delayDuration={250}>
+      <Tooltip.Trigger asChild>{children}</Tooltip.Trigger>
+      <Tooltip.Portal>
+        <Tooltip.Content
+          side="right"
+          sideOffset={8}
+          className="z-50 whitespace-nowrap rounded-md border border-dashboard-border bg-dashboard-surface px-2.5 py-1.5 text-xs font-medium text-dashboard-navy shadow-lg"
+        >
+          {label}
+        </Tooltip.Content>
+      </Tooltip.Portal>
+    </Tooltip.Root>
   );
 }
 
@@ -124,11 +141,7 @@ function WorkspaceCard({
       const result = await listAllAccessibleWorkspaces(createDrezivoApiClient(getToken));
       setWorkspaces(result);
     } catch (error) {
-      setWorkspaceError(
-        error instanceof Error
-          ? error.message
-          : "Could not load workspaces."
-      );
+      setWorkspaceError(error instanceof Error ? error.message : "Could not load workspaces.");
     } finally {
       setIsLoadingWorkspaces(false);
     }
@@ -147,11 +160,7 @@ function WorkspaceCard({
       // Full reload re-runs the dashboard access gate before any business data renders.
       window.location.assign(WORKSPACE_HOME);
     } catch (error) {
-      setWorkspaceError(
-        error instanceof Error
-          ? error.message
-          : "Could not switch workspaces."
-      );
+      setWorkspaceError(error instanceof Error ? error.message : "Could not switch workspaces.");
       // setActive may have changed the Clerk session even if the resulting API verification failed.
       // Leave this shell before it can render cached data with a different organization token.
       window.location.assign("/workspaces/select");
@@ -264,120 +273,130 @@ export function DashboardSidebar({
   const requestUpgrade = useRequestPlanUpgrade();
 
   return (
-    <Sidebar aria-label="Primary navigation">
-      <div className="flex min-h-0 flex-1 flex-col">
-        <div
-          className={
-            collapsed ? "flex h-16 items-center justify-center" : "flex h-16 items-center px-5"
-          }
-        >
-          <Link
-            href={WORKSPACE_HOME}
-            aria-label="Drezivo calendar"
-            className="flex items-center gap-2.5"
+    <Tooltip.Provider>
+      <Sidebar aria-label="Primary navigation">
+        <div className="flex min-h-0 flex-1 flex-col">
+          <div
+            className={
+              collapsed ? "flex h-16 items-center justify-center" : "flex h-16 items-center px-5"
+            }
           >
-            <DrezivoMark />
-            {!collapsed && (
-              <span className="font-display text-[1.625rem] font-medium leading-none tracking-[-0.01em] text-dashboard-navy">
-                Drezivo
-              </span>
-            )}
-          </Link>
-        </div>
-        <div className={collapsed ? "flex justify-center" : "px-4"}>
-          <WorkspaceCard identity={identity} collapsed={collapsed} />
-        </div>
-        <nav aria-label="Primary" className="mt-5 min-h-0 flex-1 overflow-y-auto px-3">
-          {!collapsed && <p className="dashboard-eyebrow px-3 pb-2">Menu</p>}
-          <div className="flex flex-col gap-0.5">
-            {NAV_ITEMS.map((item) => {
-              const isActive =
-                item.href === "/settings"
-                  ? pathname.startsWith("/settings")
-                  : isActivePath(pathname, item.href);
-              const Icon = item.icon;
-              const locked = item.href === "/fittings" && features !== undefined && !features.fittings;
-              return (
-                <div key={item.href} className="group/navitem relative">
-                  {locked ? (
-                    <button
-                      type="button"
-                      aria-current={isActive ? "page" : undefined}
-                      aria-haspopup="dialog"
-                      aria-label={collapsed ? `${item.label}, upgrade to unlock` : undefined}
-                      onClick={() => requestUpgrade("Fitting management")}
-                      className={cn(
-                        "relative flex min-h-10 w-full items-center gap-3 rounded-lg px-3 text-left text-sm opacity-60 transition-colors hover:bg-dashboard-active hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dashboard-accent",
-                        collapsed && "justify-center px-0",
-                        isActive ? "bg-dashboard-active font-medium text-dashboard-navy" : "text-dashboard-muted"
-                      )}
-                    >
-                      <Icon className="h-5 w-5 shrink-0" strokeWidth={1.7} />
-                      {!collapsed && <><span>{item.label}</span><span className="ml-auto text-[0.625rem] uppercase tracking-wide">Upgrade</span></>}
-                    </button>
-                  ) : (
-                    <Link
-                      href={item.href}
-                      aria-current={isActive ? "page" : undefined}
-                      aria-label={collapsed ? item.label : undefined}
-                      className={cn(
-                        "relative flex min-h-10 items-center gap-3 rounded-lg px-3 text-sm transition-colors",
-                        collapsed && "justify-center px-0",
-                        isActive
-                          ? "bg-dashboard-active font-medium text-dashboard-navy before:absolute before:inset-y-2 before:left-0 before:w-0.5 before:rounded-full before:bg-dashboard-accent"
-                          : "text-dashboard-muted hover:bg-dashboard-active hover:text-dashboard-navy"
-                      )}
-                    >
-                      <Icon
-                        className={cn("h-5 w-5 shrink-0", isActive && "text-dashboard-accent")}
-                        strokeWidth={1.7}
-                      />
-                      {!collapsed && <span>{item.label}</span>}
-                    </Link>
-                  )
-                  }
-                  {collapsed ? <RailTooltip label={item.label} /> : null}
-                </div>
-              );
-            })}
+            <Link
+              href={WORKSPACE_HOME}
+              aria-label="Drezivo calendar"
+              className="flex items-center gap-2.5"
+            >
+              <DrezivoMark />
+              {!collapsed && (
+                <span className="font-display text-[1.625rem] font-medium leading-none tracking-[-0.01em] text-dashboard-navy">
+                  Drezivo
+                </span>
+              )}
+            </Link>
           </div>
-        </nav>
-        <div className="px-3 pb-5 pt-3">
-          {collapsed ? (
-            <div className="group/navitem relative">
+          <div className={collapsed ? "flex justify-center" : "px-4"}>
+            <WorkspaceCard identity={identity} collapsed={collapsed} />
+          </div>
+          <nav aria-label="Primary" className="mt-5 min-h-0 flex-1 overflow-y-auto px-3">
+            {!collapsed && <p className="dashboard-eyebrow px-3 pb-2">Menu</p>}
+            <div className="flex flex-col gap-0.5">
+              {NAV_ITEMS.map((item) => {
+                const isActive =
+                  item.href === "/settings"
+                    ? pathname.startsWith("/settings")
+                    : isActivePath(pathname, item.href);
+                const Icon = item.icon;
+                const locked =
+                  item.href === "/fittings" && features !== undefined && !features.fittings;
+                const control = locked ? (
+                  <button
+                    type="button"
+                    aria-current={isActive ? "page" : undefined}
+                    aria-haspopup="dialog"
+                    aria-label={collapsed ? `${item.label}, upgrade to unlock` : undefined}
+                    onClick={() => requestUpgrade("Fitting management")}
+                    className={cn(
+                      "relative flex min-h-10 w-full items-center gap-3 rounded-lg px-3 text-left text-sm opacity-60 transition-colors hover:bg-dashboard-active hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dashboard-accent",
+                      collapsed && "justify-center px-0",
+                      isActive
+                        ? "bg-dashboard-active font-medium text-dashboard-navy"
+                        : "text-dashboard-muted"
+                    )}
+                  >
+                    <Icon className="h-5 w-5 shrink-0" strokeWidth={1.7} />
+                    {!collapsed && (
+                      <>
+                        <span>{item.label}</span>
+                        <span className="ml-auto text-[0.625rem] uppercase tracking-wide">
+                          Upgrade
+                        </span>
+                      </>
+                    )}
+                  </button>
+                ) : (
+                  <Link
+                    href={item.href}
+                    aria-current={isActive ? "page" : undefined}
+                    aria-label={collapsed ? item.label : undefined}
+                    className={cn(
+                      "relative flex min-h-10 items-center gap-3 rounded-lg px-3 text-sm transition-colors",
+                      collapsed && "justify-center px-0",
+                      isActive
+                        ? "bg-dashboard-active font-medium text-dashboard-navy before:absolute before:inset-y-2 before:left-0 before:w-0.5 before:rounded-full before:bg-dashboard-accent"
+                        : "text-dashboard-muted hover:bg-dashboard-active hover:text-dashboard-navy"
+                    )}
+                  >
+                    <Icon
+                      className={cn("h-5 w-5 shrink-0", isActive && "text-dashboard-accent")}
+                      strokeWidth={1.7}
+                    />
+                    {!collapsed && <span>{item.label}</span>}
+                  </Link>
+                );
+                return (
+                  <RailTooltip key={item.href} enabled={collapsed} label={item.label}>
+                    {control}
+                  </RailTooltip>
+                );
+              })}
+            </div>
+          </nav>
+          <div className="px-3 pb-5 pt-3">
+            {collapsed ? (
+              <RailTooltip enabled label="Help Center">
+                <Link
+                  href="/help"
+                  aria-label="Help Center"
+                  aria-current={helpActive ? "page" : undefined}
+                  className={cn(
+                    "flex h-10 w-full items-center justify-center rounded-lg transition-colors hover:bg-dashboard-active",
+                    helpActive
+                      ? "bg-dashboard-active text-dashboard-accent"
+                      : "text-dashboard-muted hover:text-dashboard-navy"
+                  )}
+                >
+                  <HelpCircle className="h-5 w-5" strokeWidth={1.7} />
+                </Link>
+              </RailTooltip>
+            ) : (
               <Link
                 href="/help"
-                aria-label="Help Center"
                 aria-current={helpActive ? "page" : undefined}
-                className={cn(
-                  "flex h-10 w-full items-center justify-center rounded-lg transition-colors hover:bg-dashboard-active",
-                  helpActive
-                    ? "bg-dashboard-active text-dashboard-accent"
-                    : "text-dashboard-muted hover:text-dashboard-navy"
-                )}
+                className="flex items-center gap-3 rounded-xl border border-dashboard-border bg-dashboard-canvas/60 px-3.5 py-3 transition-colors hover:bg-dashboard-active"
               >
-                <HelpCircle className="h-5 w-5" strokeWidth={1.7} />
+                <HelpCircle className="h-5 w-5 shrink-0 text-dashboard-accent" strokeWidth={1.7} />
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-medium text-dashboard-navy">Need help?</span>
+                  <span className="block text-xs text-dashboard-muted">Guides and support</span>
+                </span>
+                <span aria-hidden="true" className="text-lg text-dashboard-muted">
+                  ›
+                </span>
               </Link>
-              <RailTooltip label="Help Center" />
-            </div>
-          ) : (
-            <Link
-              href="/help"
-              aria-current={helpActive ? "page" : undefined}
-              className="flex items-center gap-3 rounded-xl border border-dashboard-border bg-dashboard-canvas/60 px-3.5 py-3 transition-colors hover:bg-dashboard-active"
-            >
-              <HelpCircle className="h-5 w-5 shrink-0 text-dashboard-accent" strokeWidth={1.7} />
-              <span className="min-w-0 flex-1">
-                <span className="block text-sm font-medium text-dashboard-navy">Need help?</span>
-                <span className="block text-xs text-dashboard-muted">Guides and support</span>
-              </span>
-              <span aria-hidden="true" className="text-lg text-dashboard-muted">
-                ›
-              </span>
-            </Link>
-          )}
+            )}
+          </div>
         </div>
-      </div>
-    </Sidebar>
+      </Sidebar>
+    </Tooltip.Provider>
   );
 }
