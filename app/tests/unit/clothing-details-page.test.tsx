@@ -187,11 +187,66 @@ describe("ClothingDetailsPage", () => {
     expect(api.getCatalogueClothingDetail).toHaveBeenCalledWith(productId);
     expect(screen.getByRole("heading", { name: "Variants & Pricing" })).toBeVisible();
     expect(screen.getByRole("heading", { name: "Serialized Pieces" })).toBeVisible();
-    expect(screen.getByText("GWN-001-M")).toBeVisible();
+    const variantCards = screen.getByRole("list", { name: "Variant pricing cards" });
+    const variantCard = within(variantCards).getByRole("listitem", { name: "M Emerald variant" });
+    expect(variantCard).toHaveClass("bg-dashboard-surface", "border-dashboard-border");
+    expect(variantCard).toHaveAttribute("data-mobile-card", "keep");
+    expect(within(variantCard).getByText("Color: Emerald")).toBeVisible();
+    expect(within(variantCard).getByText("Daily rental")).toBeVisible();
+    expect(within(variantCard).getByText("Extra day").nextElementSibling).toHaveTextContent("Included in daily rate");
+    expect(within(variantCard).getByText("Deposit").nextElementSibling).toHaveTextContent("₱500");
+    expect(within(variantCard).getByText("Recovery").nextElementSibling).toHaveTextContent("1 day");
+    expect(within(variantCard).getByText("Pieces").nextElementSibling).toHaveTextContent("1");
+    expect(within(variantCard).getByText("SKU").nextElementSibling).toHaveTextContent("GWN-001-M");
+    expect(within(variantCard).getByText(/Bust: Flexible fit · Waist: 72 cm · Length: 61 cm · Hips \(legacy, read-only\): 96 cm/)).toBeVisible();
+    expect(variantCards).toHaveClass("md:hidden");
+    const table = screen.getByRole("table");
+    expect(table.parentElement?.parentElement).toHaveClass("hidden", "md:block");
+    expect(within(table).getByRole("columnheader", { name: "SKU" })).toBeInTheDocument();
     expect(screen.getByText("AST-GWN-001-M-01")).toBeVisible();
     expect(screen.getByText("Needs Cleaning")).toBeVisible();
     expect(screen.getByText("Confirmed reservation")).toBeVisible();
-    expect(screen.getByText(/Bust: Flexible fit · Waist: 72 cm · Length: 61 cm · Hips \(legacy, read-only\): 96 cm/)).toBeVisible();
+  });
+
+  it("shows fixed-duration pricing and multiple variants in aligned mobile cards", async () => {
+    const longSku = "GOWN-FLEXIBLE-FIT-EMERALD-CUSTOM-MEASUREMENTS-2026-01";
+    const longMeasurement = "Flexible fit for made-to-measure customers with additional fitting notes";
+    const fixedVariant = {
+      ...detail.variants[0]!,
+      id: "00000000-0000-4000-8000-000000000040",
+      sku: longSku,
+      size_label: null,
+      color_label: null,
+      measurements: { bust: { type: "fit_note" as const, text: longMeasurement } },
+      rental_price_minor: "200000",
+      security_deposit_minor: "75000",
+      pricing_mode: "fixed_duration" as const,
+      included_duration_minutes: 4320,
+      extra_day_price_minor: "25000",
+      turnaround_minutes: 0,
+      assets: [],
+    };
+    api.getCatalogueClothingDetail.mockResolvedValueOnce({
+      data: { ...detail, variants: [detail.variants[0]!, fixedVariant] },
+      requestId: "req-detail-multiple-variants",
+    });
+
+    render(<ClothingDetailsPage productId={productId} />);
+
+    const cards = await screen.findByRole("list", { name: "Variant pricing cards" });
+    const variants = within(cards).getAllByRole("listitem");
+    expect(variants).toHaveLength(2);
+
+    const fixedCard = within(cards).getByRole("listitem", { name: "Flexible fit no color variant" });
+    expect(within(fixedCard).getByText("Color: —")).toBeVisible();
+    expect(within(fixedCard).getByText("Fixed-duration rental")).toBeVisible();
+    expect(within(fixedCard).getByText("Pickup day is Day 1")).toBeVisible();
+    expect(within(fixedCard).getByText(/₱2,000 \/ 3 days/)).toBeVisible();
+    expect(within(fixedCard).getByText("₱250 / extra day")).toBeVisible();
+    expect(within(fixedCard).getByText("None")).toBeVisible();
+    expect(within(fixedCard).getByText(longMeasurement)).toHaveClass("break-words");
+    expect(within(fixedCard).getByText(longSku)).toHaveClass("break-all");
+    expect(fixedCard.querySelector("dl")).toHaveClass("grid-cols-2");
   });
 
   it("renders legacy fit ranges with a single Fits label", async () => {
@@ -343,9 +398,10 @@ describe("ClothingDetailsPage", () => {
 
     render(<ClothingDetailsPage productId={productId} />);
 
-    const sku = await screen.findByText("GWN-001-M");
-    const row = sku.closest("tr");
-    if (!row) throw new Error("Expected variant to render in a table row.");
+    const cards = await screen.findByRole("list", { name: "Variant pricing cards" });
+    const card = within(cards).getByRole("listitem", { name: "M no color variant" });
+    expect(within(card).getByText("Color: —")).toBeVisible();
+    const row = within(screen.getByRole("table")).getByRole("row", { name: /GWN-001-M/ });
     expect(within(row).getByText("—")).toBeVisible();
   });
 
@@ -374,7 +430,7 @@ describe("ClothingDetailsPage", () => {
     render(<ClothingDetailsPage productId={productId} />);
 
     expect(await screen.findByRole("heading", { name: "Emerald Evening Gown" })).toBeVisible();
-    expect(screen.getByText("GWN-001-M")).toBeVisible();
+    expect(within(screen.getByRole("list", { name: "Variant pricing cards" })).getByText("GWN-001-M")).toBeVisible();
     expect(screen.queryByText("GWN-001-ARCHIVED-XS")).not.toBeInTheDocument();
     expect(screen.getByText("AST-GWN-001-ARCHIVED-XS-01")).toBeVisible();
     expect(screen.getAllByText(/1,500/).length).toBeGreaterThan(0);
@@ -399,7 +455,7 @@ describe("ClothingDetailsPage", () => {
     render(<ClothingDetailsPage productId={productId} />);
 
     expect(await screen.findByLabelText("Clothing lifecycle: Archived")).toBeVisible();
-    expect(screen.getByText("GWN-001-M")).toBeVisible();
+    expect(within(screen.getByRole("list", { name: "Variant pricing cards" })).getByText("GWN-001-M")).toBeVisible();
     expect(screen.getByText("AST-GWN-001-M-01")).toBeVisible();
   });
 
