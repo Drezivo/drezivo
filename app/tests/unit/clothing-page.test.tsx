@@ -305,7 +305,7 @@ describe("ClothingPage", () => {
     render(<ClothingPage />);
     await screen.findByRole("listitem", { name: "Real Black Satin Gown" });
 
-    expect(screen.getByRole("button", { name: "Active" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Status Active" })).toBeVisible();
     expect(api.getCatalogueClothing).toHaveBeenCalledWith({
       limit: 10,
       sort: "newest",
@@ -320,15 +320,30 @@ describe("ClothingPage", () => {
     expect(screen.getByRole("button", { name: "Next clothing page" })).toBeDisabled();
   });
 
+  it("renders visible labels associated with each clothing filter", async () => {
+    render(<ClothingPage />);
+    await screen.findByRole("listitem", { name: "Real Black Satin Gown" });
+
+    expect(screen.getByLabelText("Search")).toBeVisible();
+    expect(screen.getByText("Category", { selector: "span" })).toBeVisible();
+    expect(screen.getByText("Size", { selector: "span" })).toBeVisible();
+    expect(screen.getByText("Status", { selector: "span" })).toBeVisible();
+    expect(screen.getByText("Sort", { selector: "span" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Category All Categories" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Size All Sizes" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Status Active" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Sort New" })).toBeVisible();
+  });
+
   it("defaults sorting to New and changes server-side ordering with URL-backed sort state", async () => {
     render(<ClothingPage />);
     await screen.findByRole("listitem", { name: "Real Black Satin Gown" });
 
-    expect(screen.getByRole("button", { name: "Sort clothing" })).toHaveTextContent("New");
-    expect(screen.getByRole("button", { name: "Active" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Sort New" })).toHaveTextContent("New");
+    expect(screen.getByRole("button", { name: "Status Active" })).toBeVisible();
     expect(api.getCatalogueClothing).toHaveBeenCalledWith({ limit: 10, sort: "newest", product_status: "active" });
 
-    fireEvent.pointerDown(screen.getByRole("button", { name: "Sort clothing" }), {
+    fireEvent.pointerDown(screen.getByRole("button", { name: "Sort New" }), {
       button: 0,
       ctrlKey: false,
     });
@@ -338,7 +353,7 @@ describe("ClothingPage", () => {
       expect(api.getCatalogueClothing).toHaveBeenLastCalledWith({ limit: 10, sort: "oldest", product_status: "active" })
     );
     expect(navigation.replace).toHaveBeenCalledWith("/inventory?sort=oldest", { scroll: false });
-    expect(screen.getByRole("button", { name: "Sort clothing" })).toHaveTextContent("Oldest");
+    expect(screen.getByRole("button", { name: "Sort Oldest" })).toHaveTextContent("Oldest");
   });
 
   it("shows windowed availability without implying a global clothing status", async () => {
@@ -392,7 +407,7 @@ describe("ClothingPage", () => {
       },
       requestId: "req-no-cover",
     });
-    fireEvent.change(screen.getByRole("textbox", { name: "Search clothing" }), {
+    fireEvent.change(screen.getByRole("textbox", { name: "Search" }), {
       target: { value: "DRS-002" },
     });
 
@@ -416,7 +431,7 @@ describe("ClothingPage", () => {
     await screen.findByRole("listitem", { name: "Real Black Satin Gown" });
 
     const requestCountBeforeSearch = api.getCatalogueClothing.mock.calls.length;
-    fireEvent.change(screen.getByRole("textbox", { name: "Search clothing" }), {
+    fireEvent.change(screen.getByRole("textbox", { name: "Search" }), {
       target: { value: "DRS-002" },
     });
     expect(api.getCatalogueClothing).toHaveBeenCalledTimes(requestCountBeforeSearch);
@@ -536,10 +551,10 @@ describe("ClothingPage", () => {
         product_status: "draft",
       })
     );
-    expect(screen.getByRole("textbox", { name: "Search clothing" })).toHaveValue("red");
-    expect(screen.getByRole("button", { name: "L" })).toBeVisible();
-    expect(screen.getByRole("button", { name: "Draft" })).toBeVisible();
-    expect(screen.getByRole("button", { name: "Sort clothing" })).toHaveTextContent("Name Z–A");
+    expect(screen.getByRole("textbox", { name: "Search" })).toHaveValue("red");
+    expect(screen.getByRole("button", { name: "Size L" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Status Draft" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Sort Name Z–A" })).toHaveTextContent("Name Z–A");
     expect(navigation.replace).toHaveBeenCalledWith(
       `/inventory?q=red&category=${category.id}&size=L&status=draft&sort=name_desc`,
       { scroll: false }
@@ -583,7 +598,7 @@ describe("ClothingPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Next clothing page" }));
     await screen.findByRole("listitem", { name: "Real Red Dress" });
 
-    fireEvent.pointerDown(screen.getByRole("button", { name: "Active" }), {
+    fireEvent.pointerDown(screen.getByRole("button", { name: "Status Active" }), {
       button: 0,
       ctrlKey: false,
     });
@@ -617,7 +632,7 @@ describe("ClothingPage", () => {
       requestId: "req-empty",
     });
     rerender(<ClothingPage />);
-    fireEvent.change(screen.getByRole("textbox", { name: "Search clothing" }), {
+    fireEvent.change(screen.getByRole("textbox", { name: "Search" }), {
       target: { value: "nothing" },
     });
     expect(await screen.findByText("No clothing matches these filters")).toBeVisible();
