@@ -359,31 +359,35 @@ export function ClothingPage() {
 
         <Card className="gap-0 py-0">
           {/* Phones: search on its own row, then the four filters as a 2×2 grid. */}
-          <CardContent className="grid grid-cols-2 gap-2 p-3 lg:flex lg:items-center">
-            <div className="relative col-span-2 min-w-0 flex-1 lg:max-w-md">
-              <Search
-                className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-dashboard-muted"
-                aria-hidden="true"
-              />
-              <Input
-                aria-label="Search clothing"
-                value={query}
-                onChange={(event) => updateSearch(event.target.value)}
-                placeholder="Search clothing by name or code..."
-                className="pl-9"
-              />
-            </div>
+          <CardContent className="grid grid-cols-2 gap-2 p-3 lg:flex lg:items-end">
+            <label className="relative col-span-2 flex min-w-0 flex-1 flex-col gap-1.5 lg:max-w-md">
+              <span className="text-xs font-medium text-dashboard-muted">Search</span>
+              <span className="relative">
+                <Search
+                  className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-dashboard-muted"
+                  aria-hidden="true"
+                />
+                <Input
+                  value={query}
+                  onChange={(event) => updateSearch(event.target.value)}
+                  placeholder="Search clothing by name or code..."
+                  className="pl-9"
+                />
+              </span>
+            </label>
             <CategoryFilterMenu
               categories={categories}
               selected={selectedCategory}
               onSelect={updateCategory}
             />
             <FilterMenu
+              fieldLabel="Size"
               label={size}
               options={SIZE_OPTIONS}
               onSelect={updateSize}
             />
             <FilterMenu
+              fieldLabel="Status"
               label={status}
               options={STATUS_OPTIONS}
               onSelect={updateStatus}
@@ -828,57 +832,79 @@ function CategoryFilterMenu({
   selected: CatalogueCategory | null;
   onSelect: (value: CatalogueCategory["id"] | null) => void;
 }) {
+  const filterId = "clothing-category-filter";
+
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button
-          variant="ghost"
-          className="min-w-0 justify-between border border-dashboard-border bg-dashboard-surface lg:min-w-36 text-dashboard-navy hover:bg-dashboard-active"
-        >
-          {selected?.name ?? "All Categories"}
-          <ChevronRight className="h-3.5 w-3.5 rotate-90 text-dashboard-muted" />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start">
-        <DropdownMenuItem onSelect={() => onSelect(null)}>All Categories</DropdownMenuItem>
-        {categories.map((category) => (
-          <DropdownMenuItem key={category.id} onSelect={() => onSelect(category.id)}>
-            {category.name}
-          </DropdownMenuItem>
-        ))}
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <div className="flex min-w-0 flex-col gap-1.5 lg:min-w-36">
+      <span id={`${filterId}-label`} className="text-xs font-medium text-dashboard-muted">
+        Category
+      </span>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            variant="ghost"
+            aria-labelledby={`${filterId}-label ${filterId}-value`}
+            className="w-full min-w-0 justify-between border border-dashboard-border bg-dashboard-surface text-dashboard-navy hover:bg-dashboard-active"
+          >
+            <span id={`${filterId}-value`} className="truncate">
+              {selected?.name ?? "All Categories"}
+            </span>
+            <ChevronRight className="h-3.5 w-3.5 rotate-90 text-dashboard-muted" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start">
+          <DropdownMenuItem onSelect={() => onSelect(null)}>All Categories</DropdownMenuItem>
+          {categories.map((category) => (
+            <DropdownMenuItem key={category.id} onSelect={() => onSelect(category.id)}>
+              {category.name}
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
   );
 }
 
 function FilterMenu<Option extends string>({
+  fieldLabel,
   label,
   options,
   onSelect,
 }: {
+  fieldLabel: "Size" | "Status";
   label: string;
   options: readonly Option[];
   onSelect: (value: Option) => void;
 }) {
+  const filterId = `clothing-${fieldLabel.toLowerCase()}-filter`;
+
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button
-          variant="ghost"
-          className="min-w-0 justify-between border border-dashboard-border bg-dashboard-surface lg:min-w-36 text-dashboard-navy hover:bg-dashboard-active"
-        >
-          {label}
-          <ChevronRight className="h-3.5 w-3.5 rotate-90 text-dashboard-muted" />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start">
-        {options.map((option) => (
-          <DropdownMenuItem key={option} onSelect={() => onSelect(option)}>
-            {option}
-          </DropdownMenuItem>
-        ))}
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <div className="flex min-w-0 flex-col gap-1.5 lg:min-w-36">
+      <span id={`${filterId}-label`} className="text-xs font-medium text-dashboard-muted">
+        {fieldLabel}
+      </span>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            variant="ghost"
+            aria-labelledby={`${filterId}-label ${filterId}-value`}
+            className="w-full min-w-0 justify-between border border-dashboard-border bg-dashboard-surface text-dashboard-navy hover:bg-dashboard-active"
+          >
+            <span id={`${filterId}-value`} className="truncate">
+              {label}
+            </span>
+            <ChevronRight className="h-3.5 w-3.5 rotate-90 text-dashboard-muted" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start">
+          {options.map((option) => (
+            <DropdownMenuItem key={option} onSelect={() => onSelect(option)}>
+              {option}
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
   );
 }
 
@@ -890,26 +916,35 @@ function SortMenu({
   value: ClothingListSort;
 }) {
   const selected = SORT_OPTIONS.find((option) => option.value === value) ?? SORT_OPTIONS[0]!;
+  const filterId = "clothing-sort-filter";
+
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button
-          variant="ghost"
-          aria-label="Sort clothing"
-          className="min-w-0 justify-between border border-dashboard-border bg-dashboard-surface lg:min-w-32 text-dashboard-navy hover:bg-dashboard-active"
-        >
-          {selected.label}
-          <ChevronRight className="h-3.5 w-3.5 rotate-90 text-dashboard-muted" />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start">
-        {SORT_OPTIONS.map((option) => (
-          <DropdownMenuItem key={option.value} onSelect={() => onSelect(option.value)}>
-            {option.label}
-          </DropdownMenuItem>
-        ))}
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <div className="flex min-w-0 flex-col gap-1.5 lg:min-w-32">
+      <span id={`${filterId}-label`} className="text-xs font-medium text-dashboard-muted">
+        Sort
+      </span>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            variant="ghost"
+            aria-labelledby={`${filterId}-label ${filterId}-value`}
+            className="w-full min-w-0 justify-between border border-dashboard-border bg-dashboard-surface text-dashboard-navy hover:bg-dashboard-active"
+          >
+            <span id={`${filterId}-value`} className="truncate">
+              {selected.label}
+            </span>
+            <ChevronRight className="h-3.5 w-3.5 rotate-90 text-dashboard-muted" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start">
+          {SORT_OPTIONS.map((option) => (
+            <DropdownMenuItem key={option.value} onSelect={() => onSelect(option.value)}>
+              {option.label}
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
   );
 }
 
