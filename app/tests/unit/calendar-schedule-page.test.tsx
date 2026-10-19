@@ -268,6 +268,26 @@ function installDefaults() {
   });
 }
 
+function withUntimedPickups(count: number): OperationalCalendarEvent[] {
+  const pickup = calendarEvents[0];
+  if (!pickup) throw new Error("Expected a reservation Pickup fixture.");
+  return [
+    ...calendarEvents.map((event) =>
+      event.id === pickup.id ? { ...event, time_unspecified: true } : event
+    ),
+    ...Array.from({ length: count - 1 }, (_, index) => ({
+      ...pickup,
+      id: `reservation-pickup-untimed-${index + 1}`,
+      time_unspecified: true,
+      customer_name: `Untimed Customer ${index + 1}`,
+      period: {
+        start: new Date(Date.parse(pickupAt) + (index + 1) * 15 * 60_000).toISOString(),
+        end: new Date(Date.parse(pickupAt) + (index + 1) * 15 * 60_000 + 30 * 60_000).toISOString(),
+      },
+    })),
+  ];
+}
+
 describe("CalendarSchedulePage production details and states", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -281,10 +301,142 @@ describe("CalendarSchedulePage production details and states", () => {
     expect(await screen.findByRole("region", { name: /Weekly schedule grid/ })).toBeVisible();
     expect(screen.getByRole("heading", { name: "Rental Calendar" })).toBeVisible();
     expect(screen.getByRole("link", { name: /Schedule/ })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("navigation", { name: "Calendar views" })).toHaveClass("grid-cols-2");
     expect(api.getOperationalCalendar).toHaveBeenCalledWith(
       expect.objectContaining({ start: expect.any(String), end: expect.any(String) })
     );
     expect(screen.getByRole("button", { name: /Open reservation details: Pickup/ })).toBeVisible();
+  });
+
+  it("places up to two untimed events per date above the Week schedule and opens overflow in the agenda", async () => {
+    const untimedPickups = withUntimedPickups(4);
+    const pickup = untimedPickups[0];
+    if (!pickup) throw new Error("Expected an untimed reservation Pickup fixture.");
+    const nextDayStart = new Date(Date.parse(pickupAt) + 24 * 60 * 60_000).toISOString();
+    api.getOperationalCalendar.mockImplementation(
+      ({ start, end }: { start: string; end: string }) =>
+        Promise.resolve({
+          data: {
+            window: { start, end },
+            categories: [],
+            events: [
+              ...untimedPickups,
+              {
+                ...pickup,
+                id: "reservation-pickup-single-day",
+                customer_name: "Single Untimed Customer",
+                period: {
+                  start: nextDayStart,
+                  end: new Date(Date.parse(nextDayStart) + 30 * 60_000).toISOString(),
+                },
+              },
+            ],
+            truncated: false,
+          },
+          requestId: "request-calendar-untimed",
+        })
+    );
+    render(<CalendarSchedulePage />);
+
+    const grid = await screen.findByRole("region", { name: /Weekly schedule grid/ });
+    const phoneAgendaUntimedSection = screen.getByRole("region", { name: "No specific time" });
+    expect(
+      within(phoneAgendaUntimedSection).getAllByRole("button", {
+        name: /pickup with no specific time/i,
+      })
+    ).toHaveLength(4);
+    const rowLabel = within(grid).getByTestId("calendar-untimed-row-label");
+    const hourGutter = within(grid).getByTestId("calendar-hour-gutter");
+    const gridChildren = Array.from(grid.firstElementChild?.children ?? []);
+    expect(gridChildren.indexOf(rowLabel)).toBeLessThan(gridChildren.indexOf(hourGutter));
+    expect(gridChildren.indexOf(rowLabel)).toBeGreaterThan(0);
+
+    const allUntimedPreviews = within(grid).getAllByRole("button", {
+      name: /pickup with no specific time/i,
+    });
+    expect(allUntimedPreviews).toHaveLength(3);
+    const singlePreview = within(grid).getByRole("button", {
+      name: /pickup with no specific time: Single Untimed Customer/i,
+    });
+    expect(singlePreview).toHaveClass("flex-1");
+    expect(singlePreview.parentElement).toHaveClass("flex", "h-full", "flex-col");
+    const sameDatePreviews = allUntimedPreviews.filter((button) => button !== singlePreview);
+    expect(sameDatePreviews).toHaveLength(2);
+    expect(sameDatePreviews[0]).toHaveClass("flex-1");
+    expect(sameDatePreviews[1]).toHaveClass("flex-1");
+    const overflowButton = within(grid).getByRole("button", {
+      name: /Show 2 more no-specific-time events/,
+    });
+    expect(overflowButton).toBeVisible();
+    expect(overflowButton).toHaveClass("shrink-0", "h-5");
+    expect(within(grid).queryByRole("button", { name: /Open reservation details: Pickup/ })).not.toBeInTheDocument();
+    expect(within(grid).getByRole("button", { name: /Open reservation details: Return/ })).toBeVisible();
+
+    fireEvent.click(sameDatePreviews[0]!);
+    const detailSheet = await screen.findByRole("dialog");
+    expect(await within(detailSheet).findByRole("heading", { name: /RSV-REAL-101/ })).toBeVisible();
+    fireEvent.click(within(detailSheet).getByRole("button", { name: "Close" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+
+    fireEvent.click(overflowButton);
+    const agenda = await screen.findByRole("dialog");
+    expect(within(agenda).getByRole("button", { name: /All 6/ })).toBeVisible();
+    expect(
+      within(agenda).getAllByRole("button", { name: /pickup with no specific time/i })
+    ).toHaveLength(4);
+  });
+
+  it("shows a distinct untimed count in Month cells and opens the date agenda", async () => {
+    api.getOperationalCalendar.mockImplementation(
+      ({ start, end }: { start: string; end: string }) =>
+        Promise.resolve({
+          data: {
+            window: { start, end },
+            categories: [],
+            events: withUntimedPickups(4),
+            truncated: false,
+          },
+          requestId: "request-calendar-untimed-month",
+        })
+    );
+    render(<CalendarSchedulePage />);
+    await screen.findByRole("region", { name: /Weekly schedule grid/ });
+    fireEvent.click(screen.getByRole("button", { name: "Month view" }));
+    const monthGrid = await screen.findByRole("region", { name: "Monthly schedule grid" });
+    expect(within(monthGrid).queryByRole("region", { name: "No specific time" })).not.toBeInTheDocument();
+    const untimedCount = within(monthGrid).getByRole("note", {
+      name: "4 events with no specific time",
+    });
+    expect(untimedCount).toBeVisible();
+    expect(within(monthGrid).queryByRole("button", { name: /reservation details: Pickup/ })).not.toBeInTheDocument();
+
+    const dateKey = calendarDateKeyAt(new Date(pickupAt), timeZone);
+    const dateLabel = formatCalendarDate(dateKey, { month: "long", day: "numeric", year: "numeric" });
+    fireEvent.click(within(untimedCount.parentElement!).getByRole("button", { name: `Open ${dateLabel} agenda` }));
+    const agenda = await screen.findByRole("dialog");
+    expect(within(agenda).getByRole("heading", { name: "No specific time" })).toBeVisible();
+    expect(
+      within(agenda).getAllByRole("button", { name: /pickup with no specific time/i })
+    ).toHaveLength(4);
+  });
+
+  it("applies the selected activity filter to Week untimed entries", async () => {
+    const events = withUntimedPickups(4).map((event) =>
+      event.id === "reservation-return" ? { ...event, time_unspecified: true } : event
+    );
+    api.getOperationalCalendar.mockImplementation(
+      ({ start, end }: { start: string; end: string }) =>
+        Promise.resolve({
+          data: { window: { start, end }, categories: [], events, truncated: false },
+          requestId: "request-calendar-filtered-untimed",
+        })
+    );
+    navigation.search = new URLSearchParams({ activity: "return" }).toString();
+    render(<CalendarSchedulePage />);
+    const grid = await screen.findByRole("region", { name: /Weekly schedule grid/ });
+    expect(within(grid).queryByRole("button", { name: /pickup with no specific time/i })).not.toBeInTheDocument();
+    expect(within(grid).getByRole("button", { name: /Open return with no specific time/i })).toBeVisible();
+    expect(within(grid).queryByRole("button", { name: /Show .* more no-specific-time events/ })).not.toBeInTheDocument();
   });
 
   it("removes the date selector and highlights the entire current-day week column in gold", async () => {

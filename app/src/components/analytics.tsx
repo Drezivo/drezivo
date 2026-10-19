@@ -17,6 +17,7 @@ const dashboardPaths = new Set([
   "/reservations",
   "/settings",
   "/settings/account",
+  "/settings/billing",
   "/settings/measurement-guide",
   "/settings/members",
   "/settings/notifications",

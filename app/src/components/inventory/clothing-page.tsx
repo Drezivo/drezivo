@@ -435,30 +435,48 @@ export function ClothingPage() {
                 onAction={hasActiveFilters ? clearFilters : undefined}
               />
             ) : (
-              <Table aria-label="Clothing catalogue">
-                <TableHeader>
-                  <TableRow className="bg-dashboard-surface hover:bg-dashboard-surface">
-                    <TableHead className="w-14 px-2 sm:px-4">Photo</TableHead>
-                    <TableHead className="px-2 sm:px-4">Clothing</TableHead>
-                    <TableHead className="hidden md:table-cell">Category</TableHead>
-                    <TableHead className="hidden md:table-cell">Sizes</TableHead>
-                    <TableHead className="hidden lg:table-cell">Availability</TableHead>
-                    <TableHead className="hidden xl:table-cell">Rental Price</TableHead>
-                    <TableHead className="hidden xl:table-cell">Active Pieces</TableHead>
-                    <TableHead className="w-12 px-2 sm:px-4" />
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
+              <>
+                <div
+                  role="list"
+                  aria-label="Clothing catalogue"
+                  className="space-y-3 p-3 md:hidden"
+                >
                   {rows.map((item) => (
-                    <ClothingRow
+                    <ClothingMobileCard
                       key={item.product_id}
                       item={item}
                       onArchived={handleArchived}
                       onRestored={handleRestored}
                     />
                   ))}
-                </TableBody>
-              </Table>
+                </div>
+                <div className="hidden md:block">
+                  <Table aria-label="Clothing catalogue">
+                    <TableHeader>
+                      <TableRow className="bg-dashboard-surface hover:bg-dashboard-surface">
+                        <TableHead className="w-14 px-2 sm:px-4">Photo</TableHead>
+                        <TableHead className="px-2 sm:px-4">Clothing</TableHead>
+                        <TableHead className="hidden md:table-cell">Category</TableHead>
+                        <TableHead className="hidden md:table-cell">Sizes</TableHead>
+                        <TableHead className="hidden lg:table-cell">Availability</TableHead>
+                        <TableHead className="hidden xl:table-cell">Rental Price</TableHead>
+                        <TableHead className="hidden xl:table-cell">Active Pieces</TableHead>
+                        <TableHead className="w-12 px-2 sm:px-4" />
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {rows.map((item) => (
+                        <ClothingRow
+                          key={item.product_id}
+                          item={item}
+                          onArchived={handleArchived}
+                          onRestored={handleRestored}
+                        />
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </>
             )}
 
             {!isLoading && !error && rows.length > 0 ? (
@@ -566,32 +584,6 @@ function ClothingRow({
             </span>
           ) : null}
         </div>
-        <dl className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 text-xs md:hidden">
-          <div className="min-w-0">
-            <dt className="text-dashboard-muted">Category</dt>
-            <dd className="mt-0.5 truncate font-medium text-dashboard-navy">
-              {[item.category?.name ?? "Uncategorized", item.subcategory].filter(Boolean).join(" · ")}
-            </dd>
-          </div>
-          <div className="min-w-0">
-            <dt className="text-dashboard-muted">Sizes</dt>
-            <dd className="mt-0.5 truncate font-medium text-dashboard-navy">
-              {displayedSizes.length > 0 ? displayedSizes.join(" · ") : "—"}
-            </dd>
-          </div>
-          <div className="min-w-0">
-            <dt className="text-dashboard-muted">From</dt>
-            <dd className="mt-0.5 truncate font-medium text-dashboard-navy">
-              {formatMinorMoney(item.price_from_minor, item.currency)}
-            </dd>
-          </div>
-          <div className="min-w-0">
-            <dt className="text-dashboard-muted">Availability</dt>
-            <dd className="mt-0.5 font-medium text-dashboard-navy">
-              {item.availability.available_assets}/{item.availability.active_assets} available
-            </dd>
-          </div>
-        </dl>
       </TableCell>
       <TableCell className="hidden text-dashboard-muted md:table-cell">{item.category?.name ?? "Uncategorized"}</TableCell>
       <TableCell className="hidden md:table-cell">
@@ -633,6 +625,95 @@ function ClothingRow({
         <ClothingActions item={item} onArchived={onArchived} onRestored={onRestored} />
       </TableCell>
     </TableRow>
+  );
+}
+
+function ClothingMobileCard({
+  item,
+  onArchived,
+  onRestored,
+}: {
+  item: ClothingListItem;
+  onArchived: Parameters<typeof ArchiveClothingDialog>[0]["onArchived"];
+  onRestored: Parameters<typeof RestoreClothingDialog>[0]["onRestored"];
+}) {
+  const displayedSizes = displayProductSizes({
+    hasFreeSize: item.has_free_size,
+    sizeLabels: item.size_labels,
+  });
+
+  return (
+    <Card role="listitem" aria-label={item.name} data-mobile-card="keep" className="gap-3 py-3">
+      <CardContent className="space-y-3 px-3">
+        <div className="flex min-w-0 items-start gap-3">
+          <div className="flex h-[4.5rem] w-14 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-dashboard-active text-xs font-semibold text-dashboard-accent">
+            {item.primary_image_url ? (
+              // eslint-disable-next-line @next/next/no-img-element -- signed catalogue URLs are dynamic and are not configured as stable next/image remote patterns.
+              <img
+                src={item.primary_image_url}
+                srcSet={mediaImageSrcSet(item.primary_image_url)}
+                sizes="56px"
+                alt={`${item.name} catalogue photo`}
+                loading="lazy"
+                decoding="async"
+                className="h-full w-full object-cover"
+              />
+            ) : (
+              initials(item.name)
+            )}
+          </div>
+          <div className="flex min-w-0 flex-1 items-start justify-between gap-2">
+            <div className="min-w-0">
+              <p className="truncate font-semibold text-dashboard-navy">{item.name}</p>
+              <p className="mt-1 text-xs text-dashboard-muted">{item.code}</p>
+              {item.subcategory ? (
+                <p className="mt-1 text-xs font-medium text-dashboard-accent">{item.subcategory}</p>
+              ) : null}
+              {item.product_status === "archived" ? (
+                <span className="mt-2 inline-flex rounded-full bg-dashboard-neutral-soft px-2 py-1 text-[0.65rem] font-medium text-dashboard-neutral-text">
+                  Archived
+                </span>
+              ) : null}
+              {item.product_status === "draft" ? (
+                <span className="mt-2 inline-flex rounded-full bg-dashboard-active px-2 py-1 text-[0.65rem] font-medium text-dashboard-muted">
+                  Draft
+                </span>
+              ) : null}
+            </div>
+            <ClothingActions item={item} onArchived={onArchived} onRestored={onRestored} />
+          </div>
+        </div>
+        <dl
+          aria-label="Clothing details"
+          className="grid grid-cols-2 gap-x-3 gap-y-2 border-t border-dashboard-border pt-3 text-xs"
+        >
+          <div className="min-w-0">
+            <dt className="text-dashboard-muted">Category</dt>
+            <dd className="mt-0.5 truncate font-medium text-dashboard-navy">
+              {item.category?.name ?? "Uncategorized"}
+            </dd>
+          </div>
+          <div className="min-w-0">
+            <dt className="text-dashboard-muted">Sizes</dt>
+            <dd className="mt-0.5 truncate font-medium text-dashboard-navy">
+              {displayedSizes.length > 0 ? displayedSizes.join(" · ") : "—"}
+            </dd>
+          </div>
+          <div className="min-w-0">
+            <dt className="text-dashboard-muted">From price</dt>
+            <dd className="mt-0.5 truncate font-medium text-dashboard-navy">
+              {formatMinorMoney(item.price_from_minor, item.currency)}
+            </dd>
+          </div>
+          <div className="min-w-0">
+            <dt className="text-dashboard-muted">Availability</dt>
+            <dd className="mt-0.5 font-medium text-dashboard-navy">
+              {item.availability.available_assets}/{item.availability.active_assets} available
+            </dd>
+          </div>
+        </dl>
+      </CardContent>
+    </Card>
   );
 }
 

@@ -70,13 +70,13 @@ test("each migration job reports the exact gap and applies it before the normal 
     ["production-migrations", "production"],
   ];
   const targetedStatus =
-    "npm run db:migrate:status --workspace @drezivo/api -- --through 0084_session_audit_uniqueness_repair.sql";
+    "npm run db:migrate:status --workspace @drezivo/api -- --through 0087_operator_functions_pgcrypto_path.sql";
 
   for (const [jobName, environment] of stages) {
     const job = migrationJob(jobName);
     const statusIndex = job.indexOf(targetedStatus);
     const targetedApplyIndex = job.indexOf(
-      "npm run db:migrate --workspace @drezivo/api -- --through 0084_session_audit_uniqueness_repair.sql",
+      "npm run db:migrate --workspace @drezivo/api -- --through 0087_operator_functions_pgcrypto_path.sql",
     );
     const fullApplyIndex = job.indexOf(
       "npm run db:migrate --workspace @drezivo/api\n",

@@ -82,8 +82,14 @@ describe("DashboardShell", () => {
     expect(navigation).toHaveTextContent("Storefront");
     const links = within(navigation).getAllByRole("link");
     expect(links[0]).toHaveTextContent("Calendar");
-    expect(within(navigation).getByRole("link", { name: "Calendar" })).toHaveAttribute("aria-current", "page");
-    expect(within(navigation).getByRole("link", { name: "Dashboard" })).toHaveAttribute("href", "/dashboard");
+    expect(within(navigation).getByRole("link", { name: "Calendar" })).toHaveAttribute(
+      "aria-current",
+      "page"
+    );
+    expect(within(navigation).getByRole("link", { name: "Dashboard" })).toHaveAttribute(
+      "href",
+      "/dashboard"
+    );
   });
 
   it("collapses the desktop navigation from the header trigger", () => {
@@ -100,7 +106,55 @@ describe("DashboardShell", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Toggle navigation" }));
 
-    expect(reservationsLink).not.toHaveTextContent("Reservations");
+    expect(within(sidebar).getByRole("link", { name: "Reservations" })).not.toHaveTextContent(
+      "Reservations"
+    );
+  });
+
+  it("shows the collapsed navigation label in a tooltip on keyboard focus", async () => {
+    render(
+      <DashboardShell>
+        <div>Shell content</div>
+      </DashboardShell>
+    );
+
+    const sidebar = screen.getByRole("navigation", { name: "Primary" });
+    fireEvent.click(screen.getByRole("button", { name: "Toggle navigation" }));
+    const reservationsLink = within(sidebar).getByRole("link", { name: "Reservations" });
+    fireEvent.focus(reservationsLink);
+
+    expect(await screen.findByRole("tooltip")).toHaveTextContent("Reservations");
+  });
+
+  it("remembers the desktop sidebar toggle after remount", async () => {
+    const firstRender = render(
+      <DashboardShell>
+        <div>Shell content</div>
+      </DashboardShell>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Toggle navigation" }));
+    await waitFor(() =>
+      expect(screen.getByRole("complementary", { name: "Primary navigation" })).toHaveAttribute(
+        "data-state",
+        "collapsed"
+      )
+    );
+    await waitFor(() => expect(window.localStorage.getItem("drezivo:sidebar-open")).toBe("false"));
+
+    firstRender.unmount();
+    render(
+      <DashboardShell>
+        <div>Shell content</div>
+      </DashboardShell>
+    );
+
+    await waitFor(() =>
+      expect(screen.getByRole("complementary", { name: "Primary navigation" })).toHaveAttribute(
+        "data-state",
+        "collapsed"
+      )
+    );
   });
 
   it("follows the system theme by default and remembers the user's switch", async () => {
@@ -134,8 +188,14 @@ describe("DashboardShell", () => {
 
     fireEvent.keyDown(document.body, { key: "Escape" });
     openMenu(await screen.findByRole("button", { name: "Open Romero Formalwear menu" }));
-    expect(await screen.findByRole("menuitem", { name: "Business information" })).toHaveAttribute("href", "/settings");
-    expect(screen.getByRole("menuitem", { name: "Payment methods" })).toHaveAttribute("href", "/settings/payment-methods");
+    expect(await screen.findByRole("menuitem", { name: "Business information" })).toHaveAttribute(
+      "href",
+      "/settings"
+    );
+    expect(screen.getByRole("menuitem", { name: "Payment methods" })).toHaveAttribute(
+      "href",
+      "/settings/payment-methods"
+    );
   });
 
   it("shows the active business, signed-in user, resolved role, and saved business logo", async () => {
@@ -189,12 +249,21 @@ describe("DashboardShell", () => {
 
     const tabs = screen.getByRole("navigation", { name: "Quick navigation" });
     expect(within(tabs).getAllByRole("link")[0]).toHaveTextContent("Calendar");
-    expect(within(tabs).getByRole("link", { name: "Calendar" })).toHaveAttribute("aria-current", "page");
+    expect(within(tabs).getByRole("link", { name: "Calendar" })).toHaveAttribute(
+      "aria-current",
+      "page"
+    );
     fireEvent.click(within(tabs).getByRole("button", { name: "Menu" }));
 
     const sheet = await screen.findByRole("dialog");
-    expect(within(sheet).getByRole("link", { name: "Customers" })).toHaveAttribute("href", "/customers");
-    expect(within(sheet).getByRole("link", { name: "Help Center" })).toHaveAttribute("href", "/help");
+    expect(within(sheet).getByRole("link", { name: "Customers" })).toHaveAttribute(
+      "href",
+      "/customers"
+    );
+    expect(within(sheet).getByRole("link", { name: "Help Center" })).toHaveAttribute(
+      "href",
+      "/help"
+    );
     fireEvent.click(within(sheet).getByRole("radio", { name: "Dark" }));
     expect(document.documentElement.dataset["dashboardTheme"]).toBe("dark");
     expect(within(sheet).getByRole("button", { name: /Sign out/ })).toBeVisible();
@@ -220,6 +289,7 @@ describe("DashboardShell", () => {
 
     await waitFor(() => expect(screen.getByRole("dialog")).toBeVisible());
     expect(screen.getByRole("dialog")).toHaveTextContent("Reservations");
+    expect(window.localStorage.getItem("drezivo:sidebar-open")).toBeNull();
 
     Object.defineProperty(window, "matchMedia", { configurable: true, value: originalMatchMedia });
   });

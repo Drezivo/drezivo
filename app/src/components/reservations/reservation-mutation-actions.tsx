@@ -120,7 +120,10 @@ export function ReservationMutationActions({
   const [mutationError, setMutationError] = useState<DrezivoApiError | null>(null);
   const [proofViewerOpen, setProofViewerOpen] = useState(false);
   const [confirmVerifyOpen, setConfirmVerifyOpen] = useState(false);
-  const proof = usePaymentProof(detail.id, selectedAction === "verify_payment");
+  const proof = usePaymentProof(
+    detail.id,
+    selectedAction === "verify_payment" || selectedAction === "log_payment"
+  );
 
   const actions = useMemo(
     () => getVisibleMutationActions(detail, permissionCodes),
@@ -1100,9 +1103,17 @@ export function ReservationMutationActions({
               <>
                 <ActionMessage>
                   Log the {formatMinorMoney(detail.payment.amount_minor, detail.payment.currency)}{" "}
-                  paid at the counter via {detail.payment.method_name}. No receipt is needed for a
-                  walk-in.
+                  paid at the counter via {detail.payment.method_name}. A receipt is optional for a
+                  walk-in; any receipt attached to this reservation appears here.
                 </ActionMessage>
+                {proof.kind !== "ready" || proof.receipts.length > 0 ? (
+                  <PaymentProof
+                    state={proof}
+                    viewerOpen={proofViewerOpen}
+                    onViewerOpenChange={setProofViewerOpen}
+                    heading="Receipt attached to this reservation"
+                  />
+                ) : null}
                 <label className="block">
                   <span className="mb-1.5 block text-xs font-medium text-dashboard-muted">
                     Reference number (optional)

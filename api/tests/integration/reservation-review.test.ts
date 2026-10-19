@@ -89,6 +89,7 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
     inspectReturnedReservation,
     completeRentalReservation,
     submitReservation,
+    getReservationPaymentReceipts,
     verifyReservationPayment,
   } = await import('../../src/modules/reservations/reservations.service.js');
   const { submitReservationForConfirmation } =
@@ -1452,6 +1453,20 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
     expect(submitted.body).toMatchObject({
       success: true,
       data: { completion_state: 'pending_confirmation', next_action: 'payment_verification' },
+    });
+    expect(
+      await getReservationPaymentReceipts(
+        reviewContext(seed, 'req-rsv032-qr-read-receipt', 'idem-rsv032-qr-read-receipt'),
+        held.id,
+      ),
+    ).toMatchObject({
+      receipts: [
+        expect.objectContaining({
+          file_id: fileId,
+          content_type: 'image/png',
+          evidence_status: 'under_review',
+        }),
+      ],
     });
 
     const amountMinor = await withTenantTransaction(

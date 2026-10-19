@@ -57,7 +57,11 @@ import {
   type CapturedPhotoFile,
 } from "@/lib/capture-photo-file";
 import { createDrezivoApiClient, DrezivoApiError } from "@/lib/drezivo-api";
-import { inferMeasurementKind, parseMeasurementInput, type MeasurementKind } from "@/lib/measurement-input";
+import {
+  inferMeasurementKind,
+  parseMeasurementInput,
+  type MeasurementKind,
+} from "@/lib/measurement-input";
 import { useSubmitGuard } from "@/lib/use-submit-guard";
 import { cn } from "@/lib/utils";
 
@@ -71,7 +75,11 @@ type MeasurementMode = "default_guide" | "custom" | "none";
 type SubcategorySelection = "none" | "LONG" | "MINI" | "custom";
 type PhotoStatus = "preparing" | "ready" | "uploading" | "uploaded" | "error";
 type PendingNavigation = { kind: "href"; href: string } | { kind: "back" };
-type CapturedGuideImage = CapturedPhotoFile & { name: string; byteSize: number; lastModified: number };
+type CapturedGuideImage = CapturedPhotoFile & {
+  name: string;
+  byteSize: number;
+  lastModified: number;
+};
 
 type GuideSetupIntent = {
   fingerprint: string;
@@ -106,7 +114,11 @@ type MeasurementField = keyof Measurements;
 const MEASUREMENT_FIELDS: MeasurementField[] = ["bust", "waist", "length"];
 const EMPTY_MEASUREMENTS: Measurements = { bust: "", waist: "", length: "" };
 const MEASUREMENT_TARGETS = [...SIZE_OPTIONS, "FREE_SIZE"] as const;
-const EMPTY_MEASUREMENT_KINDS: Record<MeasurementField, MeasurementKind> = { bust: "exact", waist: "exact", length: "exact" };
+const EMPTY_MEASUREMENT_KINDS: Record<MeasurementField, MeasurementKind> = {
+  bust: "exact",
+  waist: "exact",
+  length: "exact",
+};
 
 export function AddClothingPage() {
   const { getToken, isLoaded, isSignedIn } = useAuth();
@@ -135,26 +147,40 @@ export function AddClothingPage() {
   const [customSubcategory, setCustomSubcategory] = useState("");
   const [color, setColor] = useState("");
   const [photos, setPhotos] = useState<PendingPhoto[]>([]);
+  const [photoLightboxOpen, setPhotoLightboxOpen] = useState(false);
+  const [activePhotoId, setActivePhotoId] = useState<string | null>(null);
   const [sizingMode, setSizingMode] = useState<SizingMode>("free_size");
   const [selectedSizes, setSelectedSizes] = useState<ClothingSize[]>(["S", "M", "L", "XL"]);
   const [measurementUnit, setMeasurementUnit] = useState<MeasurementUnit>("in");
-  const [measurementModes, setMeasurementModes] = useState<Record<MeasurementTarget, MeasurementMode>>(() =>
-    Object.fromEntries(MEASUREMENT_TARGETS.map((target) => [target, "custom"])) as Record<
-      MeasurementTarget,
-      MeasurementMode
-    >
+  const [measurementModes, setMeasurementModes] = useState<
+    Record<MeasurementTarget, MeasurementMode>
+  >(
+    () =>
+      Object.fromEntries(MEASUREMENT_TARGETS.map((target) => [target, "custom"])) as Record<
+        MeasurementTarget,
+        MeasurementMode
+      >
   );
-  const [measurements, setMeasurements] = useState<Record<MeasurementTarget, Measurements>>(() =>
-    Object.fromEntries(MEASUREMENT_TARGETS.map((target) => [target, { ...EMPTY_MEASUREMENTS }])) as Record<
-      MeasurementTarget,
-      Measurements
-    >
+  const [measurements, setMeasurements] = useState<Record<MeasurementTarget, Measurements>>(
+    () =>
+      Object.fromEntries(
+        MEASUREMENT_TARGETS.map((target) => [target, { ...EMPTY_MEASUREMENTS }])
+      ) as Record<MeasurementTarget, Measurements>
   );
-  const [measurementDraftKinds, setMeasurementDraftKinds] = useState<Record<MeasurementTarget, Record<MeasurementField, MeasurementKind>>>(() =>
-    Object.fromEntries(MEASUREMENT_TARGETS.map((target) => [target, { ...EMPTY_MEASUREMENT_KINDS }])) as Record<MeasurementTarget, Record<MeasurementField, MeasurementKind>>
+  const [measurementDraftKinds, setMeasurementDraftKinds] = useState<
+    Record<MeasurementTarget, Record<MeasurementField, MeasurementKind>>
+  >(
+    () =>
+      Object.fromEntries(
+        MEASUREMENT_TARGETS.map((target) => [target, { ...EMPTY_MEASUREMENT_KINDS }])
+      ) as Record<MeasurementTarget, Record<MeasurementField, MeasurementKind>>
   );
-  const [fitRanges, setFitRanges] = useState<Record<MeasurementTarget, string>>(() =>
-    Object.fromEntries(MEASUREMENT_TARGETS.map((target) => [target, ""])) as Record<MeasurementTarget, string>
+  const [fitRanges, setFitRanges] = useState<Record<MeasurementTarget, string>>(
+    () =>
+      Object.fromEntries(MEASUREMENT_TARGETS.map((target) => [target, ""])) as Record<
+        MeasurementTarget,
+        string
+      >
   );
   const [pricingMode, setPricingMode] = useState<PricingMode>("fixed_duration");
   const [price, setPrice] = useState("300");
@@ -183,11 +209,19 @@ export function AddClothingPage() {
     () => categories.filter((category) => category.status === "active"),
     [categories]
   );
-  const selectedCategory =
-    activeCategories.find((category) => category.id === categoryId) ?? null;
+  const selectedCategory = activeCategories.find((category) => category.id === categoryId) ?? null;
   const hasUnreadablePhoto = photos.some((photo) => photo.errorKind === "read");
   const isPreparingPhoto = photos.some((photo) => photo.status === "preparing");
   const isPhotoSubmissionBlocked = hasUnreadablePhoto || isPreparingPhoto;
+  const photoLightboxImages = photos.flatMap((photo) =>
+    photo.previewUrl
+      ? [{ id: photo.id, src: photo.previewUrl, alt: `${photo.name} full-size preview` }]
+      : []
+  );
+  const activePhotoIndex = Math.max(
+    0,
+    photoLightboxImages.findIndex((photo) => photo.id === activePhotoId)
+  );
 
   useEffect(() => {
     mountedRef.current = true;
@@ -391,19 +425,25 @@ export function AddClothingPage() {
 
   const setMeasurementMode = (target: MeasurementTarget, mode: MeasurementMode) => {
     const clearsMeasurements =
-      mode !== "custom" && Object.values(measurements[target]).some((value) => value.trim().length > 0);
+      mode !== "custom" &&
+      Object.values(measurements[target]).some((value) => value.trim().length > 0);
     if (measurementModes[target] === mode && !clearsMeasurements) return;
     markDirty();
     setMeasurementModes((current) => ({ ...current, [target]: mode }));
     if (mode !== "custom") {
       setMeasurements((current) => ({ ...current, [target]: { ...EMPTY_MEASUREMENTS } }));
-      setMeasurementDraftKinds((current) => ({ ...current, [target]: { ...EMPTY_MEASUREMENT_KINDS } }));
+      setMeasurementDraftKinds((current) => ({
+        ...current,
+        [target]: { ...EMPTY_MEASUREMENT_KINDS },
+      }));
     }
   };
 
   const useDefaultGuideForAll = () => {
-    const changesForm = measurementTargets.some(({ key }) =>
-      measurementModes[key] !== "default_guide" || Object.values(measurements[key]).some((value) => value.trim().length > 0)
+    const changesForm = measurementTargets.some(
+      ({ key }) =>
+        measurementModes[key] !== "default_guide" ||
+        Object.values(measurements[key]).some((value) => value.trim().length > 0)
     );
     if (!changesForm) return;
     markDirty();
@@ -423,16 +463,14 @@ export function AddClothingPage() {
     });
     setMeasurementDraftKinds((current) => {
       const next = { ...current };
-      measurementTargets.forEach(({ key }) => { next[key] = { ...EMPTY_MEASUREMENT_KINDS }; });
+      measurementTargets.forEach(({ key }) => {
+        next[key] = { ...EMPTY_MEASUREMENT_KINDS };
+      });
       return next;
     });
   };
 
-  const updateMeasurement = (
-    target: MeasurementTarget,
-    field: MeasurementField,
-    value: string
-  ) => {
+  const updateMeasurement = (target: MeasurementTarget, field: MeasurementField, value: string) => {
     markDirty();
     setMeasurements((current) => ({
       ...current,
@@ -473,7 +511,12 @@ export function AddClothingPage() {
     try {
       const captured = await capturePhotoFile(file);
       if (!mountedRef.current) return;
-      setGuideFile({ ...captured, name: file.name, byteSize: file.size, lastModified: file.lastModified });
+      setGuideFile({
+        ...captured,
+        name: file.name,
+        byteSize: file.size,
+        lastModified: file.lastModified,
+      });
       setGuidePreviewUrl(URL.createObjectURL(captured.body));
     } catch (error) {
       if (!mountedRef.current) return;
@@ -578,7 +621,9 @@ export function AddClothingPage() {
     setFormError(null);
     const availableSlots = Math.max(0, MAX_CLOTHING_PHOTOS - photos.length);
     if (incoming.length > availableSlots) {
-      setFormError(`You can upload a maximum of ${MAX_CLOTHING_PHOTOS} photos. ${availableSlots} slot${availableSlots === 1 ? " is" : "s are"} available.`);
+      setFormError(
+        `You can upload a maximum of ${MAX_CLOTHING_PHOTOS} photos. ${availableSlots} slot${availableSlots === 1 ? " is" : "s are"} available.`
+      );
     }
     const accepted = incoming.slice(0, availableSlots).filter((file) => {
       if (!mayBeSupportedPhoto(file)) {
@@ -705,9 +750,12 @@ export function AddClothingPage() {
   const buildCreateRequest = (activate: boolean, imageFileIds: string[]): CreateClothingRequest => {
     if (!categoryId) throw new Error("Choose an active category.");
     if (!name.trim()) throw new Error("Enter a clothing name.");
-    if (sizingMode === "sized" && selectedSizes.length === 0) throw new Error("Select at least one size.");
+    if (sizingMode === "sized" && selectedSizes.length === 0)
+      throw new Error("Select at least one size.");
     if (needsDefaultGuide && !defaultGuide) {
-      throw new Error("Set a default measurement guide, or use custom/no measurements for every variant.");
+      throw new Error(
+        "Set a default measurement guide, or use custom/no measurements for every variant."
+      );
     }
 
     const sizeTargets: Array<{ target: MeasurementTarget; sizeLabel: ClothingSize | null }> =
@@ -727,19 +775,30 @@ export function AddClothingPage() {
       }
       if (mode === "custom") {
         const values = Object.fromEntries(
-          MEASUREMENT_FIELDS
-            .filter((field) => measurements[target][field].trim() !== "")
-            .map((field) => {
+          MEASUREMENT_FIELDS.filter((field) => measurements[target][field].trim() !== "").map(
+            (field) => {
               const value = measurements[target][field].trim();
-              return [field, parseMeasurementInput(value, `${sizeLabel ?? "Flexible fit"} ${field}`, measurementDraftKinds[target][field], true)];
-            })
+              return [
+                field,
+                parseMeasurementInput(
+                  value,
+                  `${sizeLabel ?? "Flexible fit"} ${field}`,
+                  measurementDraftKinds[target][field],
+                  true
+                ),
+              ];
+            }
+          )
         );
         if (Object.keys(values).length === 0) {
-          throw new Error(`Enter at least one custom measurement or fit note for ${sizeLabel ?? "Flexible fit"}.`);
+          throw new Error(
+            `Enter at least one custom measurement or fit note for ${sizeLabel ?? "Flexible fit"}.`
+          );
         }
         return {
           size_label: sizeLabel,
-          fit_range: sizeLabel === null ? normalizeVariantFitRange(fitRanges[target]) || null : null,
+          fit_range:
+            sizeLabel === null ? normalizeVariantFitRange(fitRanges[target]) || null : null,
           measurement_mode: mode,
           measurement_unit: measurementUnit,
           measurements: values,
@@ -802,7 +861,9 @@ export function AddClothingPage() {
         throw new Error("Remove or reselect each photo that could not be read before saving.");
       }
       if (activate && photos.length === 0) {
-        throw new Error("Add at least one photo before adding clothing. You can still save it as a draft without a photo.");
+        throw new Error(
+          "Add at least one photo before adding clothing. You can still save it as a draft without a photo."
+        );
       }
 
       const previewRequest = buildCreateRequest(false, []);
@@ -884,11 +945,10 @@ export function AddClothingPage() {
         </div>
 
         <div className="mb-5">
-          <h1 className="dashboard-page-title">
-            Add Clothing
-          </h1>
+          <h1 className="dashboard-page-title">Add Clothing</h1>
           <p className="mt-1 max-w-2xl text-sm text-dashboard-muted">
-            Add one clothing style, then choose one flexible-fit variant or one rentable variant for each selected size.
+            Add one clothing style, then choose one flexible-fit variant or one rentable variant for
+            each selected size.
           </p>
         </div>
 
@@ -916,12 +976,18 @@ export function AddClothingPage() {
                     className="relative h-36 w-28 overflow-hidden rounded-xl border border-dashboard-border bg-dashboard-active"
                   >
                     {photo.previewUrl ? (
-                      // eslint-disable-next-line @next/next/no-img-element -- captured Blob preview before governed upload finalization.
-                      <img
-                        src={photo.previewUrl}
-                        alt={`${photo.name} preview`}
-                        className="h-full w-full object-cover"
-                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setActivePhotoId(photo.id);
+                          setPhotoLightboxOpen(true);
+                        }}
+                        aria-label={`Open ${photo.name} photo preview`}
+                        className="absolute inset-0 z-0 cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-dashboard-accent"
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element -- captured Blob preview before governed upload finalization. */}
+                        <img src={photo.previewUrl} alt="" className="h-full w-full object-cover" />
+                      </button>
                     ) : (
                       <span className="absolute inset-0 flex items-center justify-center px-2 text-center text-xs text-dashboard-muted">
                         {photo.status === "preparing" ? "Preparing photo…" : "Preview unavailable"}
@@ -932,17 +998,17 @@ export function AddClothingPage() {
                       onClick={() => removePhoto(photo.id)}
                       disabled={isSubmitting || photo.status === "preparing"}
                       aria-label={`Remove ${photo.name}`}
-                      className="absolute right-1.5 top-1.5 flex h-7 w-7 items-center justify-center rounded-full bg-dashboard-surface/90 text-dashboard-navy shadow-sm transition hover:bg-dashboard-active disabled:cursor-not-allowed disabled:opacity-50"
+                      className="absolute right-1.5 top-1.5 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-dashboard-surface/90 text-dashboard-navy shadow-sm transition hover:bg-dashboard-active disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       <X className="h-3.5 w-3.5" aria-hidden="true" />
                     </button>
                     {index === 0 ? (
-                      <span className="absolute bottom-2 left-2 rounded bg-dashboard-surface/90 px-2 py-1 text-[0.65rem] font-medium text-dashboard-navy">
+                      <span className="pointer-events-none absolute bottom-2 left-2 z-10 rounded bg-dashboard-surface/90 px-2 py-1 text-[0.65rem] font-medium text-dashboard-navy">
                         Cover photo
                       </span>
                     ) : null}
                     {photo.status === "uploading" || photo.status === "preparing" ? (
-                      <span className="absolute inset-x-2 bottom-2 flex items-center justify-center gap-1 rounded bg-dashboard-surface/90 px-2 py-1 text-[0.65rem] font-medium text-dashboard-navy">
+                      <span className="pointer-events-none absolute inset-x-2 bottom-2 z-20 flex items-center justify-center gap-1 rounded bg-dashboard-surface/90 px-2 py-1 text-[0.65rem] font-medium text-dashboard-navy">
                         <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
                         {photo.status === "preparing" ? "Preparing" : "Uploading"}
                       </span>
@@ -961,11 +1027,13 @@ export function AddClothingPage() {
                   </button>
                 ) : null}
               </div>
-              {photos.filter((photo) => photo.errorKind === "read").map((photo) => (
-                <p key={photo.id} className="text-xs text-dashboard-danger" role="alert">
-                  {photo.error}
-                </p>
-              ))}
+              {photos
+                .filter((photo) => photo.errorKind === "read")
+                .map((photo) => (
+                  <p key={photo.id} className="text-xs text-dashboard-danger" role="alert">
+                    {photo.error}
+                  </p>
+                ))}
               {photos.some((photo) => photo.errorKind === "upload") ? (
                 <p className="text-xs text-dashboard-danger">
                   One or more photos could not be uploaded. Retry the form submission to try again.
@@ -999,7 +1067,10 @@ export function AddClothingPage() {
                         <Button
                           variant="ghost"
                           disabled={
-                            categoryLoading || !isLoaded || !isSignedIn || activeCategories.length === 0
+                            categoryLoading ||
+                            !isLoaded ||
+                            !isSignedIn ||
+                            activeCategories.length === 0
                           }
                           className="w-full justify-between border border-dashboard-border bg-dashboard-surface pr-5 text-dashboard-navy hover:bg-dashboard-active"
                         >
@@ -1009,7 +1080,10 @@ export function AddClothingPage() {
                               : categoryLoadError
                                 ? "Could not load categories"
                                 : "No active categories")}
-                          <ChevronDown className="h-4 w-4 text-dashboard-muted" aria-hidden="true" />
+                          <ChevronDown
+                            className="h-4 w-4 text-dashboard-muted"
+                            aria-hidden="true"
+                          />
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="start" className="min-w-52">
@@ -1117,11 +1191,17 @@ export function AddClothingPage() {
               <div>
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                   <label className="text-sm font-medium text-dashboard-navy">Sizing mode</label>
-                  <div className="flex overflow-hidden rounded-lg border border-dashboard-border bg-dashboard-surface" role="group" aria-label="Sizing mode">
-                    {([
-                      ["free_size", "One flexible-fit variant"],
-                      ["sized", "Multiple labeled sizes"],
-                    ] as const).map(([mode, label]) => (
+                  <div
+                    className="flex overflow-hidden rounded-lg border border-dashboard-border bg-dashboard-surface"
+                    role="group"
+                    aria-label="Sizing mode"
+                  >
+                    {(
+                      [
+                        ["free_size", "One flexible-fit variant"],
+                        ["sized", "Multiple labeled sizes"],
+                      ] as const
+                    ).map(([mode, label]) => (
                       <button
                         key={mode}
                         type="button"
@@ -1146,10 +1226,12 @@ export function AddClothingPage() {
                 </div>
                 <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                   <label className="text-sm font-medium text-dashboard-navy">
-                    {sizingMode === "free_size" ? "Variant" : "Available Sizes"} <span className="text-dashboard-danger">*</span>
+                    {sizingMode === "free_size" ? "Variant" : "Available Sizes"}{" "}
+                    <span className="text-dashboard-danger">*</span>
                   </label>
                   <span className="text-xs text-dashboard-muted">
-                    {totalPieces} selected · {totalPieces} Total {totalPieces === 1 ? "Piece" : "Pieces"}
+                    {totalPieces} selected · {totalPieces} Total{" "}
+                    {totalPieces === 1 ? "Piece" : "Pieces"}
                   </span>
                 </div>
                 {sizingMode === "sized" ? (
@@ -1169,7 +1251,9 @@ export function AddClothingPage() {
                               : "border-dashboard-border bg-dashboard-surface text-dashboard-muted hover:bg-dashboard-active hover:text-dashboard-navy"
                           )}
                         >
-                          {selected ? <Check className="mr-1 inline h-3.5 w-3.5" aria-hidden="true" /> : null}
+                          {selected ? (
+                            <Check className="mr-1 inline h-3.5 w-3.5" aria-hidden="true" />
+                          ) : null}
                           {size}
                         </button>
                       );
@@ -1177,7 +1261,8 @@ export function AddClothingPage() {
                   </div>
                 ) : (
                   <p className="rounded-lg border border-dashboard-border bg-dashboard-surface px-3 py-2 text-sm text-dashboard-muted">
-                    One variant may fit a range of wearer sizes; this does not indicate how many physical pieces you own.
+                    One variant may fit a range of wearer sizes; this does not indicate how many
+                    physical pieces you own.
                   </p>
                 )}
 
@@ -1191,16 +1276,17 @@ export function AddClothingPage() {
                         setFitRanges((current) => ({ ...current, FREE_SIZE: event.target.value }));
                         markDirty();
                       }}
-                      onBlur={() => setFitRanges((current) => ({
-                        ...current,
-                        FREE_SIZE: normalizeVariantFitRange(current.FREE_SIZE),
-                      }))}
+                      onBlur={() =>
+                        setFitRanges((current) => ({
+                          ...current,
+                          FREE_SIZE: normalizeVariantFitRange(current.FREE_SIZE),
+                        }))
+                      }
                       placeholder="e.g. Small–XL"
                       className="max-w-md"
                     />
                   </Field>
                 ) : null}
-
               </div>
 
               {measurementTargets.length > 0 ? (
@@ -1214,11 +1300,7 @@ export function AddClothingPage() {
                     </div>
                     <div className="flex flex-wrap gap-2">
                       {!guideLoading && !defaultGuide ? (
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          onClick={openGuideSetup}
-                        >
+                        <Button variant="secondary" size="sm" onClick={openGuideSetup}>
                           <Plus className="h-4 w-4" aria-hidden="true" />
                           Add Default Size Guide
                         </Button>
@@ -1246,7 +1328,7 @@ export function AddClothingPage() {
                             <p className="text-sm font-semibold text-dashboard-navy">
                               {guideLoading
                                 ? "Loading default measurement guide…"
-                                : defaultGuide?.name ?? "No default measurement guide"}
+                                : (defaultGuide?.name ?? "No default measurement guide")}
                             </p>
                             <p className="mt-1 text-xs text-dashboard-muted">
                               {guideLoadError
@@ -1291,13 +1373,24 @@ export function AddClothingPage() {
                   <div className="divide-y divide-dashboard-border">
                     {measurementTargets.map(({ key, label }) => {
                       const mode = measurementModes[key];
-                      const modeLabel = mode === "default_guide" ? "Default guide" : mode === "custom" ? "Custom" : "None";
+                      const modeLabel =
+                        mode === "default_guide"
+                          ? "Default guide"
+                          : mode === "custom"
+                            ? "Custom"
+                            : "None";
                       const modeSelector = (
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" className="w-full justify-between border border-dashboard-border bg-dashboard-surface text-dashboard-navy hover:bg-dashboard-active">
+                            <Button
+                              variant="ghost"
+                              className="w-full justify-between border border-dashboard-border bg-dashboard-surface text-dashboard-navy hover:bg-dashboard-active"
+                            >
                               {modeLabel}
-                              <ChevronDown className="h-4 w-4 text-dashboard-muted" aria-hidden="true" />
+                              <ChevronDown
+                                className="h-4 w-4 text-dashboard-muted"
+                                aria-hidden="true"
+                              />
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="start" className="w-48">
@@ -1307,8 +1400,12 @@ export function AddClothingPage() {
                             >
                               Default guide
                             </DropdownMenuItem>
-                            <DropdownMenuItem onSelect={() => setMeasurementMode(key, "custom")}>Custom measurements</DropdownMenuItem>
-                            <DropdownMenuItem onSelect={() => setMeasurementMode(key, "none")}>No measurements</DropdownMenuItem>
+                            <DropdownMenuItem onSelect={() => setMeasurementMode(key, "custom")}>
+                              Custom measurements
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onSelect={() => setMeasurementMode(key, "none")}>
+                              No measurements
+                            </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
                       );
@@ -1338,21 +1435,45 @@ export function AddClothingPage() {
                         </div>
                       );
                       return (
-                        <div key={key} className={`grid gap-3 px-4 py-4 lg:grid-cols-[6rem_11rem_minmax(0,1fr)] ${mode === "custom" ? "lg:items-start" : "lg:items-center"}`}>
+                        <div
+                          key={key}
+                          className={`grid gap-3 px-4 py-4 lg:grid-cols-[6rem_11rem_minmax(0,1fr)] ${mode === "custom" ? "lg:items-start" : "lg:items-center"}`}
+                        >
                           {mode === "custom" ? (
                             <div className="col-span-full grid gap-3 lg:grid-cols-[6rem_11rem_repeat(3,minmax(0,1fr))] lg:items-start">
-                              <span className="col-span-full text-xs font-medium text-dashboard-muted lg:col-span-2">Custom measurements for {label}</span>
+                              <span className="col-span-full text-xs font-medium text-dashboard-muted lg:col-span-2">
+                                Custom measurements for {label}
+                              </span>
                               {MEASUREMENT_FIELDS.map((field) => (
-                                <div key={`${field}-label`} className={field === "length" ? "flex items-start justify-between gap-2" : undefined}>
-                                  <label className="hidden text-xs font-medium capitalize text-dashboard-muted lg:block" htmlFor={`${key}-${field}-measurement`}>{field}</label>
+                                <div
+                                  key={`${field}-label`}
+                                  className={
+                                    field === "length"
+                                      ? "flex items-start justify-between gap-2"
+                                      : undefined
+                                  }
+                                >
+                                  <label
+                                    className="hidden text-xs font-medium capitalize text-dashboard-muted lg:block"
+                                    htmlFor={`${key}-${field}-measurement`}
+                                  >
+                                    {field}
+                                  </label>
                                   {field === "length" ? unitSelector : null}
                                 </div>
                               ))}
-                              <span className="text-sm font-semibold text-dashboard-navy">{label}</span>
+                              <span className="text-sm font-semibold text-dashboard-navy">
+                                {label}
+                              </span>
                               {modeSelector}
                               {MEASUREMENT_FIELDS.map((field) => (
                                 <div key={field}>
-                                  <label className="mb-1.5 block text-xs font-medium capitalize text-dashboard-muted lg:hidden" htmlFor={`${key}-${field}-measurement`}>{field}</label>
+                                  <label
+                                    className="mb-1.5 block text-xs font-medium capitalize text-dashboard-muted lg:hidden"
+                                    htmlFor={`${key}-${field}-measurement`}
+                                  >
+                                    {field}
+                                  </label>
                                   <div className="relative">
                                     <Input
                                       id={`${key}-${field}-measurement`}
@@ -1360,12 +1481,20 @@ export function AddClothingPage() {
                                       inputMode="text"
                                       value={measurements[key][field]}
                                       maxLength={120}
-                                      onChange={(event) => updateMeasurement(key, field, event.target.value)}
+                                      onChange={(event) =>
+                                        updateMeasurement(key, field, event.target.value)
+                                      }
                                       placeholder={`e.g. 36 or ${field === "bust" ? "Flexible fit" : "Fits Small–XL"}`}
-                                      className={measurementDraftKinds[key][field] === "exact" ? "pr-9" : undefined}
+                                      className={
+                                        measurementDraftKinds[key][field] === "exact"
+                                          ? "pr-9"
+                                          : undefined
+                                      }
                                     />
                                     {measurementDraftKinds[key][field] === "exact" ? (
-                                      <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[0.65rem] uppercase text-dashboard-muted">{measurementUnit}</span>
+                                      <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[0.65rem] uppercase text-dashboard-muted">
+                                        {measurementUnit}
+                                      </span>
                                     ) : null}
                                   </div>
                                 </div>
@@ -1373,7 +1502,9 @@ export function AddClothingPage() {
                             </div>
                           ) : (
                             <>
-                              <span className="text-sm font-semibold text-dashboard-navy">{label}</span>
+                              <span className="text-sm font-semibold text-dashboard-navy">
+                                {label}
+                              </span>
                               {modeSelector}
                               {mode === "default_guide" ? (
                                 <p className="text-xs text-dashboard-muted">
@@ -1382,7 +1513,10 @@ export function AddClothingPage() {
                                     : "No default guide is configured. Choose Custom or None before submitting."}
                                 </p>
                               ) : (
-                                <p className="text-xs text-dashboard-muted">No measurement information will be shown for {label.toLowerCase()}.</p>
+                                <p className="text-xs text-dashboard-muted">
+                                  No measurement information will be shown for {label.toLowerCase()}
+                                  .
+                                </p>
                               )}
                             </>
                           )}
@@ -1452,9 +1586,13 @@ export function AddClothingPage() {
                         }}
                         className="pr-14"
                       />
-                      <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-dashboard-muted">days</span>
+                      <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-dashboard-muted">
+                        days
+                      </span>
                     </div>
-                    <p className="mt-1.5 text-xs text-dashboard-muted">Pickup day counts as Day 1. A 3-day rental is pickup, event, return.</p>
+                    <p className="mt-1.5 text-xs text-dashboard-muted">
+                      Pickup day counts as Day 1. A 3-day rental is pickup, event, return.
+                    </p>
                   </Field>
                   <MoneyField
                     label="Extra Day Price"
@@ -1514,14 +1652,19 @@ export function AddClothingPage() {
                     <CalendarClock className="h-4 w-4" aria-hidden="true" />
                   </span>
                   <span>
-                    <span className="block text-sm font-semibold text-dashboard-navy">Rental Timing</span>
+                    <span className="block text-sm font-semibold text-dashboard-navy">
+                      Rental Timing
+                    </span>
                     <span className="mt-0.5 block text-xs text-dashboard-muted">
                       {formatDayCount(recoveryDays)} recovery after return
                     </span>
                   </span>
                 </span>
                 <ChevronDown
-                  className={cn("h-4 w-4 text-dashboard-muted transition-transform", timingOpen && "rotate-180")}
+                  className={cn(
+                    "h-4 w-4 text-dashboard-muted transition-transform",
+                    timingOpen && "rotate-180"
+                  )}
                   aria-hidden="true"
                 />
               </button>
@@ -1539,14 +1682,18 @@ export function AddClothingPage() {
                         }}
                         className="pr-12"
                       />
-                      <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-dashboard-muted">days</span>
+                      <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-dashboard-muted">
+                        days
+                      </span>
                     </div>
                     <p className="mt-1.5 text-xs text-dashboard-muted">
-                      Days reserved for cleaning or inspection before the clothing can be rented again.
+                      Days reserved for cleaning or inspection before the clothing can be rented
+                      again.
                     </p>
                   </Field>
                   <p className="mt-3 text-xs text-dashboard-muted">
-                    Recovery starts after return and keeps the clothing unavailable for cleaning, inspection, or preparation for the next rental.
+                    Recovery starts after return and keeps the clothing unavailable for cleaning,
+                    inspection, or preparation for the next rental.
                   </p>
                 </CardContent>
               ) : null}
@@ -1561,8 +1708,12 @@ export function AddClothingPage() {
                     <PackagePlus className="h-5 w-5" aria-hidden="true" />
                   </span>
                   <div>
-                    <h2 className="text-base font-semibold text-dashboard-navy">What Drezivo will create</h2>
-                    <p className="mt-0.5 text-xs text-dashboard-muted">Based on the sizing mode selected above.</p>
+                    <h2 className="text-base font-semibold text-dashboard-navy">
+                      What Drezivo will create
+                    </h2>
+                    <p className="mt-0.5 text-xs text-dashboard-muted">
+                      Based on the sizing mode selected above.
+                    </p>
                   </div>
                 </div>
 
@@ -1578,14 +1729,16 @@ export function AddClothingPage() {
                       {sizingMode === "free_size" ? "Variant" : "Selected sizes"}
                     </p>
                     <div className="mt-2 flex flex-wrap gap-2">
-                      {(sizingMode === "free_size" ? ["Flexible fit"] : selectedSizes).map((size) => (
-                        <span
-                          key={size}
-                          className="rounded-lg border border-dashboard-border bg-dashboard-active px-2.5 py-1.5 text-xs font-semibold text-dashboard-accent"
-                        >
-                          {size}
-                        </span>
-                      ))}
+                      {(sizingMode === "free_size" ? ["Flexible fit"] : selectedSizes).map(
+                        (size) => (
+                          <span
+                            key={size}
+                            className="rounded-lg border border-dashboard-border bg-dashboard-active px-2.5 py-1.5 text-xs font-semibold text-dashboard-accent"
+                          >
+                            {size}
+                          </span>
+                        )
+                      )}
                     </div>
                   </div>
                 ) : (
@@ -1599,7 +1752,10 @@ export function AddClothingPage() {
             <Card className="gap-0 py-0">
               <CardContent className="space-y-3 p-5">
                 {formError ? (
-                  <div className="flex gap-2 rounded-lg border border-dashboard-danger/30 bg-dashboard-danger/10 px-3 py-2.5 text-xs text-dashboard-danger" role="alert">
+                  <div
+                    className="flex gap-2 rounded-lg border border-dashboard-danger/30 bg-dashboard-danger/10 px-3 py-2.5 text-xs text-dashboard-danger"
+                    role="alert"
+                  >
                     <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
                     <div>
                       <p>{formError}</p>
@@ -1615,7 +1771,10 @@ export function AddClothingPage() {
                   </div>
                 ) : null}
                 {submitStage ? (
-                  <div className="flex items-center justify-center gap-2 text-xs text-dashboard-muted" aria-live="polite">
+                  <div
+                    className="flex items-center justify-center gap-2 text-xs text-dashboard-muted"
+                    aria-live="polite"
+                  >
                     <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
                     {submitStage}
                   </div>
@@ -1623,18 +1782,37 @@ export function AddClothingPage() {
                 <Button
                   variant="ghost"
                   className="w-full border border-dashboard-border bg-dashboard-surface text-dashboard-navy hover:bg-dashboard-active"
-                  disabled={isSubmitting || isPhotoSubmissionBlocked || (sizingMode === "sized" && selectedSizes.length === 0) || !categoryId}
+                  disabled={
+                    isSubmitting ||
+                    isPhotoSubmissionBlocked ||
+                    (sizingMode === "sized" && selectedSizes.length === 0) ||
+                    !categoryId
+                  }
                   onClick={() => void submitClothing(false)}
                 >
-                  {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Save className="h-4 w-4" aria-hidden="true" />}
+                  {isSubmitting ? (
+                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                  ) : (
+                    <Save className="h-4 w-4" aria-hidden="true" />
+                  )}
                   Save as Draft
                 </Button>
                 <Button
                   className="w-full"
-                  disabled={isSubmitting || isPhotoSubmissionBlocked || (sizingMode === "sized" && selectedSizes.length === 0) || !categoryId || photos.length === 0}
+                  disabled={
+                    isSubmitting ||
+                    isPhotoSubmissionBlocked ||
+                    (sizingMode === "sized" && selectedSizes.length === 0) ||
+                    !categoryId ||
+                    photos.length === 0
+                  }
                   onClick={() => void submitClothing(true)}
                 >
-                  {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Plus className="h-4 w-4" aria-hidden="true" />}
+                  {isSubmitting ? (
+                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                  ) : (
+                    <Plus className="h-4 w-4" aria-hidden="true" />
+                  )}
                   Add Clothing
                 </Button>
                 <p className="text-center text-[0.68rem] leading-5 text-dashboard-muted">
@@ -1649,9 +1827,13 @@ export function AddClothingPage() {
 
             <div className="rounded-xl border border-dashboard-border bg-dashboard-surface p-4 text-xs text-dashboard-muted">
               <div className="flex gap-2">
-                <Info className="mt-0.5 h-4 w-4 shrink-0 text-dashboard-accent" aria-hidden="true" />
+                <Info
+                  className="mt-0.5 h-4 w-4 shrink-0 text-dashboard-accent"
+                  aria-hidden="true"
+                />
                 <p>
-                  Availability is managed separately in the Clothing Availability calendar. New clothing does not need an availability calendar during creation.
+                  Availability is managed separately in the Clothing Availability calendar. New
+                  clothing does not need an availability calendar during creation.
                 </p>
               </div>
             </div>
@@ -1667,7 +1849,8 @@ export function AddClothingPage() {
           <div className="p-5 pr-14">
             <SheetTitle>Add Default Size Guide</SheetTitle>
             <SheetDescription className="mt-1">
-              Save one reusable measurement guide for this workspace. Future clothing can reference the same guide without uploading it again.
+              Save one reusable measurement guide for this workspace. Future clothing can reference
+              the same guide without uploading it again.
             </SheetDescription>
           </div>
 
@@ -1735,7 +1918,10 @@ export function AddClothingPage() {
             ) : null}
 
             {guideSaveStage ? (
-              <div className="flex items-center gap-2 text-xs text-dashboard-muted" aria-live="polite">
+              <div
+                className="flex items-center gap-2 text-xs text-dashboard-muted"
+                aria-live="polite"
+              >
                 <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
                 {guideSaveStage}
               </div>
@@ -1756,7 +1942,8 @@ export function AddClothingPage() {
               Save Default Size Guide
             </Button>
             <p className="text-center text-xs leading-5 text-dashboard-muted">
-              The uploaded image is finalized by Drezivo before it can be saved as the reusable default.
+              The uploaded image is finalized by Drezivo before it can be saved as the reusable
+              default.
             </p>
           </div>
         </SheetContent>
@@ -1771,6 +1958,14 @@ export function AddClothingPage() {
         onOpenChange={setMeasurementGuideOpen}
       />
 
+      <ImageLightbox
+        images={photoLightboxImages}
+        open={photoLightboxOpen}
+        onOpenChange={setPhotoLightboxOpen}
+        activeIndex={activePhotoIndex}
+        onActiveIndexChange={(index) => setActivePhotoId(photoLightboxImages[index]?.id ?? null)}
+      />
+
       <Dialog.Root open={discardDialogOpen} onOpenChange={handleDiscardDialogOpenChange}>
         <Dialog.Portal>
           <Dialog.Overlay className="fixed inset-0 z-50 bg-dashboard-canvas/80 backdrop-blur-sm" />
@@ -1779,7 +1974,8 @@ export function AddClothingPage() {
               Discard unsaved changes?
             </Dialog.Title>
             <Dialog.Description className="mt-3 text-sm leading-6 text-dashboard-muted">
-              You have changes that haven&apos;t been saved as a draft. Leaving this page will discard them.
+              You have changes that haven&apos;t been saved as a draft. Leaving this page will
+              discard them.
             </Dialog.Description>
             <div className="mt-7 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
               <Button variant="secondary" onClick={stayOnPage}>
@@ -1816,7 +2012,8 @@ function MeasurementGuideSheet({
         <div className="p-5 pr-14">
           <SheetTitle>{guide.name}</SheetTitle>
           <SheetDescription className="mt-1">
-            This reusable guide can be referenced by many clothing variants without uploading another image.
+            This reusable guide can be referenced by many clothing variants without uploading
+            another image.
           </SheetDescription>
         </div>
 
@@ -1845,8 +2042,12 @@ function MeasurementGuideSheet({
                   <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl dashboard-tone-blue">
                     <Ruler className="h-6 w-6" aria-hidden="true" />
                   </span>
-                  <p className="mt-3 text-sm font-semibold text-dashboard-navy">Preview unavailable</p>
-                  <p className="mt-1 text-xs text-dashboard-muted">The saved size guide image could not be loaded.</p>
+                  <p className="mt-3 text-sm font-semibold text-dashboard-navy">
+                    Preview unavailable
+                  </p>
+                  <p className="mt-1 text-xs text-dashboard-muted">
+                    The saved size guide image could not be loaded.
+                  </p>
                 </div>
               )}
             </div>
@@ -1855,7 +2056,8 @@ function MeasurementGuideSheet({
 
         <div className="space-y-3 p-5">
           <div className="rounded-xl border border-dashboard-border bg-dashboard-active/40 p-4 text-xs leading-5 text-dashboard-muted">
-            Clothing using this guide keeps a stable reference to this exact guide. Replacing the business default later does not silently change existing clothing.
+            Clothing using this guide keeps a stable reference to this exact guide. Replacing the
+            business default later does not silently change existing clothing.
           </div>
           <Link
             href="/settings/measurement-guide"
@@ -1867,7 +2069,11 @@ function MeasurementGuideSheet({
         </div>
       </SheetContent>
       <ImageLightbox
-        images={guide.previewUrl ? [{ src: guide.previewUrl, alt: `${guide.name} full-size preview` }] : []}
+        images={
+          guide.previewUrl
+            ? [{ src: guide.previewUrl, alt: `${guide.name} full-size preview` }]
+            : []
+        }
         open={lightboxOpen}
         onOpenChange={setLightboxOpen}
         activeIndex={0}
@@ -1941,7 +2147,9 @@ function MoneyField({
   return (
     <Field label={label} required={required}>
       <div className="relative">
-        <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm font-medium text-dashboard-muted">₱</span>
+        <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm font-medium text-dashboard-muted">
+          ₱
+        </span>
         <Input
           aria-label={label}
           inputMode="decimal"
@@ -1950,7 +2158,9 @@ function MoneyField({
           className={cn("pl-8", suffix && "pr-14")}
         />
         {suffix ? (
-          <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-dashboard-muted">{suffix}</span>
+          <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-dashboard-muted">
+            {suffix}
+          </span>
         ) : null}
       </div>
     </Field>
@@ -1997,10 +2207,10 @@ function PricingModeButton({
 }
 
 function newIntentKey(prefix: string): string {
-  const random = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}_${Math.random().toString(36).slice(2)}`;
+  const random =
+    globalThis.crypto?.randomUUID?.() ?? `${Date.now()}_${Math.random().toString(36).slice(2)}`;
   return `${prefix}_${random.replaceAll("-", "_")}`;
 }
-
 
 function pesosToMinor(value: string, label: string): string {
   const normalized = value.trim();
@@ -2050,7 +2260,14 @@ function SummaryRow({
   return (
     <div className="flex items-center justify-between gap-4 px-4 py-3">
       <span className="text-xs text-dashboard-muted">{label}</span>
-      <span className={cn("text-sm font-semibold", emphasize ? "text-dashboard-accent" : "text-dashboard-navy")}>{value}</span>
+      <span
+        className={cn(
+          "text-sm font-semibold",
+          emphasize ? "text-dashboard-accent" : "text-dashboard-navy"
+        )}
+      >
+        {value}
+      </span>
     </div>
   );
 }

@@ -562,14 +562,18 @@ function AvailabilityControls({
             />
           </label>
 
-          <div className="grid min-w-0 grid-cols-[2.25rem_2.25rem_minmax(0,1fr)] items-center gap-2 sm:flex sm:flex-wrap">
+          <div
+            role="group"
+            aria-label="Availability date navigation"
+            className="grid min-w-0 grid-cols-[2.25rem_minmax(0,1fr)_2.25rem] items-center gap-2 sm:flex sm:flex-wrap"
+          >
             <Button
               variant="ghost"
               size="icon"
               aria-label="Previous date range"
               disabled={dateNavigationDisabled}
               onClick={onPreviousRange}
-              className="row-start-2 col-start-1 h-9 w-9 border border-dashboard-border bg-dashboard-surface text-dashboard-navy hover:bg-dashboard-active"
+              className="col-start-1 row-start-1 h-9 w-9 border border-dashboard-border bg-dashboard-surface text-dashboard-navy hover:bg-dashboard-active"
             >
               <ChevronLeft className="h-4 w-4" aria-hidden="true" />
             </Button>
@@ -582,7 +586,7 @@ function AvailabilityControls({
               disabled={dateNavigationDisabled}
               placeholder={dateRangeLabel}
               truncateValue={false}
-              className="col-span-3 row-start-1 min-w-0 w-full sm:col-span-1 sm:row-auto sm:w-[19rem]"
+              className="col-start-2 row-start-1 min-w-0 w-full sm:col-auto sm:row-auto sm:w-[19rem]"
             />
             <Button
               variant="ghost"
@@ -590,26 +594,20 @@ function AvailabilityControls({
               aria-label="Next date range"
               disabled={dateNavigationDisabled}
               onClick={onNextRange}
-              className="row-start-2 col-start-2 h-9 w-9 border border-dashboard-border bg-dashboard-surface text-dashboard-navy hover:bg-dashboard-active"
+              className="col-start-3 row-start-1 h-9 w-9 border border-dashboard-border bg-dashboard-surface text-dashboard-navy hover:bg-dashboard-active"
             >
               <ChevronRight className="h-4 w-4" aria-hidden="true" />
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              aria-label="Return to the current date range"
-              disabled={dateNavigationDisabled}
-              onClick={onResetRange}
-              className="row-start-2 col-start-3 justify-self-end h-9 border border-dashboard-border bg-dashboard-surface px-2.5 text-xs text-dashboard-muted hover:bg-dashboard-active hover:text-dashboard-navy sm:row-auto sm:col-auto sm:justify-self-auto sm:px-3 sm:text-sm"
-            >
-              Today
             </Button>
           </div>
         </div>
 
         <div className="flex flex-col gap-2.5 xl:flex-row xl:items-end xl:justify-between">
           <div className="min-w-0 flex-1">
-            <div className="-mx-0.5 flex items-center gap-2 overflow-x-auto px-0.5 pb-1 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 sm:pb-0">
+            <div
+              role="group"
+              aria-label="Availability filters"
+              className="flex flex-wrap items-center gap-2"
+            >
               <FilterMenu label={categoryFilter} options={categories} onSelect={onCategoryChange} />
               <FilterMenu label={sizeFilter} options={sizes} onSelect={onSizeChange} />
               <FilterMenu
@@ -617,6 +615,16 @@ function AvailabilityControls({
                 options={STATUS_OPTIONS}
                 onSelect={onStatusChange}
               />
+              <Button
+                type="button"
+                variant="ghost"
+                aria-label="Return to the current date range"
+                disabled={dateNavigationDisabled}
+                onClick={onResetRange}
+                className="h-9 shrink-0 border border-dashboard-border bg-dashboard-surface px-2.5 text-xs text-dashboard-muted hover:bg-dashboard-active hover:text-dashboard-navy sm:h-10 sm:px-3 sm:text-sm"
+              >
+                Today
+              </Button>
             </div>
             <p className="mt-1.5 text-[0.68rem] leading-4 text-dashboard-muted sm:text-xs">
               {hasCatalogueFilter

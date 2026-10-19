@@ -27,8 +27,10 @@ results. Migration `0084_session_audit_uniqueness_repair.sql` preserves every le
 marks one canonical row for each operator/session/action, and limits the uniqueness index to those
 canonical and future rows. The runtime role cannot set the canonical marker. This lets existing
 duplicates remain as evidence while new sequential and concurrent retries collapse to one event.
-The migration may run before 0085 in production or through its explicit, fail-closed history-gap
-exception after 0085 in preview; both paths converge on the same index definition.
+The migration runs in filename order before 0085 in production. Environments with exactly this one
+history gap can target it explicitly; staging and preview, which already recorded 0085 and 0086,
+use the broader 0087 operator-migration closure to apply it together with the pgcrypto search-path
+fix. All paths converge on the same index definition.
 
 Partial unique indexes enforce one future event per operator/session/action and one global command
 result per operator/intent hash. Tenant commands gain a nullable request fingerprint so a changed

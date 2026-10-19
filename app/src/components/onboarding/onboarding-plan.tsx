@@ -25,6 +25,7 @@ import { RestartOnboardingDialog } from "@/components/onboarding/restart-onboard
 import { createDrezivoApiClient, DrezivoApiError } from "@/lib/drezivo-api";
 import { publicTermsUrl } from "@/lib/public-terms";
 import { useSubmitGuard } from "@/lib/use-submit-guard";
+import { rememberResolvedWorkspace } from "@/lib/workspace-handoff";
 import { WORKSPACE_HOME } from "@/lib/workspace-routes";
 
 type LoadState =
@@ -313,6 +314,8 @@ export function OnboardingPlan() {
             { status: 409 }
           );
         }
+        // The dashboard gate can skip re-resolving the workspace that was just activated.
+        rememberResolvedWorkspace(workspace.clerk_org_id);
       });
       // Full navigation: Clerk refreshes the router after switching organizations (see post-auth-resolver).
       window.location.replace(WORKSPACE_HOME);
