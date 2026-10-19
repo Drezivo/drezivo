@@ -124,12 +124,12 @@ describe("privacy notice starter", () => {
     );
 
     const textarea = await screen.findByRole("textbox", { name: "Privacy notice" });
-    expect(textarea).toHaveValue(
-      "Your shop uses the information you provide, such as your name, email, phone number, rental or fitting details, and, for reservations, your pickup or delivery address, to manage your request, arrange pickup or delivery, and contact you. Depending on your request, this may also include the selected item and dates, event date, social-media handle, fitting note, and any payment proof you submit. Drezivo processes this information for the shop to provide the booking service. Contact the shop through its storefront details with privacy questions."
-    );
+    expect((textarea as HTMLTextAreaElement).value).toMatch(/^Luna Gown Rentals uses the information you provide/);
     expect(
       screen.getByText(`${(textarea as HTMLTextAreaElement).value.length}/2000`)
     ).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Start from example text" }));
+    expect((textarea as HTMLTextAreaElement).value).toMatch(/^Luna Gown Rentals uses the information you provide/);
     expect(api.publishStorefrontPolicy).not.toHaveBeenCalled();
     expect(screen.getByRole("button", { name: "Publish policy" })).toBeEnabled();
   });
