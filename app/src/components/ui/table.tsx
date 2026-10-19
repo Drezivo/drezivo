@@ -1,15 +1,70 @@
-import { forwardRef } from "react";
+"use client";
+
+import { forwardRef, useCallback, useEffect, useRef } from "react";
 
 import { cn } from "@/lib/utils";
+
+/**
+ * Phones (below 640px, globals.css) show every table as stacked rows: the first cell is the row's
+ * title and each other cell reads "Header  value". The labels come from the table's own column
+ * headers, copied onto each body cell as data-label, so no page has to repeat them. A cell that
+ * already has a data-label keeps it; a cell under an empty header (actions) gets none.
+ */
+function labelCellsFromHeaders(table: HTMLTableElement) {
+  const headerRow = table.tHead?.rows[table.tHead.rows.length - 1];
+  if (!headerRow) return;
+  const labels: string[] = [];
+  for (const cell of Array.from(headerRow.cells)) {
+    const text = cell.textContent?.trim() ?? "";
+    for (let span = 0; span < Math.max(1, cell.colSpan); span += 1) labels.push(text);
+  }
+  for (const body of Array.from(table.tBodies)) {
+    for (const row of Array.from(body.rows)) {
+      let column = 0;
+      for (const cell of Array.from(row.cells)) {
+        const label = labels[column];
+        if (cell.dataset["autoLabel"] !== undefined || !cell.hasAttribute("data-label")) {
+          if (label && cell.colSpan === 1) {
+            cell.setAttribute("data-label", label);
+            cell.dataset["autoLabel"] = "";
+          } else if (cell.dataset["autoLabel"] !== undefined) {
+            cell.removeAttribute("data-label");
+          }
+        }
+        column += Math.max(1, cell.colSpan);
+      }
+    }
+  }
+}
 
 const Table = forwardRef<HTMLTableElement, React.HTMLAttributes<HTMLTableElement>>(function Table(
   { className, ...props },
   ref
 ) {
+  const tableRef = useRef<HTMLTableElement | null>(null);
+  const setRef = useCallback(
+    (node: HTMLTableElement | null) => {
+      tableRef.current = node;
+      if (typeof ref === "function") ref(node);
+      else if (ref) ref.current = node;
+    },
+    [ref]
+  );
+
+  // Rows arrive and change with data, so labels are re-applied whenever the table's rows change.
+  useEffect(() => {
+    const table = tableRef.current;
+    if (!table) return;
+    labelCellsFromHeaders(table);
+    const observer = new MutationObserver(() => labelCellsFromHeaders(table));
+    observer.observe(table, { childList: true, subtree: true });
+    return () => observer.disconnect();
+  }, []);
+
   return (
-    <div className="relative w-full overflow-x-auto">
+    <div data-slot="table-wrap" className="relative w-full overflow-x-auto">
       <table
-        ref={ref}
+        ref={setRef}
         data-slot="table"
         className={cn("w-full caption-bottom text-sm", className)}
         {...props}

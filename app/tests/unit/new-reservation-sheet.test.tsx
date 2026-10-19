@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { useState } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   clothingDetail,
@@ -41,9 +41,15 @@ const api = vi.hoisted(() => ({
   getCustomerDetail: vi.fn(),
 }));
 
+const fileUpload = vi.hoisted(() => ({
+  uploadAuthorizedFile: vi.fn(),
+}));
+
 vi.mock("@clerk/nextjs", () => ({
   useAuth: clerk.useAuth,
 }));
+
+vi.mock("@/lib/authorized-file-upload", () => fileUpload);
 
 vi.mock("@/components/reservations/reservation-availability-calendar", () => ({
   ReservationAvailabilityCalendar: ({
@@ -449,8 +455,18 @@ function setPickerTime(label: string, hour: string, minute: string, period: "AM"
 const fillDatesAndSelectProduct = selectProductVariantAndRentalPeriod;
 
 describe("NewReservationSheet", () => {
+  afterEach(() => vi.useRealTimers());
+
   beforeEach(() => {
     vi.clearAllMocks();
+    let receiptPreviewCounter = 0;
+    Object.assign(URL, {
+      createObjectURL: vi.fn(() => `blob:receipt-${++receiptPreviewCounter}`),
+      revokeObjectURL: vi.fn(),
+    });
+    fileUpload.uploadAuthorizedFile.mockResolvedValue(undefined);
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-01T00:00:00.000Z"));
     clerk.getToken.mockResolvedValue("clerk-token");
     clerk.useAuth.mockReturnValue({ getToken: clerk.getToken });
     api.getStaffReservationIntakeOptions.mockResolvedValue({
@@ -1283,6 +1299,26 @@ describe("NewReservationSheet", () => {
     expect(screen.queryByText(/This is a 3-day rental\./)).not.toBeInTheDocument();
   });
 
+  it("holds a Pickup booking without times from opening on the pickup date to closing on the return date", async () => {
+    renderSheet();
+    fireEvent.click(await screen.findByRole("button", { name: /Emerald Gown/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /M · Emerald/i }));
+    fireEvent.click(await screen.findByRole("button", { name: "Select Oct 10 to Oct 13" }));
+
+    expect(screen.getByText(/Pickup time \(optional\)/)).toBeVisible();
+    expect(await screen.findByText(/Pickup and return times are not set\. Availability still blocks the garment from 8:00\sAM on .+ until 8:00\sPM on/i)).toBeVisible();
+    // Branch hours 08:00–20:00 in Asia/Manila (UTC+8).
+    await waitFor(() =>
+      expect(api.getStaffReservationAvailabilityCheck).toHaveBeenCalledWith(
+        expect.objectContaining({ pickup_at: "2026-10-10T00:00:00.000Z", due_at: "2026-10-13T12:00:00.000Z" })
+      )
+    );
+
+    fireEvent.change(screen.getByRole("combobox", { name: "Fulfillment" }), { target: { value: "delivery" } });
+    expect(screen.queryByText(/No exact time needed/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Pickup time \(optional\)/)).not.toBeInTheDocument();
+  });
+
   it("bounds event date to the selected rental dates and clears it when the range changes", async () => {
     renderSheet();
     await fillDatesAndSelectProduct();
@@ -1315,6 +1351,8 @@ describe("NewReservationSheet", () => {
           },
           event_date: "2026-10-11",
           fulfillment_method: "pickup",
+          pickup_time_unspecified: false,
+          return_time_unspecified: false,
           payment_method_id: ids.paymentMethod,
         },
         expect.any(String)
@@ -1328,12 +1366,6 @@ describe("NewReservationSheet", () => {
     fireEvent.change(screen.getByLabelText("Full name"), { target: { value: "Walk-in Customer" } });
     fireEvent.change(screen.getByLabelText("Phone"), { target: { value: "09171234567" } });
     fireEvent.change(screen.getByLabelText("Address"), { target: { value: "123 Test Street" } });
-    fireEvent.click(
-      screen.getByRole("checkbox", {
-        name: /Customer has reviewed and accepted the business rental terms/i,
-      })
-    );
-    fireEvent.click(screen.getAllByRole("checkbox", { name: "Cash received" })[0]!);
     const confirm = screen.getByRole("button", { name: "Confirm Reservation" });
     expect(confirm).toBeDisabled();
     fireEvent.change(screen.getByLabelText("Email"), { target: { value: "invalid-email" } });
@@ -1370,7 +1402,48 @@ describe("NewReservationSheet", () => {
     expect(props.onReservationChanged).toHaveBeenCalledWith(ids.reservation);
   });
 
-  it("requires cash confirmation before recording an unpaid past cash booking as Completed", async () => {
+  it("marks only the blank Pickup milestone as time-unspecified", async () => {
+    api.getStaffReservationAvailabilityCheck.mockImplementation(
+      ({
+        variant_id,
+        pickup_at,
+        due_at,
+      }: {
+        variant_id: string;
+        pickup_at: string;
+        due_at: string;
+      }) =>
+        Promise.resolve({
+          data: {
+            ...exactResponse,
+            variant_id,
+            requested_interval: { start: pickup_at, end: due_at },
+          },
+          requestId: "req-partial-time-availability",
+        })
+    );
+    renderSheet();
+    fireEvent.click(await screen.findByRole("button", { name: /Emerald Gown/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /M · Emerald/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Select Oct 10 to Oct 13" }));
+    setPickerTime("Pickup time", "10", "00", "AM");
+    await waitFor(() => expect(api.getStaffReservationAvailabilityCheck).toHaveBeenCalled());
+    await waitFor(() => expect(screen.getByRole("button", { name: "Reserve" })).toBeEnabled());
+
+    fireEvent.click(screen.getByRole("button", { name: "Reserve" }));
+    await waitFor(() =>
+      expect(api.createStaffReservation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          fulfillment_method: "pickup",
+          pickup_time_unspecified: false,
+          return_time_unspecified: true,
+        }),
+        expect.any(String)
+      )
+    );
+  });
+
+  it("requires the full cash tendered before recording an unpaid past cash booking as Completed", async () => {
     api.createStaffReservation.mockResolvedValueOnce({
       data: staffReservationCreateResponse.parse({
         ...heldResponse,
@@ -1405,12 +1478,11 @@ describe("NewReservationSheet", () => {
     fireEvent.change(screen.getByLabelText("Phone"), { target: { value: "09171234567" } });
     fireEvent.change(screen.getByLabelText("Email"), { target: { value: "past@example.test" } });
     fireEvent.change(screen.getByLabelText("Address"), { target: { value: "123 Past Street" } });
-    fireEvent.click(screen.getByRole("checkbox", { name: /Customer has reviewed and accepted/i }));
+    // No separate tick boxes: confirming records the terms and the cash tendered.
+    expect(screen.queryByRole("checkbox", { name: /accepted|Cash received/i })).not.toBeInTheDocument();
+    expect(screen.getByText(/Enter the cash tendered before recording this past booking/i)).toBeVisible();
+    fireEvent.change(screen.getByLabelText("Cash tendered"), { target: { value: "" } });
     expect(screen.getByRole("button", { name: "Record as Completed" })).toBeDisabled();
-    expect(
-      screen.getByText(/Confirm that the cash was received and enter the amount tendered/i)
-    ).toBeVisible();
-    fireEvent.click(screen.getAllByRole("checkbox", { name: "Cash received" })[0]!);
     fireEvent.change(screen.getByLabelText("Cash tendered"), { target: { value: "1000" } });
     expect(screen.getByRole("button", { name: "Record as Completed" })).toBeDisabled();
     fireEvent.change(screen.getByLabelText("Cash tendered"), { target: { value: "2000" } });
@@ -1470,7 +1542,7 @@ describe("NewReservationSheet", () => {
     );
   });
 
-  it("lets staff submit manual QR for verification without uploading a receipt", async () => {
+  it("lets staff replace or remove an optional receipt locally, then submit without one", async () => {
     api.getStaffReservationIntakeOptions.mockResolvedValue({
       data: {
         payment_methods: [
@@ -1497,8 +1569,46 @@ describe("NewReservationSheet", () => {
     await screen.findByText("RSV-WALKIN-001");
 
     expect(
-      screen.getByText(/Payment evidence is optional for staff-created reservations/i)
+      screen.getByText(/Receipts are optional/i)
     ).toBeVisible();
+    const receiptInput = document.querySelector<HTMLInputElement>('input[type="file"]');
+    expect(receiptInput).not.toBeNull();
+    fireEvent.change(receiptInput!, {
+      target: { files: [new File(["first receipt"], "first.png", { type: "image/png" })] },
+    });
+    expect(screen.getByText("Replace receipt")).toBeVisible();
+    expect(screen.getByRole("img", { name: "first.png" })).toHaveAttribute(
+      "src",
+      "blob:receipt-1"
+    );
+    fireEvent.change(document.querySelector<HTMLInputElement>('input[type="file"]')!, {
+      target: {
+        files: [new File(["replacement receipt"], "replacement.png", { type: "image/png" })],
+      },
+    });
+    expect(screen.queryByRole("img", { name: "first.png" })).not.toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "replacement.png" })).toHaveAttribute(
+      "src",
+      "blob:receipt-2"
+    );
+    await waitFor(() => expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:receipt-1"));
+    fireEvent.click(screen.getByRole("button", { name: "Remove receipt" }));
+    expect(screen.queryByText("replacement.png")).not.toBeInTheDocument();
+    expect(screen.getByText("Choose receipt")).toBeVisible();
+    await waitFor(() => expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:receipt-2"));
+
+    fireEvent.change(document.querySelector<HTMLInputElement>('input[type="file"]')!, {
+      target: { files: [new File(["pdf receipt"], "receipt.pdf", { type: "application/pdf" })] },
+    });
+    expect(screen.getByText("receipt.pdf")).toBeVisible();
+    expect(screen.queryByRole("img", { name: "receipt.pdf" })).not.toBeInTheDocument();
+    expect(URL.createObjectURL).toHaveBeenCalledTimes(2);
+    fireEvent.click(screen.getByRole("button", { name: "Remove receipt" }));
+    expect(screen.getByText("Choose receipt")).toBeVisible();
+    expect(api.authorizeUpload).not.toHaveBeenCalled();
+    expect(fileUpload.uploadAuthorizedFile).not.toHaveBeenCalled();
+    expect(api.finalizeUpload).not.toHaveBeenCalled();
+    expect(api.attachReservationPaymentReceipt).not.toHaveBeenCalled();
     fireEvent.change(screen.getByLabelText("Full name"), {
       target: { value: "Walk-in GCash Customer" },
     });
@@ -1507,11 +1617,6 @@ describe("NewReservationSheet", () => {
       target: { value: "walkin-gcash@example.test" },
     });
     fireEvent.change(screen.getByLabelText("Address"), { target: { value: "123 Test Street" } });
-    fireEvent.click(
-      screen.getByRole("checkbox", {
-        name: /Customer has reviewed and accepted the business rental terms/i,
-      })
-    );
 
     const submit = screen.getByRole("button", { name: "Submit for Verification" });
     expect(submit).toBeEnabled();
@@ -1538,9 +1643,114 @@ describe("NewReservationSheet", () => {
     );
     expect(api.authorizeUpload).not.toHaveBeenCalled();
     expect(api.attachReservationPaymentReceipt).not.toHaveBeenCalled();
+    expect(fileUpload.uploadAuthorizedFile).not.toHaveBeenCalled();
     expect(
       await screen.findByText("Reservation saved. Payment verification required.")
     ).toBeVisible();
+  });
+
+  it("uploads a staged receipt on submit, keeps it after failures, and avoids duplicate uploads", async () => {
+    const fileId = "00000000-0000-4000-8000-000000000120";
+    api.getStaffReservationIntakeOptions.mockResolvedValue({
+      data: {
+        payment_methods: [
+          { id: ids.paymentMethod, name: "Cash", rail: "cash" },
+          { id: ids.gcashPaymentMethod, name: "GCash", rail: "manual_qr" },
+        ],
+        customers: [],
+      },
+      requestId: "req-intake",
+    });
+    api.createStaffReservation.mockResolvedValueOnce({
+      data: gcashHeldResponse,
+      requestId: "req-hold-gcash",
+    });
+    api.completeStaffReservation.mockRejectedValueOnce(new Error("Temporary completion failure"));
+    api.completeStaffReservation.mockResolvedValue({
+      data: gcashPendingResponse,
+      requestId: "req-complete-gcash",
+    });
+    api.authorizeUpload.mockResolvedValue({
+      data: {
+        file_id: fileId,
+        upload_url: "https://uploads.example.test/receipt",
+        upload_method: "PUT",
+        required_headers: {},
+        expires_at: "2026-10-01T00:10:00.000Z",
+      },
+      requestId: "req-authorize-receipt",
+    });
+    api.finalizeUpload.mockResolvedValue({
+      data: { file: { file_id: fileId } },
+      requestId: "req-finalize-receipt",
+    });
+    api.attachReservationPaymentReceipt.mockResolvedValue({
+      data: {},
+      requestId: "req-attach-receipt",
+    });
+    fileUpload.uploadAuthorizedFile.mockRejectedValueOnce(new Error("Upload interrupted"));
+
+    renderSheet();
+    await fillDatesAndSelectProduct();
+    fireEvent.click(screen.getByRole("button", { name: /GCash/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Reserve" }));
+    await screen.findByText("RSV-WALKIN-001");
+    fireEvent.change(screen.getByLabelText("Full name"), {
+      target: { value: "Walk-in GCash Customer" },
+    });
+    fireEvent.change(screen.getByLabelText("Phone"), { target: { value: "09171234567" } });
+    fireEvent.change(screen.getByLabelText("Email"), {
+      target: { value: "walkin-gcash@example.test" },
+    });
+    fireEvent.change(screen.getByLabelText("Address"), { target: { value: "123 Test Street" } });
+
+    const receiptInput = document.querySelector<HTMLInputElement>('input[type="file"]');
+    expect(receiptInput).not.toBeNull();
+    fireEvent.change(receiptInput!, {
+      target: { files: [new File(["receipt"], "receipt.png", { type: "image/png" })] },
+    });
+    expect(screen.getByText("receipt.png")).toBeVisible();
+    expect(api.authorizeUpload).not.toHaveBeenCalled();
+    expect(fileUpload.uploadAuthorizedFile).not.toHaveBeenCalled();
+
+    const submit = screen.getByRole("button", { name: "Submit for Verification" });
+    fireEvent.click(submit);
+    await waitFor(() =>
+      expect(fileUpload.uploadAuthorizedFile).toHaveBeenCalledTimes(1)
+    );
+    expect(screen.getByRole("alert")).toHaveTextContent("Could not complete this reservation action");
+    expect(api.completeStaffReservation).not.toHaveBeenCalled();
+    expect(screen.getByText("receipt.png")).toBeVisible();
+
+    fireEvent.click(submit);
+    await waitFor(() => expect(api.completeStaffReservation).toHaveBeenCalledTimes(1));
+    expect(screen.getByText(/Receipt attached: receipt\.png/)).toBeVisible();
+    expect(api.finalizeUpload).toHaveBeenCalledTimes(1);
+    expect(api.attachReservationPaymentReceipt).toHaveBeenCalledTimes(1);
+    expect(api.completeStaffReservation).toHaveBeenCalledTimes(1);
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:receipt-1");
+    expect(api.authorizeUpload.mock.invocationCallOrder[1]).toBeLessThan(
+      fileUpload.uploadAuthorizedFile.mock.invocationCallOrder[1] ?? Infinity
+    );
+    expect(fileUpload.uploadAuthorizedFile.mock.invocationCallOrder[1]).toBeLessThan(
+      api.finalizeUpload.mock.invocationCallOrder[0] ?? Infinity
+    );
+    expect(api.finalizeUpload.mock.invocationCallOrder[0]).toBeLessThan(
+      api.attachReservationPaymentReceipt.mock.invocationCallOrder[0] ?? Infinity
+    );
+    expect(api.attachReservationPaymentReceipt.mock.invocationCallOrder[0]).toBeLessThan(
+      api.completeStaffReservation.mock.invocationCallOrder[0] ?? Infinity
+    );
+
+    fireEvent.click(submit);
+    await waitFor(() => expect(api.completeStaffReservation).toHaveBeenCalledTimes(2));
+    expect(screen.getByText("Reservation saved. Payment verification required.")).toBeVisible();
+    expect(api.authorizeUpload).toHaveBeenCalledTimes(2);
+    expect(fileUpload.uploadAuthorizedFile).toHaveBeenCalledTimes(2);
+    expect(api.finalizeUpload).toHaveBeenCalledTimes(1);
+    expect(api.attachReservationPaymentReceipt).toHaveBeenCalledTimes(1);
+    expect(api.completeStaffReservation).toHaveBeenCalledTimes(2);
+    expect(screen.getByText(/Receipt attached: receipt\.png/)).toBeVisible();
   });
 
   it("stops before creating a reservation when no single physical piece is free for the exact times", async () => {
@@ -1648,12 +1858,6 @@ describe("NewReservationSheet", () => {
     fireEvent.change(screen.getByLabelText("Address"), { target: { value: "2 Updated Street" } });
     fireEvent.change(screen.getByLabelText("Social media (optional)"), { target: { value: "" } });
     fireEvent.change(screen.getByLabelText("Customer notes (optional)"), { target: { value: "" } });
-    fireEvent.click(
-      screen.getByRole("checkbox", {
-        name: /Customer has reviewed and accepted the business rental terms/i,
-      })
-    );
-    fireEvent.click(screen.getAllByRole("checkbox", { name: "Cash received" })[0]!);
     fireEvent.click(screen.getByRole("button", { name: "Confirm Reservation" }));
 
     await waitFor(() =>
@@ -1726,12 +1930,6 @@ describe("NewReservationSheet", () => {
       expect(screen.getByLabelText("Email")).toHaveValue("addressless@example.test")
     );
     expect(screen.getByLabelText("Address")).toBeVisible();
-    fireEvent.click(
-      screen.getByRole("checkbox", {
-        name: /Customer has reviewed and accepted the business rental terms/i,
-      })
-    );
-    fireEvent.click(screen.getAllByRole("checkbox", { name: "Cash received" })[0]!);
     expect(complete).toBeDisabled();
 
     fireEvent.change(screen.getByLabelText("Address"), {
@@ -1850,10 +2048,6 @@ describe("NewReservationSheet", () => {
 
       expect(await screen.findByLabelText(missing)).toBeVisible();
       expect(screen.getByLabelText("Address")).toBeVisible();
-      fireEvent.click(
-        screen.getByRole("checkbox", { name: /Customer has reviewed and accepted/i })
-      );
-      fireEvent.click(screen.getAllByRole("checkbox", { name: "Cash received" })[0]!);
       const confirm = screen.getByRole("button", { name: "Confirm Reservation" });
       expect(confirm).toBeDisabled();
       fireEvent.change(screen.getByLabelText(missing), { target: { value: fill } });
@@ -1921,12 +2115,6 @@ describe("NewReservationSheet", () => {
     fireEvent.change(screen.getByLabelText("Phone"), { target: { value: "09171234567" } });
     fireEvent.change(screen.getByLabelText("Email"), { target: { value: "walkin@example.test" } });
     fireEvent.change(screen.getByLabelText("Address"), { target: { value: "123 Test Street" } });
-    fireEvent.click(
-      screen.getByRole("checkbox", {
-        name: /Customer has reviewed and accepted the business rental terms/i,
-      })
-    );
-    fireEvent.click(screen.getAllByRole("checkbox", { name: "Cash received" })[0]!);
     fireEvent.click(screen.getByRole("button", { name: "Confirm Reservation" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(/hold (has )?expired/i);

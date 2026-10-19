@@ -56,6 +56,7 @@ describe('BE-8 operational integration contracts', () => {
             item_names: ['Evening Gown'],
             category_ids: [ids.category],
             status: 'confirmed',
+            time_unspecified: true,
           },
           {
             id: `fitting:${ids.fitting}`,

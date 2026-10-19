@@ -1,7 +1,7 @@
 import Image from 'next/image';
 import Link from 'next/link';
-import '@fontsource-variable/bodoni-moda/opsz.css';
-import '@fontsource-variable/bodoni-moda/opsz-italic.css';
+import '@fontsource-variable/playfair-display/wght.css';
+import '@fontsource-variable/playfair-display/wght-italic.css';
 import '@fontsource-variable/jost/wght.css';
 
 import { NotFoundBackButton } from '@/components/ui/not-found-back-button';

@@ -52,6 +52,7 @@ describe("operational Calendar presentation mapping", () => {
           "00000000-0000-4000-8000-000000000104" as OperationalCalendarEvent["category_ids"][number],
         ],
         status: "confirmed",
+        time_unspecified: true,
       },
     ];
 
@@ -64,6 +65,7 @@ describe("operational Calendar presentation mapping", () => {
       source: "reservation",
       sourceId: reservationId,
       eventType: "pickup",
+      timeUnspecified: true,
       type: "Pickup",
       status: "confirmed",
       dateKey: "2026-09-28",

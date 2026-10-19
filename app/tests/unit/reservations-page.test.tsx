@@ -192,6 +192,11 @@ const secondReservation = reservationListItem.parse({
   },
 });
 
+const realReservationRowName = "Open reservation details for Real Customer and Real Emerald Gown";
+const holdReservationRowName =
+  "Open reservation details for Customer not added yet and Real Emerald Gown";
+const secondReservationRowName = "Open reservation details for Second Customer and Second Gown";
+
 const secondDetailRecord = reservationDetail.parse({
   ...reservationDetailRecord,
   id: secondReservation.id,
@@ -334,14 +339,30 @@ describe("ReservationsPage", () => {
 
     render(<ReservationsPage />);
 
-    expect(await screen.findByText("RSV-REAL-001")).toBeVisible();
-    expect(screen.getByText("Real Customer")).toBeVisible();
-    expect(screen.getAllByText("Real Emerald Gown")).toHaveLength(2);
-    expect(screen.getAllByRole("img", { name: "Real Emerald Gown cover image" })).toHaveLength(2);
+    const realRow = await screen.findByRole("button", { name: realReservationRowName });
+    const table = screen.getByRole("table", { name: "Reservations" });
+    expect(within(table).getAllByRole("columnheader").map((header) => header.textContent?.trim())).toEqual([
+      "Rental Item",
+      "Customer",
+      "Pickup",
+      "Return",
+      "Fulfillment",
+      "Payment",
+      "Status",
+    ]);
+    expect(realRow).toBeVisible();
+    expect(within(realRow).queryByText("RSV-REAL-001")).not.toBeInTheDocument();
+    expect(within(realRow).queryByText(/Created /)).not.toBeInTheDocument();
+    expect(screen.queryByText("RSV-REAL-001")).not.toBeInTheDocument();
+    expect(within(table).getByText("Rental Item")).toBeVisible();
+    expect(within(realRow).getByText("Real Customer")).toBeVisible();
+    expect(within(realRow).getByText("Real Emerald Gown")).toBeVisible();
+    const itemImage = within(realRow).getByRole("img", { name: "Real Emerald Gown cover image" });
+    expect(itemImage.parentElement).toHaveClass("h-14", "w-14");
     expect(screen.queryByText("RC")).not.toBeInTheDocument();
-    expect(screen.getByText("Paid")).toBeVisible();
-    expect(screen.getByText("Verified")).toBeVisible();
-    expect(screen.getByText("Customer not added yet")).toBeVisible();
+    expect(within(realRow).getByText("Paid")).toBeVisible();
+    expect(within(realRow).getByText("Verified")).toBeVisible();
+    expect(screen.getByRole("button", { name: holdReservationRowName })).toBeVisible();
     expect(screen.queryByText("Maria Santos")).not.toBeInTheDocument();
     expect(screen.queryByText("Total Reservations")).not.toBeInTheDocument();
 
@@ -351,13 +372,13 @@ describe("ReservationsPage", () => {
     });
   });
 
-  it("sends search and status filters to the reservations endpoint instead of filtering rows in memory", async () => {
+  it("sends reference and status filters to the reservations endpoint instead of filtering rows in memory", async () => {
     render(<ReservationsPage />);
-    await screen.findByText("RSV-REAL-001");
+    await screen.findByRole("button", { name: realReservationRowName });
     const requestCountBeforeSearch = api.getReservations.mock.calls.length;
 
     fireEvent.change(screen.getByLabelText("Search reservations"), {
-      target: { value: "Emerald" },
+      target: { value: "RSV-REAL-001" },
     });
     expect(api.getReservations).toHaveBeenCalledTimes(requestCountBeforeSearch);
     fireEvent.click(screen.getByRole("tab", { name: "Confirmed" }));
@@ -366,11 +387,11 @@ describe("ReservationsPage", () => {
       expect(api.getReservations).toHaveBeenLastCalledWith({
         limit: 10,
         sort: "created_desc",
-        search: "Emerald",
+        search: "RSV-REAL-001",
         status: "confirmed",
       })
     );
-    expect(navigation.replace).toHaveBeenCalledWith(expect.stringContaining("q=Emerald"), {
+    expect(navigation.replace).toHaveBeenCalledWith(expect.stringContaining("q=RSV-REAL-001"), {
       scroll: false,
     });
   });
@@ -382,10 +403,10 @@ describe("ReservationsPage", () => {
       .mockResolvedValue(page([reservation]));
 
     render(<ReservationsPage />);
-    await screen.findByText("RSV-REAL-001");
+    await screen.findByRole("button", { name: realReservationRowName });
 
     fireEvent.click(screen.getByRole("button", { name: "Next reservations page" }));
-    await screen.findByText("RSV-HOLD-002");
+    await screen.findByRole("button", { name: holdReservationRowName });
     const requestsBeforeSearch = api.getReservations.mock.calls.length;
 
     fireEvent.change(screen.getByLabelText("Search reservations"), {
@@ -412,7 +433,7 @@ describe("ReservationsPage", () => {
 
     render(<ReservationsPage />);
 
-    expect(await screen.findByText("RSV-REAL-001")).toBeVisible();
+    expect(await screen.findByRole("button", { name: realReservationRowName })).toBeVisible();
     expect(screen.getByRole("tab", { name: label })).toHaveAttribute("aria-selected", "true");
     await waitFor(() =>
       expect(api.getReservations).toHaveBeenCalledWith(expect.objectContaining({ status }))
@@ -421,7 +442,7 @@ describe("ReservationsPage", () => {
 
   it("treats the first pickup-date selection as an exact day and the second as an inclusive range", async () => {
     render(<ReservationsPage />);
-    await screen.findByText("RSV-REAL-001");
+    await screen.findByRole("button", { name: realReservationRowName });
     await waitFor(() => expect(api.getActorContext).toHaveBeenCalledTimes(1));
 
     fireEvent.click(screen.getByRole("button", { name: "Pickup date" }));
@@ -436,6 +457,10 @@ describe("ReservationsPage", () => {
       })
     );
 
+    const pickupDateButton = screen.getByRole("button", { name: "Pickup date" });
+    if (pickupDateButton.getAttribute("aria-expanded") === "false") {
+      fireEvent.click(pickupDateButton);
+    }
     fireEvent.click(screen.getByRole("button", { name: /October 12/i }));
 
     await waitFor(() =>
@@ -465,7 +490,7 @@ describe("ReservationsPage", () => {
       .mockResolvedValue(page([reservation], "cursor-page-2"));
 
     render(<ReservationsPage />);
-    await screen.findByText("RSV-REAL-001");
+    await screen.findByRole("button", { name: realReservationRowName });
 
     expect(screen.getByRole("button", { name: "Previous reservations page" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Next reservations page" })).toHaveClass("text-dashboard-navy");
@@ -479,7 +504,7 @@ describe("ReservationsPage", () => {
         sort: "created_desc",
       })
     );
-    expect(await screen.findByText("RSV-HOLD-002")).toBeVisible();
+    expect(await screen.findByRole("button", { name: holdReservationRowName })).toBeVisible();
     expect(screen.getByText("Page 2 · 1 reservation loaded")).toBeVisible();
     expect(screen.getByRole("button", { name: "Previous reservations page" })).toHaveClass("text-dashboard-navy");
     expect(screen.getByRole("button", { name: "Next reservations page" })).toBeDisabled();
@@ -495,14 +520,15 @@ describe("ReservationsPage", () => {
 
   it("opens the authoritative details sheet from a row and renders snapshots, payment, and permission-derived actions", async () => {
     render(<ReservationsPage />);
-    await screen.findByText("RSV-REAL-001");
+    await screen.findByRole("button", { name: realReservationRowName });
 
-    fireEvent.click(screen.getByRole("button", { name: "Open reservation RSV-REAL-001" }));
+    fireEvent.click(screen.getByRole("button", { name: realReservationRowName }));
 
     await waitFor(() => expect(api.getReservationDetail).toHaveBeenCalledWith(reservation.id));
     expect(await screen.findByRole("heading", { name: "Reservation RSV-REAL-001" })).toBeVisible();
     expect(screen.getAllByText("Real Customer").length).toBeGreaterThanOrEqual(1);
     const detailSheet = screen.getByRole("dialog");
+    expect(within(detailSheet).getByText(/Created .*Version 3/)).toBeVisible();
     expect(within(detailSheet).getByText("Customer")).toBeVisible();
     expect(within(detailSheet).getByText("Name")).toBeVisible();
     expect(within(detailSheet).queryByText("RC")).not.toBeInTheDocument();
@@ -513,7 +539,7 @@ describe("ReservationsPage", () => {
     expect(garmentImage.parentElement).toHaveClass("h-20", "w-20");
     expect(screen.getByText("123 Test Street")).toBeVisible();
     expect(screen.getByText("Medium · Emerald")).toBeVisible();
-    expect(screen.getByText("EMERALD-M")).toBeVisible();
+    expect(within(detailSheet).queryByText("SKU")).not.toBeInTheDocument();
     expect(screen.getByText("Bust Cm: 91")).toBeVisible();
     expect(screen.getByText("Waist Cm: 72")).toBeVisible();
     expect(screen.getAllByText("Verified").length).toBeGreaterThanOrEqual(1);
@@ -529,8 +555,8 @@ describe("ReservationsPage", () => {
     });
 
     render(<ReservationsPage />);
-    await screen.findByText("RSV-REAL-001");
-    fireEvent.click(screen.getByRole("button", { name: "Open reservation RSV-REAL-001" }));
+    await screen.findByRole("button", { name: realReservationRowName });
+    fireEvent.click(screen.getByRole("button", { name: realReservationRowName }));
     await screen.findByRole("heading", { name: "Reservation RSV-REAL-001" });
 
     fireEvent.click(screen.getByRole("button", { name: "Pick Up" }));
@@ -549,8 +575,8 @@ describe("ReservationsPage", () => {
     });
 
     render(<ReservationsPage />);
-    await screen.findByText("RSV-REAL-001");
-    fireEvent.keyDown(screen.getByRole("button", { name: "Open reservation RSV-REAL-001" }), {
+    await screen.findByRole("button", { name: realReservationRowName });
+    fireEvent.keyDown(screen.getByRole("button", { name: realReservationRowName }), {
       key: "Enter",
     });
 
@@ -578,15 +604,15 @@ describe("ReservationsPage", () => {
       .mockResolvedValueOnce({ data: secondDetailRecord, requestId: "req-second-detail" });
 
     render(<ReservationsPage />);
-    await screen.findByText("RSV-REAL-001");
+    await screen.findByRole("button", { name: realReservationRowName });
 
-    fireEvent.click(screen.getByRole("button", { name: "Open reservation RSV-REAL-001" }));
+    fireEvent.click(screen.getByRole("button", { name: realReservationRowName }));
     expect(await screen.findByRole("heading", { name: "Loading reservation…" })).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Close" }));
     await waitFor(() =>
-      expect(screen.getByRole("button", { name: "Open reservation RSV-REAL-002" })).toBeVisible()
+      expect(screen.getByRole("button", { name: secondReservationRowName })).toBeVisible()
     );
-    fireEvent.click(screen.getByRole("button", { name: "Open reservation RSV-REAL-002" }));
+    fireEvent.click(screen.getByRole("button", { name: secondReservationRowName }));
 
     expect(await screen.findByRole("heading", { name: "Reservation RSV-REAL-002" })).toBeVisible();
     expect(screen.getAllByText("Second Customer").length).toBeGreaterThanOrEqual(1);
@@ -612,13 +638,13 @@ describe("ReservationsPage", () => {
       .mockResolvedValueOnce({ data: reservationDetailRecord, requestId: "req-detail-retry" });
 
     render(<ReservationsPage />);
-    await screen.findByText("RSV-REAL-001");
-    fireEvent.click(screen.getByRole("button", { name: "Open reservation RSV-REAL-001" }));
+    const reservationRow = await screen.findByRole("button", { name: realReservationRowName });
+    fireEvent.click(reservationRow);
 
     expect(await screen.findByText("Could not load reservation")).toBeVisible();
     expect(screen.getByText("Reservation detail is temporarily unavailable.")).toBeVisible();
     expect(screen.getByText("Request ID: req-detail-failed")).toBeVisible();
-    expect(screen.getByText("RSV-REAL-001")).toBeVisible();
+    expect(reservationRow).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
     expect(await screen.findByRole("heading", { name: "Reservation RSV-REAL-001" })).toBeVisible();
@@ -655,6 +681,6 @@ describe("ReservationsPage", () => {
     expect(screen.getByText("Request ID: req-failed")).toBeVisible();
 
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
-    expect(await screen.findByText("RSV-REAL-001")).toBeVisible();
+    expect(await screen.findByRole("button", { name: realReservationRowName })).toBeVisible();
   });
 });

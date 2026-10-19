@@ -70,9 +70,9 @@
   --color-google-yellow: #fbbc05;
   --color-google-red: #ea4335;
 
-  /* next/font sets --font-jost and --font-bodoni on <html> (src/app/layout.tsx). */
+  /* next/font sets --font-jost and --font-playfair on <html> (src/app/layout.tsx). */
   --font-sans: var(--font-jost), "Futura", ui-sans-serif, system-ui, -apple-system, sans-serif;
-  --font-display: var(--font-bodoni), "Bodoni 72", "Didot", Georgia, serif;
+  --font-display: var(--font-playfair), "Bodoni 72", "Didot", Georgia, serif;
 }
 
 html {
@@ -123,7 +123,6 @@ html {
   --ws-control: 2.75rem;
   --ws-gutter: 1rem;
   --ws-gap: 0.75rem;
-  --ws-scrollbar-thin: 0.375rem;
   --ws-radius-card: 1.125rem;
   --ws-header: 3.75rem;
   --ws-tabbar: 4.25rem;
@@ -696,6 +695,58 @@ html[data-dashboard-theme="dark"] .availability-state-unavailable {
   to { transform: translateY(100%); }
 }
 
+/* Phones: every sheet rises from the bottom like an iOS sheet, whatever side it uses on larger
+   screens. Full width, capped below the status area, rounded top, clear of the home indicator.
+   Opening and closing use iOS's own curve so the motion matches the platform. */
+@media (max-width: 639.98px) {
+  .dashboard-sheet-content[data-side]:not([data-phone-layout="side"]) {
+    inset: auto 0 0 0;
+    width: 100%;
+    max-width: none;
+    height: auto;
+    max-height: 92svh;
+    border-width: 1px 0 0;
+    border-radius: 1rem 1rem 0 0;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}
+
+/* Motion only for people who have not asked to reduce it (the reduced-motion rule below is less
+   specific, so these must not apply to them at all). */
+@media (max-width: 639.98px) and (prefers-reduced-motion: no-preference) {
+  /* Navigation drawers keep their side but move on the same iOS curve. */
+  .dashboard-sheet-content[data-phone-layout="side"][data-state="open"] {
+    animation-duration: 420ms;
+    animation-timing-function: cubic-bezier(0.32, 0.72, 0, 1);
+  }
+
+  .dashboard-sheet-content[data-phone-layout="side"][data-state="closed"] {
+    animation-duration: 300ms;
+    animation-timing-function: cubic-bezier(0.32, 0.72, 0, 1);
+  }
+
+  .dashboard-sheet-content[data-side]:not([data-phone-layout="side"])[data-state="open"] {
+    animation-name: dashboard-sheet-in-bottom;
+    animation-duration: 440ms;
+    animation-timing-function: cubic-bezier(0.32, 0.72, 0, 1);
+  }
+
+  .dashboard-sheet-content[data-side]:not([data-phone-layout="side"])[data-state="closed"] {
+    animation-name: dashboard-sheet-out-bottom;
+    animation-duration: 300ms;
+    animation-timing-function: cubic-bezier(0.32, 0.72, 0, 1);
+  }
+
+  .dashboard-sheet-overlay[data-state="open"] {
+    animation-duration: 440ms;
+    animation-timing-function: cubic-bezier(0.32, 0.72, 0, 1);
+  }
+
+  .dashboard-sheet-overlay[data-state="closed"] {
+    animation-duration: 300ms;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .dashboard-sheet-overlay,
   .dashboard-sheet-content {
@@ -716,34 +767,103 @@ body {
   color: var(--color-dashboard-navy);
 }
 
+/* Phones: no tables and no sideways scrolling. Below 640px every table (components/ui/table.tsx)
+   becomes stacked rows separated by hairlines: the first cell is the row's title, every other cell
+   reads "Header  value" on one line (labels copied from the column headers). Elements Tailwind
+   hides on phones (.hidden, e.g. "hidden md:table-cell") stay hidden; minimum widths are dropped so
+   nothing extends past the screen. Tablets and up keep real tables. */
+@media (max-width: 639.98px) {
+  [data-slot="table-wrap"] {
+    overflow: visible;
+  }
+
+  [data-slot="table"]:not(.hidden) {
+    display: block;
+    min-width: 0;
+  }
+
+  [data-slot="table"] > thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+
+  [data-slot="table"] > :is(tbody, tfoot) {
+    display: block;
+  }
+
+  [data-slot="table"] > :is(tbody, tfoot) > tr:not(.hidden) {
+    display: block;
+    padding: 0.75rem 0;
+    border-bottom: 1px solid var(--color-dashboard-border);
+  }
+
+  [data-slot="table"] > :is(tbody, tfoot) > tr > td:not(.hidden) {
+    display: flex;
+    min-width: 0;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.125rem 0;
+    border: 0;
+    text-align: right;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  [data-slot="table"] > :is(tbody, tfoot) > tr > td[data-label]:not(:first-child)::before {
+    content: attr(data-label);
+    flex: none;
+    max-width: 45%;
+    color: var(--color-dashboard-muted);
+    font-size: 0.8125rem;
+    text-align: left;
+  }
+
+  /* The first cell is the row's title, full width. */
+  [data-slot="table"] > :is(tbody, tfoot) > tr > td:first-child:not(.hidden) {
+    display: block;
+    padding-bottom: 0.375rem;
+    text-align: left;
+  }
+
+  /* Cells without a header (row actions) sit at the right; spanning cells (empty states) centre. */
+  [data-slot="table"] > :is(tbody, tfoot) > tr > td:not(:first-child):not([data-label]):not(.hidden) {
+    justify-content: flex-end;
+  }
+
+  [data-slot="table"] > :is(tbody, tfoot) > tr > td[colspan]:not([colspan="1"]):not(.hidden) {
+    display: block;
+    text-align: center;
+  }
+}
+
 /* Thin gold scrollbars, as on the landing page. */
 html {
   scrollbar-width: thin;
   scrollbar-color: color-mix(in srgb, var(--color-dashboard-accent) 55%, transparent) transparent;
 }
 
-.settings-nav-scrollbar {
-  scrollbar-width: thin;
-  scrollbar-color: color-mix(in srgb, var(--color-dashboard-accent) 55%, transparent) transparent;
-}
+/* Phones: page cards dissolve into the page. A bordered box inside a 16px gutter left too little room
+   for the content, so below 640px a card in the workspace <main> keeps only a hairline above it and
+   gives its full width to its content. Sheets and dialogs render in portals outside <main> and keep
+   their boxes; a card that must stay a tile (tappable KPI tiles, alerts) opts out with
+   data-mobile-card="keep". Tablets and up are unchanged. */
+@media (max-width: 639.98px) {
+  [data-ws-main] [data-slot="card"]:not([data-mobile-card="keep"]) {
+    overflow: visible;
+    border-width: 1px 0 0;
+    border-radius: 0;
+    background: transparent;
+  }
 
-.settings-nav-scrollbar::-webkit-scrollbar {
-  height: var(--ws-scrollbar-thin);
-}
-
-.settings-nav-scrollbar::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.settings-nav-scrollbar::-webkit-scrollbar-thumb {
-  border-radius: 9999px;
-  background-color: color-mix(in srgb, var(--color-dashboard-accent) 55%, transparent);
-}
-
-.settings-nav-scrollbar::-webkit-scrollbar-button {
-  width: 0;
-  height: 0;
-  display: none;
+  [data-ws-main] [data-slot="card"]:not([data-mobile-card="keep"])
+    > :is([data-slot="card-header"], [data-slot="card-content"], [data-slot="card-footer"]) {
+    padding-inline: 0;
+  }
 }
 
 * {

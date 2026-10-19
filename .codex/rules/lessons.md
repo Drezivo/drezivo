@@ -84,3 +84,5 @@
   keeps the previous page's scroll limit and clamps the target short.
 - In a phone swipe row, a scroll-scrubbed reveal on the off-screen card plays unseen. Use
   `gsap.matchMedia` and give phones a one-shot scene that brings the card into view.
+- When changing the targeted migration reconciliation step in `.github/workflows/ci.yml`, update
+  `.github/scripts/migration-action.test.mjs` and run `npm run test:backend-validation` locally.
