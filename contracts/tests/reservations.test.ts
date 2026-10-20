@@ -160,6 +160,47 @@ describe('reservation contracts', () => {
     ).toBe(false);
   });
 
+  it('allows independently unspecified times for staff pickup and rejects them for delivery', () => {
+    expect(
+      staffReservationCreateRequest.safeParse({
+        ...baseStaffCreate,
+        pickup_time_unspecified: true,
+        return_time_unspecified: false,
+      }).success,
+    ).toBe(true);
+    expect(
+      staffReservationCreateRequest.safeParse({
+        ...baseStaffCreate,
+        pickup_time_unspecified: false,
+        return_time_unspecified: true,
+      }).success,
+    ).toBe(true);
+    expect(
+      staffReservationCreateRequest.safeParse({
+        ...baseStaffCreate,
+        fulfillment_method: 'delivery',
+        pickup_time_unspecified: true,
+      }).success,
+    ).toBe(false);
+    expect(
+      guestReservationRequest.safeParse({
+        email: 'renter@example.test',
+        customer: {
+          full_name: 'Renter Name',
+          phone: null,
+          address: '123 Test Street',
+          social_handle: null,
+        },
+        variant_id: ids.variant,
+        requested_interval: interval,
+        event_date: null,
+        fulfillment_method: 'pickup',
+        payment_method_id: ids.paymentMethod,
+        pickup_time_unspecified: true,
+      }).success,
+    ).toBe(false);
+  });
+
   it('accepts up to ten new-booking garments and rejects ambiguous or oversized item lists', () => {
     const extraVariants = Array.from(
       { length: 9 },

@@ -68,6 +68,7 @@ export async function getOperationalCalendar(
         item_names: row.item_names,
         category_ids: row.category_ids,
         status: row.status,
+        ...(row.source === 'reservation' ? { time_unspecified: row.time_unspecified } : {}),
       })),
       truncated: page.truncated,
     });

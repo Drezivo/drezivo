@@ -263,7 +263,7 @@ jobs:
       - name: Install dependencies
         run: npm ci --include=dev
       - name: Report staging migration status
-        run: npm run db:migrate:status --workspace @drezivo/api -- --through 0080_file_image_variants_backfill.sql
+        run: npm run db:migrate:status --workspace @drezivo/api -- --through 0087_operator_functions_pgcrypto_path.sql
       - name: Reject a stale staging commit before applying
         if: needs.staging-migration-scope.outputs.apply == 'true'
         shell: bash
@@ -275,9 +275,9 @@ jobs:
             echo "::error::This migration run became stale before application."
             exit 1
           fi
-      - name: Apply staging image variants backfill
+      - name: Apply staging operator migration reconciliation
         if: needs.staging-migration-scope.outputs.apply == 'true'
-        run: npm run db:migrate --workspace @drezivo/api -- --through 0080_file_image_variants_backfill.sql
+        run: npm run db:migrate --workspace @drezivo/api -- --through 0087_operator_functions_pgcrypto_path.sql
       - name: Apply remaining staging migrations
         if: needs.staging-migration-scope.outputs.apply == 'true'
         run: npm run db:migrate --workspace @drezivo/api
@@ -322,7 +322,7 @@ jobs:
       - name: Install dependencies
         run: npm ci --include=dev
       - name: Report preview migration status
-        run: npm run db:migrate:status --workspace @drezivo/api -- --through 0080_file_image_variants_backfill.sql
+        run: npm run db:migrate:status --workspace @drezivo/api -- --through 0087_operator_functions_pgcrypto_path.sql
       - name: Reject a stale main commit before applying
         if: needs.migration-scope.outputs.apply == 'true'
         shell: bash
@@ -334,9 +334,9 @@ jobs:
             echo "::error::This migration run became stale before application."
             exit 1
           fi
-      - name: Apply preview image variants backfill
+      - name: Apply preview operator migration reconciliation
         if: needs.migration-scope.outputs.apply == 'true'
-        run: npm run db:migrate --workspace @drezivo/api -- --through 0080_file_image_variants_backfill.sql
+        run: npm run db:migrate --workspace @drezivo/api -- --through 0087_operator_functions_pgcrypto_path.sql
       - name: Apply remaining preview migrations
         if: needs.migration-scope.outputs.apply == 'true'
         run: npm run db:migrate --workspace @drezivo/api
@@ -387,7 +387,7 @@ jobs:
       - name: Install dependencies
         run: npm ci --include=dev
       - name: Report production migration status
-        run: npm run db:migrate:status --workspace @drezivo/api -- --through 0080_file_image_variants_backfill.sql
+        run: npm run db:migrate:status --workspace @drezivo/api -- --through 0087_operator_functions_pgcrypto_path.sql
       - name: Reject a stale main commit before applying
         shell: bash
         run: |
@@ -398,8 +398,8 @@ jobs:
             echo "::error::This migration run became stale before application."
             exit 1
           fi
-      - name: Apply production image variants backfill
-        run: npm run db:migrate --workspace @drezivo/api -- --through 0080_file_image_variants_backfill.sql
+      - name: Apply production operator migration reconciliation
+        run: npm run db:migrate --workspace @drezivo/api -- --through 0087_operator_functions_pgcrypto_path.sql
       - name: Apply remaining production migrations
         run: npm run db:migrate --workspace @drezivo/api
       - name: Verify production migration status

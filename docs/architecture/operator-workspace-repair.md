@@ -1,7 +1,7 @@
 # Operator workspace repair
 
-Local implementation adds migration `0086_operator_workspace_repair.sql` alongside the
-platform audit projection in migration 0085. No hosted environment has been migrated.
+Migration `0086_operator_workspace_repair.sql` adds scoped operator support alongside the
+platform audit projection in migration 0085.
 
 The business database owns scoped operator support through `operator_workspace`. Its fixed
 resource registry exposes redacted operational projections across 22 modules. Each call requires

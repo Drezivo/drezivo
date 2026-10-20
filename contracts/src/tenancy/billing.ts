@@ -149,6 +149,17 @@ export const billingOverview = z
       })
       .strict(),
     access: subscriptionAccess,
+    /**
+     * What the workspace uses against its plan limits, so the owner can see how close Free is to
+     * full. Optional only so this response stays readable by API builds released before it existed.
+     */
+    usage: z
+      .object({
+        active_garments: z.number().int().nonnegative(),
+        frontdesk_seats_used: z.number().int().nonnegative(),
+      })
+      .strict()
+      .optional(),
     can_pay: z.boolean(),
     /** Free owners can start a paid trial only while their lifetime trial remains unused. */
     can_start_trial: z.boolean(),

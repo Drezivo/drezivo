@@ -101,6 +101,55 @@ describe('CLT-072 draft clothing publish', async () => {
     expect(activeList.items.map((item) => item.product_id)).toContain(seeded.productId);
   });
 
+  it('publishes a draft with an already-active variant and reports zero newly activated variants', async () => {
+    const tenant = await createTestTenant({ clerkOrgId: 'org_clt072_existing_active_variant' });
+    const seeded = await seedDraft(tenant.id, 'user_clt072_existing_active_variant', {
+      withImage: true,
+      withAsset: true,
+    });
+    const context = commandContext(tenant.id, seeded.branchId, 'user_clt072_existing_active_variant');
+
+    await withTenantTransaction(tenant.id, context.principalId, async (client) => {
+      await client.query(
+        `UPDATE product_variant
+            SET status = 'active'
+          WHERE tenant_id = $1 AND id = $2`,
+        [tenant.id, seeded.variantId],
+      );
+    });
+
+    const result = await publishClothing({
+      ...context,
+      requestId: 'req-clt072-existing-active-variant',
+      idempotencyKey: 'clt072-zero-activated',
+      productId: seeded.productId,
+      request: { expected_updated_at: seeded.updatedAt },
+    });
+
+    expect(result.status).toBe(200);
+    expect(result.body).toMatchObject({
+      success: true,
+      data: {
+        product_id: seeded.productId,
+        status: 'active',
+        activated_variant_count: 0,
+      },
+    });
+
+    const state = await withTenantTransaction(tenant.id, context.principalId, async (client) => {
+      const product = await client.query<{ status: string }>(
+        'SELECT status FROM product WHERE tenant_id = $1 AND id = $2',
+        [tenant.id, seeded.productId],
+      );
+      const variant = await client.query<{ status: string }>(
+        'SELECT status FROM product_variant WHERE tenant_id = $1 AND id = $2',
+        [tenant.id, seeded.variantId],
+      );
+      return { product: product.rows[0]?.status, variant: variant.rows[0]?.status };
+    });
+    expect(state).toEqual({ product: 'active', variant: 'active' });
+  });
+
   it('keeps a draft unchanged when it has no accepted catalogue image', async () => {
     const tenant = await createTestTenant({ clerkOrgId: 'org_clt072_no_image' });
     const seeded = await seedDraft(tenant.id, 'user_clt072_no_image', { withImage: false, withAsset: true });

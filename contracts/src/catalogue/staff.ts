@@ -462,7 +462,7 @@ export type PublishClothingRequest = z.infer<typeof publishClothingRequest>;
 export const publishClothingResponse = z.object({
   product_id: productId,
   status: z.literal('active'),
-  activated_variant_count: z.number().int().positive(),
+  activated_variant_count: z.number().int().nonnegative(),
   updated_at: isoInstant,
 });
 export type PublishClothingResponse = z.infer<typeof publishClothingResponse>;

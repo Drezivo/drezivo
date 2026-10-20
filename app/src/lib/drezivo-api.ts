@@ -320,6 +320,8 @@ import {
   type ClothingPhotoExtractResponse,
   type PublicPlanCatalogResponse,
   type ChangeSubscriptionPlanRequest,
+  subscriptionSummary,
+  type SubscriptionSummary,
 } from "@drezivo/contracts";
 
 type TokenGetter = () => Promise<string | null>;
@@ -646,14 +648,15 @@ export function createDrezivoApiClient(getToken: TokenGetter) {
         path: "/api/v1/billing",
         responseSchema: apiEnvelope(billingOverview),
       }),
+    /** Owner only. On Free, starts the eligible 14-day trial of the chosen paid plan. */
     changeSubscriptionPlan: (input: ChangeSubscriptionPlanRequest, idempotencyKey: string) =>
-      request<ActorContext>({
+      request<SubscriptionSummary>({
         getToken,
         body: changeSubscriptionPlanRequest.parse(input),
         idempotencyKey,
         method: "POST",
-        path: "/api/v1/billing/subscription/plan",
-        responseSchema: apiEnvelope(actorContext),
+        path: "/api/v1/subscription/plan",
+        responseSchema: apiEnvelope(subscriptionSummary),
       }),
     submitSubscriptionPayment: (input: SubmitSubscriptionPaymentRequest, idempotencyKey: string) =>
       request<SubmitSubscriptionPaymentResponse>({

@@ -14,10 +14,28 @@ export class MigrationHistoryError extends Error {
 
 export const OUT_OF_ORDER_SAFE_MIGRATION = '0070_webhook_invitation_resolution.sql';
 export const OUT_OF_ORDER_SAFE_IMAGE_VARIANTS_MIGRATION = '0080_file_image_variants_backfill.sql';
+export const OUT_OF_ORDER_SAFE_OPERATOR_SESSION_MIGRATION =
+  '0084_session_audit_uniqueness_repair.sql';
+export const OUT_OF_ORDER_SAFE_OPERATOR_FUNCTIONS_MIGRATION =
+  '0087_operator_functions_pgcrypto_path.sql';
 
-const OUT_OF_ORDER_SAFE_MIGRATIONS = new Set([
-  OUT_OF_ORDER_SAFE_MIGRATION,
-  OUT_OF_ORDER_SAFE_IMAGE_VARIANTS_MIGRATION,
+const OUT_OF_ORDER_SAFE_MIGRATION_CLOSURES = new Map<string, ReadonlySet<string>>([
+  [OUT_OF_ORDER_SAFE_MIGRATION, new Set([OUT_OF_ORDER_SAFE_MIGRATION])],
+  [
+    OUT_OF_ORDER_SAFE_IMAGE_VARIANTS_MIGRATION,
+    new Set([OUT_OF_ORDER_SAFE_IMAGE_VARIANTS_MIGRATION]),
+  ],
+  [
+    OUT_OF_ORDER_SAFE_OPERATOR_SESSION_MIGRATION,
+    new Set([OUT_OF_ORDER_SAFE_OPERATOR_SESSION_MIGRATION]),
+  ],
+  [
+    OUT_OF_ORDER_SAFE_OPERATOR_FUNCTIONS_MIGRATION,
+    new Set([
+      OUT_OF_ORDER_SAFE_OPERATOR_SESSION_MIGRATION,
+      OUT_OF_ORDER_SAFE_OPERATOR_FUNCTIONS_MIGRATION,
+    ]),
+  ],
 ]);
 
 export interface MigrationArguments {
@@ -90,14 +108,13 @@ export function inspectMigrationHistory(
       : orderedFiles.slice(firstPendingIndex).filter((file) => appliedSet.has(file));
   if (laterAppliedFiles.length > 0) {
     const pendingFile = orderedFiles[firstPendingIndex];
-    if (
-      throughFile !== null &&
-      OUT_OF_ORDER_SAFE_MIGRATIONS.has(throughFile) &&
-      pendingFile === throughFile
-    ) {
-      // Explicitly targeted additive migrations may close their one known ledger gap. Simulating
-      // the ledger after applying the target proves that no additional gap is hidden.
-      inspectMigrationHistory(orderedFiles, [...appliedSet, throughFile]);
+    const allowedClosure = throughFile === null
+      ? undefined
+      : OUT_OF_ORDER_SAFE_MIGRATION_CLOSURES.get(throughFile);
+    if (pendingFile !== undefined && allowedClosure?.has(pendingFile)) {
+      // Explicitly targeted additive migrations may close their reviewed ledger gaps. Simulating
+      // the full closure proves that no unrelated gap is hidden.
+      inspectMigrationHistory(orderedFiles, [...appliedSet, ...allowedClosure]);
       return {
         appliedFiles: orderedFiles.filter((file) => appliedSet.has(file)),
         pendingFiles: orderedFiles.filter((file) => !appliedSet.has(file)),

@@ -1,9 +1,8 @@
 "use client";
 
-import { Bell, Building2, CreditCard, Ruler, ShieldCheck, UserRound, Users } from "lucide-react";
+import { Bell, Building2, CreditCard, Receipt, Ruler, ShieldCheck, UserRound, Users } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useRef } from "react";
 
 import {
   PROFILE_HASH,
@@ -28,6 +27,7 @@ const GROUPS: { label: string; items: NavItem[] }[] = [
     label: "Business",
     items: [
       { href: "/settings", label: "Business information", icon: Building2 },
+      { href: "/settings/billing", label: "Plan & billing", icon: Receipt },
       { href: "/settings/payment-methods", label: "Payment methods", icon: CreditCard },
       { href: "/settings/measurement-guide", label: "Measurement guide", icon: Ruler },
     ],
@@ -53,7 +53,6 @@ export function SettingsNav() {
   const pathname = usePathname();
   const hash = useLocationHash();
   const actor = useVerifiedActorContext();
-  const nav = useRef<HTMLElement>(null);
   const groups: { label: string; items: NavItem[] }[] =
     actor?.membership.role === "owner"
       ? GROUPS.map((group) =>
@@ -69,22 +68,12 @@ export function SettingsNav() {
         )
       : GROUPS;
 
-  // On phones the menu is one scrolling row; bring the current page into view so it is never
-  // hidden off to the side.
-  useEffect(() => {
-    nav.current
-      ?.querySelector<HTMLElement>('[aria-current="page"]')
-      ?.scrollIntoView?.({ block: "nearest", inline: "center" });
-  }, [pathname, hash]);
-
+  // Phones and tablets: every section is visible at once in a two-column grid, never a sideways
+  // scrolling row that hides sections off-screen. Laptops: the grouped vertical list.
   return (
-    <nav
-      ref={nav}
-      aria-label="Settings"
-      className="settings-nav-scrollbar flex gap-1 overflow-x-auto pb-2 lg:flex-col lg:gap-5 lg:overflow-visible lg:pb-0"
-    >
+    <nav aria-label="Settings" className="grid grid-cols-2 gap-x-2 gap-y-1 lg:flex lg:flex-col lg:gap-5">
       {groups.map((group) => (
-        <div key={group.label} className="flex shrink-0 gap-1 lg:flex-col">
+        <div key={group.label} className="contents lg:flex lg:flex-col lg:gap-1">
           <p className="hidden px-3 pb-1 text-xs font-medium text-dashboard-muted lg:block">
             {group.label}
           </p>
@@ -104,7 +93,7 @@ export function SettingsNav() {
                   }
                 }}
                 className={cn(
-                  "relative flex items-center gap-2.5 whitespace-nowrap rounded-lg px-3 py-2 text-sm transition-colors after:absolute after:inset-x-3 after:bottom-0 after:h-px after:content-[''] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dashboard-accent/40",
+                  "relative flex min-h-11 min-w-0 items-center gap-2.5 rounded-lg px-3 py-2 text-sm leading-tight transition-colors lg:min-h-0 lg:whitespace-nowrap after:absolute after:inset-x-3 after:bottom-0 after:h-px after:content-[''] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dashboard-accent/40",
                   active
                     ? "bg-dashboard-active font-medium text-dashboard-navy after:bg-dashboard-accent"
                     : "text-dashboard-muted after:bg-dashboard-border hover:bg-dashboard-active/60 hover:text-dashboard-navy"
