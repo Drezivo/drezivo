@@ -125,9 +125,6 @@ const secondItem = {
   },
 };
 
-const getClothingCard = async (name: string) =>
-  within(await screen.findByRole("listitem", { name }));
-
 describe("ClothingPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -197,7 +194,7 @@ describe("ClothingPage", () => {
         summary: defaultSummary,
       },
     });
-    expect(await screen.findByRole("listitem", { name: "Real Black Satin Gown" })).toBeVisible();
+    expect(await screen.findByText("Real Black Satin Gown")).toBeVisible();
     expect(screen.queryByRole("status", { name: "Loading clothing" })).not.toBeInTheDocument();
   });
 
@@ -235,7 +232,7 @@ describe("ClothingPage", () => {
     render(<ClothingPage />);
 
     expect(await screen.findByRole("status")).toHaveTextContent("Clothing added");
-    expect(await screen.findByRole("listitem", { name: "Real Black Satin Gown" })).toBeVisible();
+    expect(await screen.findByText("Real Black Satin Gown")).toBeVisible();
     expect(screen.getAllByText("LONG").length).toBeGreaterThan(0);
     expect(api.getCatalogueClothing).toHaveBeenCalledWith({ limit: 10, sort: "newest", product_status: "active" });
     expect(sessionStorage.getItem("drezivo:inventory-notice")).toBeNull();
@@ -255,7 +252,7 @@ describe("ClothingPage", () => {
 
   it("shows Batch Add only when the API allows it for this account", async () => {
     const { unmount } = render(<ClothingPage />);
-    await screen.findByRole("listitem", { name: "Real Black Satin Gown" });
+    await screen.findByText("Real Black Satin Gown");
     await waitFor(() => expect(api.getCatalogueImportCapabilities).toHaveBeenCalled());
     expect(screen.queryByRole("link", { name: "Batch Add" })).not.toBeInTheDocument();
     unmount();
@@ -271,19 +268,25 @@ describe("ClothingPage", () => {
     render(<ClothingPage />);
 
     expect(screen.getByRole("heading", { name: "Clothing" })).toBeVisible();
-    const clothingCard = await getClothingCard("Real Black Satin Gown");
-    expect(clothingCard.getByText("GWN-001")).toBeVisible();
+    expect(await screen.findByText("Real Black Satin Gown")).toBeVisible();
+    expect(screen.getByText("GWN-001")).toBeVisible();
     expect(screen.getAllByText("₱1,500").length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText("S · M").length).toBeGreaterThanOrEqual(1);
     expect(screen.queryByText("Black Satin Gown")).not.toBeInTheDocument();
-    expect(
-      clothingCard.getByRole("img", { name: "Real Black Satin Gown catalogue photo" })
-    ).toHaveAttribute("loading", "lazy");
-    expect(
-      clothingCard.getByRole("img", { name: "Real Black Satin Gown catalogue photo" })
-    ).toHaveAttribute("decoding", "async");
+    expect(screen.getByRole("img", { name: "Real Black Satin Gown catalogue photo" })).toHaveAttribute(
+      "loading",
+      "lazy"
+    );
+    expect(screen.getByRole("img", { name: "Real Black Satin Gown catalogue photo" })).toHaveAttribute(
+      "decoding",
+      "async"
+    );
 
-    expect(api.getCatalogueClothing).toHaveBeenCalledWith({ limit: 10, sort: "newest", product_status: "active" });
+    expect(api.getCatalogueClothing).toHaveBeenCalledWith({
+      limit: 10,
+      sort: "newest",
+      product_status: "active",
+    });
   });
 
   it("uses authoritative workspace totals, Active by default, and clear pagination states", async () => {
@@ -303,9 +306,9 @@ describe("ClothingPage", () => {
     });
 
     render(<ClothingPage />);
-    await screen.findByRole("listitem", { name: "Real Black Satin Gown" });
+    await screen.findByText("Real Black Satin Gown");
 
-    expect(screen.getByRole("button", { name: "Status Active" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Active" })).toBeVisible();
     expect(api.getCatalogueClothing).toHaveBeenCalledWith({
       limit: 10,
       sort: "newest",
@@ -320,30 +323,15 @@ describe("ClothingPage", () => {
     expect(screen.getByRole("button", { name: "Next clothing page" })).toBeDisabled();
   });
 
-  it("renders visible labels associated with each clothing filter", async () => {
-    render(<ClothingPage />);
-    await screen.findByRole("listitem", { name: "Real Black Satin Gown" });
-
-    expect(screen.getByLabelText("Search")).toBeVisible();
-    expect(screen.getByText("Category", { selector: "span" })).toBeVisible();
-    expect(screen.getByText("Size", { selector: "span" })).toBeVisible();
-    expect(screen.getByText("Status", { selector: "span" })).toBeVisible();
-    expect(screen.getByText("Sort", { selector: "span" })).toBeVisible();
-    expect(screen.getByRole("button", { name: "Category All Categories" })).toBeVisible();
-    expect(screen.getByRole("button", { name: "Size All Sizes" })).toBeVisible();
-    expect(screen.getByRole("button", { name: "Status Active" })).toBeVisible();
-    expect(screen.getByRole("button", { name: "Sort New" })).toBeVisible();
-  });
-
   it("defaults sorting to New and changes server-side ordering with URL-backed sort state", async () => {
     render(<ClothingPage />);
-    await screen.findByRole("listitem", { name: "Real Black Satin Gown" });
+    await screen.findByText("Real Black Satin Gown");
 
-    expect(screen.getByRole("button", { name: "Sort New" })).toHaveTextContent("New");
-    expect(screen.getByRole("button", { name: "Status Active" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Sort clothing" })).toHaveTextContent("New");
+    expect(screen.getByRole("button", { name: "Active" })).toBeVisible();
     expect(api.getCatalogueClothing).toHaveBeenCalledWith({ limit: 10, sort: "newest", product_status: "active" });
 
-    fireEvent.pointerDown(screen.getByRole("button", { name: "Sort New" }), {
+    fireEvent.pointerDown(screen.getByRole("button", { name: "Sort clothing" }), {
       button: 0,
       ctrlKey: false,
     });
@@ -353,7 +341,7 @@ describe("ClothingPage", () => {
       expect(api.getCatalogueClothing).toHaveBeenLastCalledWith({ limit: 10, sort: "oldest", product_status: "active" })
     );
     expect(navigation.replace).toHaveBeenCalledWith("/inventory?sort=oldest", { scroll: false });
-    expect(screen.getByRole("button", { name: "Sort Oldest" })).toHaveTextContent("Oldest");
+    expect(screen.getByRole("button", { name: "Sort clothing" })).toHaveTextContent("Oldest");
   });
 
   it("shows windowed availability without implying a global clothing status", async () => {
@@ -381,7 +369,7 @@ describe("ClothingPage", () => {
     });
 
     render(<ClothingPage />);
-    await screen.findByRole("listitem", { name: "Real Black Satin Gown" });
+    await screen.findByText("Real Black Satin Gown");
 
     expect(screen.queryByRole("columnheader", { name: "Status" })).not.toBeInTheDocument();
     expect(screen.queryByText("Operational status", { selector: "dt" })).not.toBeInTheDocument();
@@ -393,8 +381,7 @@ describe("ClothingPage", () => {
   it("renders the backend cover image and falls back to initials when none is available", async () => {
     render(<ClothingPage />);
 
-    const clothingCard = await getClothingCard("Real Black Satin Gown");
-    const image = clothingCard.getByRole("img", { name: "Real Black Satin Gown catalogue photo" });
+    const image = await screen.findByRole("img", { name: "Real Black Satin Gown catalogue photo" });
     expect(image).toHaveAttribute(
       "src",
       "https://reads.example.test/catalogue%2Fblack-satin-gown.webp?version=cover-v1",
@@ -407,15 +394,13 @@ describe("ClothingPage", () => {
       },
       requestId: "req-no-cover",
     });
-    fireEvent.change(screen.getByRole("textbox", { name: "Search" }), {
+    fireEvent.change(screen.getByRole("textbox", { name: "Search clothing" }), {
       target: { value: "DRS-002" },
     });
 
-    const redDressCard = await getClothingCard("Real Red Dress");
-    expect(
-      redDressCard.queryByRole("img", { name: "Real Red Dress catalogue photo" })
-    ).not.toBeInTheDocument();
-    expect(redDressCard.getByText("RR")).toBeVisible();
+    expect(await screen.findByText("Real Red Dress")).toBeVisible();
+    expect(screen.queryByRole("img", { name: "Real Red Dress catalogue photo" })).not.toBeInTheDocument();
+    expect(screen.getByText("RR")).toBeVisible();
   });
 
   it("sends search text to the backend instead of filtering a local mock array", async () => {
@@ -428,10 +413,10 @@ describe("ClothingPage", () => {
     }));
 
     render(<ClothingPage />);
-    await screen.findByRole("listitem", { name: "Real Black Satin Gown" });
+    await screen.findByText("Real Black Satin Gown");
 
     const requestCountBeforeSearch = api.getCatalogueClothing.mock.calls.length;
-    fireEvent.change(screen.getByRole("textbox", { name: "Search" }), {
+    fireEvent.change(screen.getByRole("textbox", { name: "Search clothing" }), {
       target: { value: "DRS-002" },
     });
     expect(api.getCatalogueClothing).toHaveBeenCalledTimes(requestCountBeforeSearch);
@@ -444,7 +429,7 @@ describe("ClothingPage", () => {
         product_status: "active",
       })
     );
-    expect(await screen.findByRole("listitem", { name: "Real Red Dress" })).toBeVisible();
+    expect(await screen.findByText("Real Red Dress")).toBeVisible();
   });
 
   it("wires Edit and Archive actions to Phase 3 routes and backend archive command", async () => {
@@ -463,12 +448,10 @@ describe("ClothingPage", () => {
       });
 
     render(<ClothingPage />);
-    await screen.findByRole("listitem", { name: "Real Black Satin Gown" });
+    await screen.findByText("Real Black Satin Gown");
 
     fireEvent.pointerDown(
-      (await getClothingCard("Real Black Satin Gown")).getByRole("button", {
-        name: "Open actions for Real Black Satin Gown",
-      }),
+      screen.getByRole("button", { name: "Open actions for Real Black Satin Gown" }),
       { button: 0, ctrlKey: false }
     );
     expect(await screen.findByRole("menuitem", { name: "Edit" })).toHaveAttribute(
@@ -512,11 +495,9 @@ describe("ClothingPage", () => {
       });
 
     render(<ClothingPage />);
-    await screen.findByRole("listitem", { name: "Real Black Satin Gown" });
+    await screen.findByText("Real Black Satin Gown");
     fireEvent.pointerDown(
-      (await getClothingCard("Real Black Satin Gown")).getByRole("button", {
-        name: "Open actions for Real Black Satin Gown",
-      }),
+      screen.getByRole("button", { name: "Open actions for Real Black Satin Gown" }),
       { button: 0, ctrlKey: false }
     );
     fireEvent.click(await screen.findByRole("menuitem", { name: "Restore to Draft" }));
@@ -551,10 +532,10 @@ describe("ClothingPage", () => {
         product_status: "draft",
       })
     );
-    expect(screen.getByRole("textbox", { name: "Search" })).toHaveValue("red");
-    expect(screen.getByRole("button", { name: "Size L" })).toBeVisible();
-    expect(screen.getByRole("button", { name: "Status Draft" })).toBeVisible();
-    expect(screen.getByRole("button", { name: "Sort Name Z–A" })).toHaveTextContent("Name Z–A");
+    expect(screen.getByRole("textbox", { name: "Search clothing" })).toHaveValue("red");
+    expect(screen.getByRole("button", { name: "L" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Draft" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Sort clothing" })).toHaveTextContent("Name Z–A");
     expect(navigation.replace).toHaveBeenCalledWith(
       `/inventory?q=red&category=${category.id}&size=L&status=draft&sort=name_desc`,
       { scroll: false }
@@ -594,11 +575,11 @@ describe("ClothingPage", () => {
     });
 
     render(<ClothingPage />);
-    await screen.findByRole("listitem", { name: "Real Black Satin Gown" });
+    await screen.findByText("Real Black Satin Gown");
     fireEvent.click(screen.getByRole("button", { name: "Next clothing page" }));
-    await screen.findByRole("listitem", { name: "Real Red Dress" });
+    await screen.findByText("Real Red Dress");
 
-    fireEvent.pointerDown(screen.getByRole("button", { name: "Status Active" }), {
+    fireEvent.pointerDown(screen.getByRole("button", { name: "Active" }), {
       button: 0,
       ctrlKey: false,
     });
@@ -614,7 +595,7 @@ describe("ClothingPage", () => {
     expect(screen.getByText("Showing 1–1 of 1")).toBeVisible();
   });
 
-  it("renders designed permission and empty states", async () => {
+  it("renders designed permission, empty, and mobile-detail states", async () => {
     const { DrezivoApiError } = await import("@/lib/drezivo-api");
     api.getCatalogueClothing.mockRejectedValueOnce(
       new DrezivoApiError("This branch does not grant clothing management access.", {
@@ -632,7 +613,7 @@ describe("ClothingPage", () => {
       requestId: "req-empty",
     });
     rerender(<ClothingPage />);
-    fireEvent.change(screen.getByRole("textbox", { name: "Search" }), {
+    fireEvent.change(screen.getByRole("textbox", { name: "Search clothing" }), {
       target: { value: "nothing" },
     });
     expect(await screen.findByText("No clothing matches these filters")).toBeVisible();
@@ -642,48 +623,11 @@ describe("ClothingPage", () => {
       requestId: "req-mobile",
     });
     fireEvent.click(screen.getByRole("button", { name: "Clear filters" }));
-    const clothingCard = await getClothingCard("Real Black Satin Gown");
-    const mobileList = screen.getByRole("list", { name: "Clothing catalogue" });
-    const desktopTable = screen.getByRole("table", { name: "Clothing catalogue" });
-    expect(mobileList).toHaveClass("md:hidden");
-    expect(desktopTable.parentElement?.parentElement).toHaveClass("hidden", "md:block");
-    expect(
-      within(desktopTable).getByRole("columnheader", { name: "Clothing" })
-    ).toBeInTheDocument();
-    expect(clothingCard.getByText("Category", { selector: "dt" })).toBeInTheDocument();
-    expect(clothingCard.getByText("Availability", { selector: "dt" })).toBeInTheDocument();
-    expect(
-      clothingCard.queryByText("Operational status", { selector: "dt" })
-    ).not.toBeInTheDocument();
-  });
-
-  it("renders balanced mobile cards with aligned details and the existing actions", async () => {
-    api.getCatalogueClothing.mockResolvedValue({
-      data: {
-        items: [{ ...firstItem, product_status: "draft" }],
-        page_meta: { next_cursor: null, has_more: false },
-        summary: defaultSummary,
-      },
-      requestId: "req-mobile-card",
-    });
-
-    render(<ClothingPage />);
-
-    const card = await screen.findByRole("listitem", { name: "Real Black Satin Gown" });
-    const details = within(card).getByLabelText("Clothing details");
-    expect(card).toHaveClass("bg-dashboard-surface", "border-dashboard-border", "rounded-xl");
-    expect(card).toHaveAttribute("data-mobile-card", "keep");
-    expect(within(card).getByText("GWN-001")).toBeVisible();
-    expect(within(card).getByText("LONG")).toBeVisible();
-    expect(within(card).getByText("Draft")).toBeVisible();
-    expect(details).toHaveClass("grid", "grid-cols-2");
-    expect(within(details).getByText("Gowns")).toBeVisible();
-    expect(within(details).getByText("S · M")).toBeVisible();
-    expect(within(details).getByText("₱1,500")).toBeVisible();
-    expect(within(details).getByText("2/2 available")).toBeVisible();
-    expect(
-      within(card).getByRole("button", { name: "Open actions for Real Black Satin Gown" })
-    ).toBeVisible();
+    await screen.findByText("Real Black Satin Gown");
+    expect(screen.getByRole("table", { name: "Clothing catalogue" })).toBeVisible();
+    expect(screen.getByText("Category", { selector: "dt" })).toBeInTheDocument();
+    expect(screen.getByText("Availability", { selector: "dt" })).toBeInTheDocument();
+    expect(screen.queryByText("Operational status", { selector: "dt" })).not.toBeInTheDocument();
   });
 
   it("uses the backend next cursor for catalogue pagination", async () => {
@@ -708,13 +652,13 @@ describe("ClothingPage", () => {
     );
 
     render(<ClothingPage />);
-    await screen.findByRole("listitem", { name: "Real Black Satin Gown" });
+    await screen.findByText("Real Black Satin Gown");
 
     expect(screen.getByRole("button", { name: "Previous clothing page" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Next clothing page" })).toBeEnabled();
     fireEvent.click(screen.getByRole("button", { name: "Next clothing page" }));
 
-    expect(await screen.findByRole("listitem", { name: "Real Red Dress" })).toBeVisible();
+    expect(await screen.findByText("Real Red Dress")).toBeVisible();
     expect(api.getCatalogueClothing).toHaveBeenLastCalledWith({
       limit: 10,
       sort: "newest",

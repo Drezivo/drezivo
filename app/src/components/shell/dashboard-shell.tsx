@@ -125,7 +125,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
         <SubscriptionBanner access={access} />
         {/* `relative` makes this scroller the containing block for absolutely positioned content (such as
             visually hidden inputs), so focusing them scrolls this pane instead of shifting the whole shell. */}
-        <main data-ws-main="" className="relative min-h-0 flex-1 overflow-y-auto bg-dashboard-canvas">
+        <main className="relative min-h-0 flex-1 overflow-y-auto bg-dashboard-canvas">
           {/* Locked after the 30 view-only days: every page shows the Subscribe wall. The API enforces it too. */}
           {access?.level === "locked" ? <SubscriptionWall access={access} /> : children}
         </main>

@@ -6,7 +6,6 @@ import { Suspense } from 'react';
 import { catalogueQuery } from '@drezivo/contracts';
 
 import { CatalogControls } from '@/components/store/catalog-controls';
-import { CatalogPagination } from '@/components/store/catalog-pagination';
 import { ProductGrid } from '@/components/store/product-card';
 import { readCatalogue, readStore } from '@/lib/storefront-preview';
 
@@ -79,7 +78,20 @@ export default async function CatalogPage({ params, searchParams }: { params: Pr
         )}
       </div>
 
-      <CatalogPagination page={query.page} pages={pages} hrefFor={pageHref} />
+      {pages > 1 ? (
+        <nav aria-label="Pages" className="mt-14 flex items-center justify-center gap-2 text-sm">
+          {Array.from({ length: pages }, (_, index) => index + 1).map((page) => (
+            <Link
+              key={page}
+              href={pageHref(page)}
+              aria-current={page === query.page ? 'page' : undefined}
+              className={`flex h-10 min-w-10 items-center justify-center border px-3 tabular-nums ${page === query.page ? 'border-sf-ink' : 'border-transparent text-sf-muted hover:text-sf-ink'}`}
+            >
+              {page}
+            </Link>
+          ))}
+        </nav>
+      ) : null}
     </div>
   );
 }

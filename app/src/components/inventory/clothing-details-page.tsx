@@ -179,17 +179,14 @@ function DetailContent({
   const [failedImageUrls, setFailedImageUrls] = useState<Set<string>>(() => new Set());
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState(0);
-  const displayedVariants = item.status === "archived"
-    ? item.variants
-    : item.variants.filter((variant) => variant.status !== "archived");
   const allAssets = useMemo(() => item.variants.flatMap((variant) => variant.assets), [item.variants]);
   const activeAssets = allAssets.filter((asset) => asset.lifecycle_status === "active");
   const readyAssets = activeAssets.filter((asset) => asset.readiness === "ready");
   const sizes = displayProductSizes({
     hasFreeSize: item.sizing_mode === "free_size",
-    sizeLabels: [...new Set(displayedVariants.flatMap((variant) => (variant.size_label ? [variant.size_label] : [])))],
+    sizeLabels: [...new Set(item.variants.flatMap((variant) => (variant.size_label ? [variant.size_label] : [])))],
   });
-  const priceRange = formatPriceRange(displayedVariants);
+  const priceRange = formatPriceRange(item.variants);
   const usableImageUrls = imageUrls.filter((url) => !failedImageUrls.has(url));
   const primaryImage =
     selectedImageUrl && usableImageUrls.includes(selectedImageUrl)
@@ -375,7 +372,7 @@ function DetailContent({
                 </div>
                 <div className="mt-4">
                   <p className="text-xl font-semibold text-dashboard-navy">{priceRange}</p>
-                  <p className="mt-1 text-sm text-dashboard-muted">{formatHeroPricingSummary(displayedVariants)}</p>
+                  <p className="mt-1 text-sm text-dashboard-muted">{formatHeroPricingSummary(item.variants)}</p>
                 </div>
                 {item.description ? (
                   <p className="mt-5 max-w-3xl text-sm leading-6 text-dashboard-muted">{item.description}</p>
@@ -385,7 +382,7 @@ function DetailContent({
 
                 <div className="mt-5 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
                   <SummaryStat icon={Shirt} label="Sizes" value={sizes.length ? sizes.join(" · ") : "—"} />
-                  <SummaryStat icon={Layers3} label="Variants" value={String(displayedVariants.length)} />
+                  <SummaryStat icon={Layers3} label="Variants" value={String(item.variants.length)} />
                   <SummaryStat icon={Package} label="Active Pieces" value={String(activeAssets.length)} />
                   <SummaryStat icon={Ruler} label="Ready Pieces" value={String(readyAssets.length)} />
                 </div>
@@ -399,111 +396,48 @@ function DetailContent({
           title="Variants & Pricing"
           description="Each variant keeps its own size, color, pricing, and measurement source."
         >
-          {displayedVariants.length === 0 ? (
+          {item.variants.length === 0 ? (
             <EmptySection message="No variants are configured for this clothing style." />
           ) : (
-            <>
-              <div role="list" aria-label="Variant pricing cards" className="space-y-3 md:hidden">
-                {displayedVariants.map((variant) => (
-                  <Card
-                    key={variant.id}
-                    role="listitem"
-                    aria-label={`${displaySizeLabel(variant.size_label)} ${variant.color_label ?? "no color"} variant`}
-                    data-mobile-card="keep"
-                    className="gap-0 py-0"
-                  >
-                    <div className="space-y-4 p-4">
-                      <div>
-                        <h3 className="font-semibold text-dashboard-navy">
-                          {displaySizeLabel(variant.size_label)}
-                        </h3>
-                        <p className="mt-1 text-sm text-dashboard-muted">
-                          Color: {variant.color_label ?? "—"}
-                        </p>
-                      </div>
-
-                      <div className="border-y border-dashboard-border py-3">
-                        <p className="text-xs text-dashboard-muted">Rental price</p>
-                        <p className="mt-1 text-base font-semibold text-dashboard-navy">
-                          {formatVariantRentalRate(variant)}
-                        </p>
-                        <p className="mt-1 text-xs text-dashboard-muted">
-                          {formatPricingModeLabel(variant)}
-                        </p>
-                        {variant.pricing_mode === "fixed_duration" ? (
-                          <p className="mt-1 text-xs text-dashboard-muted">Pickup day is Day 1</p>
-                        ) : null}
-                      </div>
-
-                      <dl className="grid grid-cols-2 gap-x-4 gap-y-3">
-                        <VariantDetail label="Extra day" value={formatExtraDayPrice(variant)} />
-                        <VariantDetail
-                          label="Deposit"
-                          value={formatMoney(variant.security_deposit_minor, variant.currency)}
-                        />
-                        <VariantDetail
-                          label="Recovery"
-                          value={formatRecoveryDuration(variant.turnaround_minutes)}
-                        />
-                        <VariantDetail label="Pieces" value={String(variant.assets.length)} />
-                      </dl>
-
-                      <div>
-                        <p className="text-xs text-dashboard-muted">Measurements</p>
-                        <p className="mt-1 break-words text-sm text-dashboard-navy">
-                          {measurementLabel(variant)}
-                        </p>
-                      </div>
-
-                      <div className="border-t border-dashboard-border pt-3">
-                        <p className="text-xs text-dashboard-muted">SKU</p>
-                        <p className="mt-1 break-all text-sm text-dashboard-muted">{variant.sku}</p>
-                      </div>
-                    </div>
-                  </Card>
-                ))}
-              </div>
-
-              <div className="hidden rounded-xl border border-dashboard-border md:block md:overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="bg-dashboard-active/40 hover:bg-dashboard-active/40">
-                      <TableHead>Size</TableHead>
-                      <TableHead>Color</TableHead>
-                      <TableHead>SKU</TableHead>
-                      <TableHead>Rental Price</TableHead>
-                      <TableHead>Extra Day</TableHead>
-                      <TableHead>Deposit</TableHead>
-                      <TableHead>Recovery</TableHead>
-                      <TableHead>Measurements</TableHead>
-                      <TableHead>Pieces</TableHead>
+            <div className="overflow-x-auto rounded-xl border border-dashboard-border">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-dashboard-active/40 hover:bg-dashboard-active/40">
+                    <TableHead>Size</TableHead>
+                    <TableHead>Color</TableHead>
+                    <TableHead>SKU</TableHead>
+                    <TableHead>Rental Price</TableHead>
+                    <TableHead>Extra Day</TableHead>
+                    <TableHead>Deposit</TableHead>
+                    <TableHead>Recovery</TableHead>
+                    <TableHead>Measurements</TableHead>
+                    <TableHead>Pieces</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {item.variants.map((variant) => (
+                    <TableRow key={variant.id}>
+                      <TableCell className="font-semibold text-dashboard-navy">{displaySizeLabel(variant.size_label)}</TableCell>
+                      <TableCell className="text-dashboard-muted">{variant.color_label ?? "—"}</TableCell>
+                      <TableCell className="text-dashboard-muted">{variant.sku}</TableCell>
+                      <TableCell>
+                        <div className="font-medium text-dashboard-navy">{formatVariantRentalPrice(variant)}</div>
+                        <div className="mt-0.5 text-xs text-dashboard-muted">{formatPricingModeLabel(variant)}</div>
+                      </TableCell>
+                      <TableCell className="text-dashboard-muted">
+                        {formatExtraDayPrice(variant)}
+                      </TableCell>
+                      <TableCell className="text-dashboard-muted">
+                        {formatMoney(variant.security_deposit_minor, variant.currency)}
+                      </TableCell>
+                      <TableCell className="text-dashboard-muted">{formatRecoveryDuration(variant.turnaround_minutes)}</TableCell>
+                      <TableCell className="text-dashboard-muted">{measurementLabel(variant)}</TableCell>
+                      <TableCell className="text-dashboard-muted">{variant.assets.length}</TableCell>
                     </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {displayedVariants.map((variant) => (
-                      <TableRow key={variant.id}>
-                        <TableCell className="font-semibold text-dashboard-navy">{displaySizeLabel(variant.size_label)}</TableCell>
-                        <TableCell className="text-dashboard-muted">{variant.color_label ?? "—"}</TableCell>
-                        <TableCell className="text-dashboard-muted">{variant.sku}</TableCell>
-                        <TableCell>
-                          <div className="font-medium text-dashboard-navy">{formatVariantRentalPrice(variant)}</div>
-                          <div className="mt-0.5 text-xs text-dashboard-muted">{formatPricingModeLabel(variant)}</div>
-                        </TableCell>
-                        <TableCell className="text-dashboard-muted">
-                          {formatExtraDayPrice(variant)}
-                        </TableCell>
-                        <TableCell className="text-dashboard-muted">
-                          {formatMoney(variant.security_deposit_minor, variant.currency)}
-                        </TableCell>
-                        <TableCell className="text-dashboard-muted">{formatRecoveryDuration(variant.turnaround_minutes)}</TableCell>
-                        <TableCell className="text-dashboard-muted">{measurementLabel(variant)}</TableCell>
-                        <TableCell className="text-dashboard-muted">{variant.assets.length}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            </>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
           )}
         </SectionCard>
 
@@ -516,7 +450,7 @@ function DetailContent({
             {allAssets.length === 0 ? (
               <EmptySection message="No physical pieces are attached to this clothing style in the active branch." />
             ) : (
-              <div className="sm:overflow-x-auto sm:rounded-xl sm:border sm:border-dashboard-border">
+              <div className="overflow-x-auto rounded-xl border border-dashboard-border">
                 <Table>
                   <TableHeader>
                     <TableRow className="bg-dashboard-active/40 hover:bg-dashboard-active/40">
@@ -777,15 +711,6 @@ function DetailPair({ label, value }: { label: string; value: string }) {
   );
 }
 
-function VariantDetail({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="min-w-0">
-      <dt className="text-xs text-dashboard-muted">{label}</dt>
-      <dd className="mt-1 break-words text-sm font-medium text-dashboard-navy">{value}</dd>
-    </div>
-  );
-}
-
 function EmptySection({ message }: { message: string }) {
   return (
     <div className="rounded-xl border border-dashed border-dashboard-border px-5 py-10 text-center text-sm text-dashboard-muted">
@@ -857,14 +782,9 @@ function formatHeroPricingSummary(variants: ClothingVariantDetail[]): string {
 }
 
 function formatVariantRentalPrice(variant: ClothingVariantDetail): string {
-  const price = formatVariantRentalRate(variant);
-  return variant.pricing_mode === "daily" ? price : `${price} (pickup day is Day 1)`;
-}
-
-function formatVariantRentalRate(variant: ClothingVariantDetail): string {
   const price = formatMoney(variant.rental_price_minor, variant.currency);
   if (variant.pricing_mode === "daily") return `${price} / day`;
-  return `${price} / ${formatDurationDays(variant.included_duration_minutes)}`;
+  return `${price} / ${formatDurationDays(variant.included_duration_minutes)} (pickup day is Day 1)`;
 }
 
 function formatPricingModeLabel(variant: ClothingVariantDetail): string {

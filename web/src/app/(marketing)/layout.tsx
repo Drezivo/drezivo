@@ -1,6 +1,6 @@
 import { preconnect } from 'react-dom';
-import '@fontsource-variable/playfair-display/wght.css';
-import '@fontsource-variable/playfair-display/wght-italic.css';
+import '@fontsource-variable/bodoni-moda/opsz.css';
+import '@fontsource-variable/bodoni-moda/opsz-italic.css';
 import '@fontsource-variable/caveat/wght.css';
 import '@fontsource-variable/jost/wght.css';
 

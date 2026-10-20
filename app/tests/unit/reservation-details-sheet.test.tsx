@@ -113,18 +113,6 @@ function renderSheet(detail: ReservationDetail, permissionCodes: PermissionCode[
 }
 
 describe("ReservationDetailsSheet", () => {
-  it("omits SKU and lays out the remaining rental details in two columns", () => {
-    renderSheet(detailWith({}));
-
-    expect(screen.queryByText("SKU")).not.toBeInTheDocument();
-    expect(screen.getAllByText("Variant")).toHaveLength(2);
-    expect(screen.getAllByText("Rental")).toHaveLength(2);
-    expect(screen.getAllByText("Deposit")).toHaveLength(2);
-
-    const detailsGrid = screen.getAllByText("Variant")[0]?.parentElement?.parentElement;
-    expect(detailsGrid).toHaveClass("grid", "grid-cols-2");
-  });
-
   it("starts a replacement reservation with every original line and the same available details", () => {
     const { onContinue } = renderSheet(detailWith({}));
 
@@ -177,33 +165,23 @@ describe("ReservationDetailsSheet", () => {
     expect(screen.queryByRole("button", { name: /create new reservation from this/i })).toBeNull();
   });
 
-  it.each([
-    "held",
-    "pending_confirmation",
-    "confirmed",
-    "picked_up",
-    "returned",
-    "completed",
-    "cancelled",
-    "expired",
-    "rejected",
-  ] as const)("shows payment receipts for %s reservations", async (status) => {
+  it("shows completed payment receipts only to staff with payment and evidence permissions", async () => {
     api.getReservationPaymentReceipts.mockReset().mockResolvedValue({
       data: {
         receipts: [
           {
             file_id: "00000000-0000-4000-8000-000000000901",
             content_type: "image/png",
-            url: "https://files.test/reservation-receipt.png",
+            url: "https://files.test/completed-receipt.png",
             submitted_at: "2026-10-10T02:05:00.000Z",
             evidence_status: "verified",
           },
         ],
       },
-      requestId: "req-reservation-receipts",
+      requestId: "req-completed-receipts",
     });
-    const reservation = detailWith({
-      status,
+    const completed = detailWith({
+      status: "completed",
       payment: {
         id: "00000000-0000-4000-8000-000000000105",
         payment_method_id: "00000000-0000-4000-8000-000000000106",
@@ -217,185 +195,17 @@ describe("ReservationDetailsSheet", () => {
       },
     });
 
-    renderSheet(reservation, [...MANAGE, "payments.manage", "evidence.verify"]);
+    renderSheet(completed, [...MANAGE, "payments.manage", "evidence.verify"]);
 
     expect(await screen.findByRole("button", { name: "View proof of payment 1 full size" })).toBeTruthy();
-    const receiptHeading = screen.getByText("Payment receipt");
-    const paymentMethodHeading = screen.getByText("Payment method");
-    const paymentStatusHeading = screen.getByText("Payment status");
-    const evidenceHeading = screen.getByText("Evidence");
-    const verifiedHeading = screen.getByText("Verified at");
-    const recordedAmountHeading = screen.getByText("Recorded amount");
-    expect(
-      Boolean(
-        receiptHeading.compareDocumentPosition(paymentMethodHeading) &
-          Node.DOCUMENT_POSITION_FOLLOWING
-      )
-    ).toBe(true);
-    expect(
-      Boolean(
-        paymentMethodHeading.compareDocumentPosition(paymentStatusHeading) &
-          Node.DOCUMENT_POSITION_FOLLOWING
-      )
-    ).toBe(true);
-    const paymentGrid = receiptHeading.closest("div.grid");
-    const paymentFieldsGrid = paymentMethodHeading.closest("div.grid");
-    expect(paymentGrid).toHaveClass("sm:grid-cols-[8rem_minmax(0,1fr)]");
-    expect(paymentFieldsGrid).toHaveClass("sm:grid-cols-2");
-    expect(paymentFieldsGrid?.parentElement).toBe(paymentGrid);
-    expect(paymentStatusHeading.closest("div.grid")).toBe(paymentFieldsGrid);
-    expect(
-      Boolean(
-        paymentStatusHeading.compareDocumentPosition(evidenceHeading) &
-          Node.DOCUMENT_POSITION_FOLLOWING
-      )
-    ).toBe(true);
-    expect(
-      Boolean(
-        evidenceHeading.compareDocumentPosition(verifiedHeading) & Node.DOCUMENT_POSITION_FOLLOWING
-      )
-    ).toBe(true);
-    expect(
-      Boolean(
-        verifiedHeading.compareDocumentPosition(recordedAmountHeading) &
-          Node.DOCUMENT_POSITION_FOLLOWING
-      )
-    ).toBe(true);
-    expect(api.getReservationPaymentReceipts).toHaveBeenCalledWith(reservation.id);
-  });
-
-  it("opens an attached image receipt in the lightbox", async () => {
-    api.getReservationPaymentReceipts.mockReset().mockResolvedValue({
-      data: {
-        receipts: [
-          {
-            file_id: "00000000-0000-4000-8000-000000000901",
-            content_type: "image/png",
-            url: "https://files.test/reservation-receipt.png",
-            submitted_at: "2026-10-10T02:05:00.000Z",
-            evidence_status: "verified",
-          },
-        ],
-      },
-      requestId: "req-reservation-receipt-lightbox",
-    });
-    renderSheet(
-      detailWith({
-        status: "confirmed",
-        payment: {
-          id: "00000000-0000-4000-8000-000000000105",
-          payment_method_id: "00000000-0000-4000-8000-000000000106",
-          method_name: "GCash",
-          rail: "manual_qr",
-          status: "paid",
-          evidence_status: "verified",
-          amount_minor: "1050000",
-          currency: "PHP",
-          verified_at: "2026-10-10T03:00:00.000Z",
-        },
-      }),
-      [...MANAGE, "payments.manage", "evidence.verify"]
-    );
-
-    fireEvent.click(await screen.findByRole("button", { name: "View proof of payment 1 full size" }));
-
-    expect(await screen.findByRole("dialog", { name: "Image preview" })).toBeTruthy();
-    expect(screen.getByRole("img", { name: "Proof of payment 1" })).toBeTruthy();
-  });
-
-  it("links an attached PDF receipt from payment details", async () => {
-    api.getReservationPaymentReceipts.mockReset().mockResolvedValue({
-      data: {
-        receipts: [
-          {
-            file_id: "00000000-0000-4000-8000-000000000902",
-            content_type: "application/pdf",
-            url: "https://files.test/reservation-receipt.pdf",
-            submitted_at: "2026-10-10T02:05:00.000Z",
-            evidence_status: "verified",
-          },
-        ],
-      },
-      requestId: "req-reservation-receipt-pdf",
-    });
-    renderSheet(
-      detailWith({
-        status: "confirmed",
-        payment: {
-          id: "00000000-0000-4000-8000-000000000105",
-          payment_method_id: "00000000-0000-4000-8000-000000000106",
-          method_name: "GCash",
-          rail: "manual_qr",
-          status: "paid",
-          evidence_status: "verified",
-          amount_minor: "1050000",
-          currency: "PHP",
-          verified_at: "2026-10-10T03:00:00.000Z",
-        },
-      }),
-      [...MANAGE, "payments.manage", "evidence.verify"]
-    );
-
-    const link = await screen.findByRole("link", { name: /PDF proof/ });
-
-    expect(link.getAttribute("href")).toBe("https://files.test/reservation-receipt.pdf");
-    expect(link.getAttribute("target")).toBe("_blank");
-    expect(link.getAttribute("rel")).toBe("noopener noreferrer");
-  });
-
-  it("shows when no receipt is attached to an authorized non-cash payment", async () => {
-    api.getReservationPaymentReceipts.mockReset().mockResolvedValue({
-      data: { receipts: [] },
-      requestId: "req-no-reservation-receipt",
-    });
-    const reservation = detailWith({
-      status: "completed",
-      payment: {
-        id: "00000000-0000-4000-8000-000000000105",
-        payment_method_id: "00000000-0000-4000-8000-000000000106",
-        method_name: "GCash",
-        rail: "manual_qr",
-        status: "paid",
-        evidence_status: "awaiting_upload",
-        amount_minor: "1050000",
-        currency: "PHP",
-        verified_at: "2026-10-10T03:00:00.000Z",
-      },
-    });
-
-    renderSheet(reservation, [...MANAGE, "payments.manage", "evidence.verify"]);
-
-    expect(await screen.findByText(/No receipt is attached to this payment/)).toBeTruthy();
-    expect(api.getReservationPaymentReceipts).toHaveBeenCalledWith(reservation.id);
-  });
-
-  it("does not request receipts for cash payments", () => {
-    api.getReservationPaymentReceipts.mockReset();
-    const reservation = detailWith({
-      status: "completed",
-      payment: {
-        id: "00000000-0000-4000-8000-000000000105",
-        payment_method_id: "00000000-0000-4000-8000-000000000106",
-        method_name: "Cash",
-        rail: "cash",
-        status: "paid",
-        evidence_status: "not_required",
-        amount_minor: "1050000",
-        currency: "PHP",
-        verified_at: "2026-10-10T03:00:00.000Z",
-      },
-    });
-
-    renderSheet(reservation, [...MANAGE, "payments.manage", "evidence.verify"]);
-
-    expect(api.getReservationPaymentReceipts).not.toHaveBeenCalled();
-    expect(screen.queryByText("Payment receipt")).toBeNull();
+    expect(screen.getByText("Payment receipt")).toBeTruthy();
+    expect(api.getReservationPaymentReceipts).toHaveBeenCalledWith(completed.id);
   });
 
   it.each([
     ["without evidence verification", [...MANAGE, "payments.manage"] as PermissionCode[]],
     ["without payment management", [...MANAGE, "evidence.verify"] as PermissionCode[]],
-  ])("does not request or display payment receipts %s", (_scenario, permissions) => {
+  ])("does not request or display completed payment receipts %s", (_scenario, permissions) => {
     api.getReservationPaymentReceipts.mockReset();
     const completed = detailWith({
       status: "completed",

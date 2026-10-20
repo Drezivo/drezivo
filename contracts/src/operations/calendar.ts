@@ -98,7 +98,6 @@ export const operationalCalendarEvent = z.discriminatedUnion('source', [
       item_names: z.array(z.string().min(1)).max(20),
       category_ids: z.array(categoryId).max(20),
       status: operationalCalendarReservationStatus,
-      time_unspecified: z.boolean().optional(),
     })
     .strict(),
   z

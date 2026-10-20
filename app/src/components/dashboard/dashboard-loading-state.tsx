@@ -24,7 +24,7 @@ export function DashboardLoadingState() {
           className="grid grid-cols-2 gap-ws-gap md:grid-cols-3 min-[1440px]:grid-cols-6"
         >
           {Array.from({ length: 6 }).map((_, index) => (
-            <Card key={index} data-mobile-card="keep" className="min-h-36 py-4 sm:min-h-[166px] sm:py-5">
+            <Card key={index} className="min-h-36 py-4 sm:min-h-[166px] sm:py-5">
               <CardContent className="flex h-full flex-col justify-between px-4 sm:px-5">
                 <div className="flex items-center justify-between">
                   <Skeleton className="h-10 w-10 rounded-xl" />

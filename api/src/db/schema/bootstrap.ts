@@ -1,14 +1,4 @@
-import {
-  boolean,
-  index,
-  integer,
-  jsonb,
-  pgTable,
-  text,
-  timestamp,
-  uniqueIndex,
-  uuid,
-} from 'drizzle-orm/pg-core';
+import { index, integer, jsonb, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 
 import { account } from './account.js';
 import { idColumn, timestamps } from './_shared.js';
@@ -59,7 +49,6 @@ export const globalAuditEvent = pgTable(
     outcome: text('outcome').notNull(),
     redactedSummary: jsonb('redacted_summary').$type<unknown>().notNull(),
     requestId: text('request_id').notNull(),
-    operatorSessionUniqueGuard: boolean('operator_session_unique_guard').default(true),
     ...timestamps,
   },
   (table) => [

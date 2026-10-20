@@ -13,7 +13,7 @@ export type PaymentProofState =
   | { kind: "ready"; receipts: ReservationPaymentReceipt[] }
   | { kind: "error"; message: string };
 
-/** Loads uploaded receipts for one reservation. Links expire after five minutes. */
+/** Loads the renter's uploaded receipts for one reservation. Links expire after five minutes. */
 export function usePaymentProof(reservationId: string, enabled: boolean): PaymentProofState {
   const { getToken } = useAuth();
   const [state, setState] = useState<PaymentProofState>({ kind: "loading" });
@@ -72,7 +72,7 @@ export function PaymentProof({
   if (state.receipts.length === 0) {
     return (
       <p className="rounded-md border border-dashed border-dashboard-border px-3 py-2.5 text-xs text-dashboard-muted">
-        No receipt is attached to this payment. Verify only if you can see this payment in your own account.
+        The renter has not uploaded a proof of payment yet. Verify only if you can see this payment in your own account.
       </p>
     );
   }

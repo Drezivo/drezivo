@@ -7,7 +7,7 @@
 
 .marketing-page {
   /* Fontsource registers these bundled families from this route group's layout. */
-  --font-atelier-display: var(--font-playfair), 'Bodoni 72', 'Didot', Georgia, serif;
+  --font-atelier-display: var(--font-bodoni), 'Bodoni 72', 'Didot', Georgia, serif;
   --font-atelier-body: var(--font-atelier-jost), 'Futura', ui-sans-serif, system-ui, sans-serif;
   /* Pages still on the older marketing classes (font-display) inherit the same pairing. */
   --font-display: var(--font-atelier-display);

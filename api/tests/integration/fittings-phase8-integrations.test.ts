@@ -316,13 +316,7 @@ async function insertFitting(
 
 async function insertReservation(
   seed: Seed,
-  input: {
-    pickupAt: string;
-    dueAt: string;
-    withPayment?: boolean;
-    pickupTimeUnspecified?: boolean;
-    returnTimeUnspecified?: boolean;
-  },
+  input: { pickupAt: string; dueAt: string; withPayment?: boolean },
 ): Promise<{ reservationId: string; paymentId: string | null }> {
   return withAdmin(async (client) => {
     const reservationId = requireId(
@@ -330,11 +324,10 @@ async function insertReservation(
         await client.query<{ id: string }>(
           `INSERT INTO reservation
              (tenant_id,branch_id,customer_id,storefront_id,policy_snapshot_id,payment_method_id,
-              reference_code,status,pickup_at,due_at,pickup_time_unspecified,return_time_unspecified,
-              timezone_snapshot,customer_snapshot,
+              reference_code,status,pickup_at,due_at,timezone_snapshot,customer_snapshot,
               delivery_snapshot,price_snapshot,currency,rental_total_minor,security_required_minor,due_now_minor)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,'confirmed',$8::timestamptz,$9::timestamptz,$10,$11,'UTC',
-                   $12::jsonb,'{"fulfillment_method":"pickup"}'::jsonb,
+           VALUES ($1,$2,$3,$4,$5,$6,$7,'confirmed',$8::timestamptz,$9::timestamptz,'UTC',
+                   $10::jsonb,'{"fulfillment_method":"pickup"}'::jsonb,
                    '{"rental_total_minor":"1000","security_required_minor":"0","due_now_minor":"1000","currency":"PHP"}'::jsonb,
                    'PHP',1000,0,1000) RETURNING id`,
           [
@@ -347,8 +340,6 @@ async function insertReservation(
             `BE8-${randomUUID().slice(0, 8)}`,
             input.pickupAt,
             input.dueAt,
-            input.pickupTimeUnspecified ?? false,
-            input.returnTimeUnspecified ?? false,
             JSON.stringify({ full_name: 'BE8 Customer', email: 'be8@example.test', phone: null }),
           ],
         )
@@ -425,7 +416,6 @@ describe('FIT-BE-080..083 cross-product integration', async () => {
     const reservation = await insertReservation(seed, {
       pickupAt: plus(seed.todayStart, 12),
       dueAt: plus(seed.todayStart, 36),
-      pickupTimeUnspecified: true,
     });
     await withAdmin(async (client) => {
       await client.query(`UPDATE customer SET full_name = 'Live Customer Changed' WHERE id = $1`, [
@@ -459,7 +449,6 @@ describe('FIT-BE-080..083 cross-product integration', async () => {
             start: plus(seed.todayStart, 12),
             end: plus(seed.todayStart, 12.5),
           },
-          time_unspecified: true,
         }),
         expect.objectContaining({
           source: 'reservation',
@@ -470,7 +459,6 @@ describe('FIT-BE-080..083 cross-product integration', async () => {
             start: plus(seed.todayStart, 36),
             end: plus(seed.todayStart, 36.5),
           },
-          time_unspecified: false,
         }),
       ]),
     );

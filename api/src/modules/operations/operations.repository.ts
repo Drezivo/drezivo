@@ -16,7 +16,6 @@ export interface CalendarEventRow {
   branch_id: string;
   starts_at: Date;
   ends_at: Date;
-  time_unspecified: boolean;
   customer_name: string;
   item_names: string[];
   category_ids: string[];
@@ -77,9 +76,7 @@ export async function readOperationalCalendarEvents(
               r.customer_snapshot,
               r.status,
               r.pickup_at,
-              r.due_at,
-              r.pickup_time_unspecified,
-              r.return_time_unspecified
+              r.due_at
          FROM reservation r
         WHERE r.tenant_id = $1::uuid
           AND r.branch_id = $2::uuid
@@ -100,7 +97,6 @@ export async function readOperationalCalendarEvents(
          r.customer_snapshot,
          r.pickup_at AS starts_at,
          r.pickup_at + interval '30 minutes' AS ends_at,
-         r.pickup_time_unspecified AS time_unspecified,
          r.status::text AS status
        FROM reservation_candidates r
        WHERE r.status IN ('pending_confirmation', 'confirmed')
@@ -117,7 +113,6 @@ export async function readOperationalCalendarEvents(
          r.customer_snapshot,
          r.due_at AS starts_at,
          r.due_at + interval '30 minutes' AS ends_at,
-         r.return_time_unspecified AS time_unspecified,
          r.status::text AS status
        FROM reservation_candidates r
        WHERE r.status IN ('pending_confirmation', 'confirmed', 'picked_up')
@@ -135,7 +130,6 @@ export async function readOperationalCalendarEvents(
          NULL::jsonb AS customer_snapshot,
          lower(fa.period) AS starts_at,
          upper(fa.period) AS ends_at,
-         false AS time_unspecified,
          fa.status::text AS status
        FROM fitting_appointment fa
        WHERE fa.tenant_id = $1::uuid
@@ -184,7 +178,6 @@ export async function readOperationalCalendarEvents(
               be.branch_id,
               be.starts_at,
               be.ends_at,
-              be.time_unspecified,
               COALESCE(
                 NULLIF(btrim(be.customer_snapshot->>'full_name'), ''),
                 NULLIF(btrim(c.full_name), ''),
@@ -211,7 +204,6 @@ export async function readOperationalCalendarEvents(
               be.branch_id,
               be.starts_at,
               be.ends_at,
-              be.time_unspecified,
               c.full_name AS customer_name,
               COALESCE(items.item_names, ARRAY[]::text[]) AS item_names,
               COALESCE(items.category_ids, ARRAY[]::uuid[]) AS category_ids,

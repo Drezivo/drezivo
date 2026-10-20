@@ -6,7 +6,6 @@ import {
   CalendarDays,
   Check,
   ChevronDown,
-  FileText,
   FileUp,
   Plus,
   Search,
@@ -224,27 +223,14 @@ export function NewReservationSheet({
   const [heldLines, setHeldLines] = useState<ReservationDetail["lines"] | null>(null);
   const [heldLinesError, setHeldLinesError] = useState<string | null>(null);
   const [cashAmountReceived, setCashAmountReceived] = useState("");
+  const [cashReceived, setCashReceived] = useState(false);
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
-  const [receiptPreviewUrl, setReceiptPreviewUrl] = useState<string | null>(null);
   const [receiptAttached, setReceiptAttached] = useState(false);
   const [completionNextAction, setCompletionNextAction] = useState<
     "none" | "merchant_review" | "payment_verification" | null
   >(null);
   const [serverExpired, setServerExpired] = useState(false);
   const [now, setNow] = useState(() => Date.now());
-
-  useEffect(() => {
-    if (!receiptPreviewUrl) return;
-    return () => URL.revokeObjectURL(receiptPreviewUrl);
-  }, [receiptPreviewUrl]);
-
-  const stageReceiptFile = (file: File | null) => {
-    setReceiptFile(file);
-    setReceiptPreviewUrl(file?.type.startsWith("image/") ? URL.createObjectURL(file) : null);
-    setReceiptAttached(false);
-    receiptGuard.resetIntent();
-    completeGuard.resetIntent();
-  };
 
   const [customerMode, setCustomerMode] = useState<CustomerMode>("new");
   const [customerSearch, setCustomerSearch] = useState("");
@@ -266,6 +252,7 @@ export function NewReservationSheet({
   const [address, setAddress] = useState("");
   const [socialMedia, setSocialMedia] = useState("");
   const [notes, setNotes] = useState("");
+  const [termsAccepted, setTermsAccepted] = useState(false);
 
   const canCreate = permissionCodes.includes("reservations.manage");
   const activeVariant =
@@ -354,17 +341,9 @@ export function NewReservationSheet({
         !customerProfileLoading &&
         !customerProfileError))
   );
-  // Pickup customers rarely give an exact time, so with Pickup both times are optional: a blank
-  // pickup time holds the garment from opening on the pickup date, a blank return time until
-  // closing on the return date. Delivery is scheduled, so it still needs both times.
-  const timesOptional = fulfillmentMethod === "pickup";
-  const opensLocal = businessHours?.opens_local ?? "08:00";
-  const closesLocal = businessHours?.closes_local ?? "20:00";
-  const effectivePickupTime = pickupTime || (timesOptional ? opensLocal : "");
-  const effectiveDueTime = dueTime || (timesOptional ? closesLocal : "");
   const requestedInterval = useMemo(
-    () => toRequestedInterval(pickupDate, effectivePickupTime, dueDate, effectiveDueTime, timeZone),
-    [dueDate, effectiveDueTime, pickupDate, effectivePickupTime, timeZone]
+    () => toRequestedInterval(pickupDate, pickupTime, dueDate, dueTime, timeZone),
+    [dueDate, dueTime, pickupDate, pickupTime, timeZone]
   );
   const minimumDurationIssue = useMemo(
     () => minimumRentalDurationIssue(rentalVariant, requestedInterval, timeZone),
@@ -1042,8 +1021,8 @@ export function NewReservationSheet({
     setHeldLines(null);
     setHeldLinesError(null);
     setCashAmountReceived("");
+    setCashReceived(false);
     setReceiptFile(null);
-    setReceiptPreviewUrl(null);
     setReceiptAttached(false);
     setCompletionNextAction(null);
     setServerExpired(false);
@@ -1060,6 +1039,7 @@ export function NewReservationSheet({
     setAddress("");
     setSocialMedia("");
     setNotes("");
+    setTermsAccepted(false);
   };
 
   const makeSelectedGarment = (
@@ -1270,8 +1250,6 @@ export function NewReservationSheet({
       requested_interval: requestedInterval,
       ...(eventDate ? { event_date: eventDate } : {}),
       fulfillment_method: fulfillmentMethod,
-      pickup_time_unspecified: timesOptional && !pickupTime,
-      return_time_unspecified: timesOptional && !dueTime,
       payment_method_id: paymentMethodId,
     };
     const result = await reserveGuard.submit((idempotencyKey) =>
@@ -1301,8 +1279,8 @@ export function NewReservationSheet({
     setCashAmountReceived(
       minorUnitsToMajorInput(result.data.reservation.price_snapshot.due_now_minor)
     );
+    setCashReceived(false);
     setReceiptFile(null);
-    setReceiptPreviewUrl(null);
     setReceiptAttached(false);
     setCompletionNextAction(null);
     receiptGuard.resetIntent();
@@ -1320,8 +1298,8 @@ export function NewReservationSheet({
     onReservationChanged(result.data.reservation.id);
   };
 
-  const uploadPaymentReceipt = async (): Promise<boolean> => {
-    if (!held || !receiptFile || receiptAttached || holdExpired) return false;
+  const uploadPaymentReceipt = async () => {
+    if (!held || !receiptFile || holdExpired) return;
     setNotice(null);
 
     const result = await receiptGuard.submit(async (idempotencyKey) => {
@@ -1357,12 +1335,15 @@ export function NewReservationSheet({
         idempotencyKey
       );
     });
-    if (!result) return false;
+    if (!result) return;
 
     setReceiptAttached(true);
-    setReceiptPreviewUrl(null);
     receiptGuard.resetIntent();
-    return true;
+    completeGuard.resetIntent();
+    setNotice({
+      tone: "success",
+      text: "Payment receipt uploaded. Complete the reservation to send it for verification.",
+    });
   };
 
   const complete = async () => {
@@ -1395,13 +1376,25 @@ export function NewReservationSheet({
       });
       return;
     }
+    if (!termsAccepted) {
+      setNotice({
+        tone: "attention",
+        text: "Confirm that the customer accepted the rental terms.",
+      });
+      return;
+    }
+
     const paymentDue = BigInt(held.reservation.price_snapshot.due_now_minor) > 0n;
     const isCash = held.paymentInstructions.rail === "cash";
     const cashCollectionAuthorized = permissionCodes.includes("payments.manage");
     const cashTenderedMinor = majorInputToMinorUnits(cashAmountReceived);
     const cashCollectionSubmitted =
-      paymentDue && isCash && cashTenderedMinor !== null;
+      paymentDue && isCash && cashReceived && cashTenderedMinor !== null;
     if (paymentDue && isCash) {
+      if (!cashReceived) {
+        setNotice({ tone: "attention", text: "Confirm that the cash payment was received." });
+        return;
+      }
       if (
         cashTenderedMinor === null ||
         BigInt(cashTenderedMinor) < BigInt(held.reservation.price_snapshot.due_now_minor)
@@ -1417,21 +1410,11 @@ export function NewReservationSheet({
       }
     }
     setNotice(null);
-    if (receiptFile && !receiptAttached) {
-      try {
-        if (!(await uploadPaymentReceipt())) return;
-      } catch (error) {
-        handleFailure(error, receiptGuard);
-        return;
-      }
-    }
     const result = await completeGuard.submit((idempotencyKey) =>
       createDrezivoApiClient(getToken).completeStaffReservation(
         held.reservation.id,
         {
           version: held.reservation.version,
-          // Staff book in person under the shop's posted rental terms, so confirming records
-          // their acceptance (the owner removed the separate tick box, 2026-10-15).
           terms_accepted: true,
           customer,
           ...(cashCollectionSubmitted && cashTenderedMinor
@@ -2035,7 +2018,7 @@ export function NewReservationSheet({
                   {pickupDate && dueDate ? (
                     <div className="mt-4 space-y-3">
                       <div className="grid gap-3 sm:grid-cols-2">
-                        <Field label={`Pickup time${timesOptional ? " (optional)" : ""} · ${formatIsoDateForDisplay(pickupDate)}`}>
+                        <Field label={`Pickup time · ${formatIsoDateForDisplay(pickupDate)}`}>
                           <TimePickerField
                             ariaLabel="Pickup time"
                             mode="input"
@@ -2049,7 +2032,7 @@ export function NewReservationSheet({
                             }}
                           />
                         </Field>
-                        <Field label={`Return time${timesOptional ? " (optional)" : ""} · ${formatIsoDateForDisplay(dueDate)}`}>
+                        <Field label={`Return time · ${formatIsoDateForDisplay(dueDate)}`}>
                           <TimePickerField
                             ariaLabel="Return time"
                             mode="input"
@@ -2112,20 +2095,7 @@ export function NewReservationSheet({
                           only after its return time has passed.
                         </p>
                       ) : null}
-                      {timesOptional && (!pickupTime || !dueTime) && requestedInterval ? (
-                        <p className="text-xs text-dashboard-muted" role="status">
-                          {!pickupTime && !dueTime
-                            ? "Pickup and return times are not set. "
-                            : !pickupTime
-                              ? "Pickup time is not set. "
-                              : "Return time is not set. "}
-                          Availability still blocks the garment from{" "}
-                          {formatLocalClock(effectivePickupTime)} on{" "}
-                          {formatIsoDateForDisplay(pickupDate)} until{" "}
-                          {formatLocalClock(effectiveDueTime)} on {formatIsoDateForDisplay(dueDate)}.
-                        </p>
-                      ) : null}
-                      {!requestedInterval && effectivePickupTime && effectiveDueTime && !minimumDurationIssue ? (
+                      {!requestedInterval && pickupTime && dueTime && !minimumDurationIssue ? (
                         <p className="text-xs text-warning-500" role="alert">
                           Return must be after pickup and the rental period cannot exceed 31 days.
                           Times use the selected branch timezone.
@@ -2434,6 +2404,19 @@ export function NewReservationSheet({
                       </a>
                     ) : null}
                   </div>
+                  {held.paymentInstructions.rail === "cash" && step === "held" ? (
+                    <label className="hidden items-center gap-2 rounded-md border border-dashboard-border px-3 py-2 text-sm text-dashboard-navy sm:flex">
+                      <input
+                        type="checkbox"
+                        checked={cashReceived}
+                        onChange={(event) => {
+                          setCashReceived(event.target.checked);
+                          completeGuard.resetIntent();
+                        }}
+                      />
+                      Cash received
+                    </label>
+                  ) : null}
                 </div>
 
                 {held.paymentInstructions.rail === "cash" ? (
@@ -2465,80 +2448,66 @@ export function NewReservationSheet({
                       ) : null}
                     </Field>
                     {step === "held" ? (
-                      <p className="text-xs text-dashboard-muted">
-                        Confirming records this cash as received.
-                      </p>
+                      <label className="flex h-10 items-center gap-2 rounded-md border border-dashboard-border px-3 text-sm text-dashboard-navy sm:hidden">
+                        <input
+                          type="checkbox"
+                          checked={cashReceived}
+                          onChange={(event) => {
+                            setCashReceived(event.target.checked);
+                            completeGuard.resetIntent();
+                          }}
+                        />
+                        Cash received
+                      </label>
                     ) : null}
                   </div>
                 ) : (
                   <div className="mt-3 space-y-2">
                     <p className="text-xs text-dashboard-muted">
-                      {receiptAttached
-                        ? "The receipt is attached to this reservation. Staff must still verify the payment."
-                        : step === "held"
-                          ? "Receipts are optional. A selected receipt stays on this device until you submit for verification. Staff can verify the payment manually without one."
-                          : "No receipt was attached. Receipts are optional; staff can verify the payment manually."}
+                      Payment evidence is optional for staff-created reservations. Upload a receipt
+                      only if you want to keep it with this reservation; staff can verify the
+                      payment manually after checking the merchant account or the customer&apos;s
+                      receipt in person.
                     </p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <label className="inline-flex h-9 cursor-pointer items-center gap-2 rounded-md border border-dashboard-border px-3 text-sm font-medium text-dashboard-navy hover:bg-dashboard-active">
+                        <FileUp className="h-4 w-4" aria-hidden="true" />
+                        {receiptFile ? receiptFile.name : "Choose receipt"}
+                        <input
+                          type="file"
+                          className="sr-only"
+                          accept="image/jpeg,image/png,image/webp,application/pdf"
+                          onChange={(event) => {
+                            setReceiptFile(event.target.files?.[0] ?? null);
+                            setReceiptAttached(false);
+                            receiptGuard.resetIntent();
+                            completeGuard.resetIntent();
+                          }}
+                        />
+                      </label>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="secondary"
+                        disabled={!receiptFile || receiptAttached || receiptGuard.isSubmitting}
+                        onClick={() =>
+                          void uploadPaymentReceipt().catch((error) =>
+                            handleFailure(error, receiptGuard)
+                          )
+                        }
+                      >
+                        {receiptGuard.isSubmitting
+                          ? "Uploading…"
+                          : receiptAttached
+                            ? "Receipt uploaded"
+                            : "Upload receipt"}
+                      </Button>
+                    </div>
                     {receiptAttached ? (
-                      <p role="status" className="text-xs font-medium text-success-500">
-                        Receipt attached{receiptFile ? <>: {receiptFile.name}</> : null}. Payment
-                        will still require staff verification before confirmation.
+                      <p className="text-xs font-medium text-success-500">
+                        Receipt attached. Payment will still require staff verification before
+                        confirmation.
                       </p>
-                    ) : step === "held" ? (
-                      <div className="flex flex-wrap items-center gap-3">
-                        {receiptFile ? (
-                          <div className="flex flex-col items-start gap-1">
-                            <div className="relative h-24 w-24 overflow-hidden rounded-md border border-dashboard-border bg-dashboard-canvas">
-                              {receiptPreviewUrl ? (
-                                // eslint-disable-next-line @next/next/no-img-element -- local receipt preview
-                                <img
-                                  src={receiptPreviewUrl}
-                                  alt={receiptFile.name}
-                                  className="h-full w-full object-contain"
-                                />
-                              ) : (
-                                <div className="flex h-full w-full flex-col items-center justify-center gap-1 p-2 text-dashboard-muted">
-                                  <FileText className="h-6 w-6" aria-hidden="true" />
-                                  <span className="line-clamp-2 text-center text-[10px]">
-                                    {receiptFile.name}
-                                  </span>
-                                </div>
-                              )}
-                              <button
-                                type="button"
-                                aria-label="Remove receipt"
-                                disabled={receiptGuard.isSubmitting || completeGuard.isSubmitting}
-                                onClick={() => stageReceiptFile(null)}
-                                className="absolute right-1 top-1 inline-flex h-6 w-6 items-center justify-center rounded-full bg-white/95 text-dashboard-danger shadow-sm hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dashboard-accent/50 disabled:cursor-not-allowed disabled:opacity-50"
-                              >
-                                <X className="h-4 w-4" aria-hidden="true" />
-                              </button>
-                            </div>
-                            {receiptPreviewUrl ? (
-                              <span
-                                className="max-w-24 truncate text-[10px] text-dashboard-muted"
-                                title={receiptFile.name}
-                              >
-                                {receiptFile.name}
-                              </span>
-                            ) : null}
-                          </div>
-                        ) : null}
-                        <label className="inline-flex h-9 cursor-pointer items-center gap-2 rounded-md border border-dashboard-border px-3 text-sm font-medium text-dashboard-navy hover:bg-dashboard-active">
-                          <FileUp className="h-4 w-4" aria-hidden="true" />
-                          {receiptFile ? "Replace receipt" : "Choose receipt"}
-                          <input
-                            type="file"
-                            className="sr-only"
-                            accept="image/jpeg,image/png,image/webp,application/pdf"
-                            disabled={receiptGuard.isSubmitting || completeGuard.isSubmitting}
-                            onChange={(event) => {
-                              stageReceiptFile(event.currentTarget.files?.[0] ?? null);
-                              event.currentTarget.value = "";
-                            }}
-                          />
-                        </label>
-                      </div>
                     ) : null}
                   </div>
                 )}
@@ -2946,19 +2915,31 @@ export function NewReservationSheet({
                 held.paymentInstructions.rail === "cash" &&
                 BigInt(held.reservation.price_snapshot.due_now_minor) > 0n ? (
                   <p className="text-xs text-dashboard-muted">
-                    Enter the cash tendered before recording this past booking as Completed.
+                    Confirm that the cash was received and enter the amount tendered before
+                    recording this past booking as Completed.
                   </p>
                 ) : null}
+
+                <label className="flex items-start gap-3 rounded-lg border border-dashboard-border p-3 text-sm">
+                  <input
+                    type="checkbox"
+                    className="mt-1"
+                    checked={termsAccepted}
+                    onChange={(event) => {
+                      setTermsAccepted(event.target.checked);
+                      completeGuard.resetIntent();
+                    }}
+                  />
+                  <span className="text-dashboard-navy">
+                    Customer has reviewed and accepted the business rental terms.
+                  </span>
+                </label>
 
                 <div className="flex flex-wrap justify-between gap-2 border-t border-dashboard-border pt-4">
                   <Button
                     type="button"
                     variant="danger"
-                    disabled={
-                      cancelGuard.isSubmitting ||
-                      completeGuard.isSubmitting ||
-                      receiptGuard.isSubmitting
-                    }
+                    disabled={cancelGuard.isSubmitting || completeGuard.isSubmitting}
                     onClick={() => {
                       setCancelDialogError(null);
                       setCancelDialogOpen(true);
@@ -2972,10 +2953,12 @@ export function NewReservationSheet({
                       completeGuard.isSubmitting ||
                       cancelGuard.isSubmitting ||
                       receiptGuard.isSubmitting ||
+                      !termsAccepted ||
                       !customerReady ||
                       (BigInt(held.reservation.price_snapshot.due_now_minor) > 0n &&
                         (held.paymentInstructions.rail === "cash"
-                          ? cashTenderedMinor === null ||
+                          ? !cashReceived ||
+                            cashTenderedMinor === null ||
                             BigInt(cashTenderedMinor) <
                               BigInt(held.reservation.price_snapshot.due_now_minor)
                           : false))
@@ -2984,10 +2967,8 @@ export function NewReservationSheet({
                       void complete().catch((error) => handleFailure(error, completeGuard))
                     }
                   >
-                    {receiptGuard.isSubmitting
-                      ? "Uploading receipt…"
-                      : completeGuard.isSubmitting
-                        ? "Completing…"
+                    {completeGuard.isSubmitting
+                      ? "Completing…"
                       : pastDueBooking
                         ? "Record as Completed"
                         : held.paymentInstructions.rail === "cash"
@@ -3197,14 +3178,6 @@ function buildCancellationCustomerInput(input: {
       ...(notes ? { notes } : {}),
     },
   };
-}
-
-/** "08:00" -> "8:00 AM": a branch-local wall-clock time, so no timezone conversion applies. */
-function formatLocalClock(time: string): string {
-  const [hours = 0, minutes = 0] = time.split(":").map(Number);
-  return new Intl.DateTimeFormat("en-PH", { hour: "numeric", minute: "2-digit", timeZone: "UTC" }).format(
-    new Date(Date.UTC(2000, 0, 1, hours, minutes))
-  );
 }
 
 function toRequestedInterval(

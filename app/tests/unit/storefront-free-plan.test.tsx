@@ -76,7 +76,7 @@ function renderPage(page: React.ReactNode) {
 
 async function expectUpgradeDialog(feature: string) {
   expect(await screen.findByRole("heading", { name: "Upgrade to unlock" })).toBeVisible();
-  expect(await screen.findByText(`${feature} is not included in the Free plan.`)).toBeVisible();
+  expect(screen.getByText(`${feature} is not included in Free. Choose a paid plan to continue.`)).toBeVisible();
 }
 
 describe("Free storefront feature gates", () => {
@@ -90,17 +90,7 @@ describe("Free storefront feature gates", () => {
     api.publishStorefrontPolicy.mockResolvedValue({ data: settings(), requestId: "r" });
     api.setStorefrontPublished.mockResolvedValue({ data: settings({ status: "published" }), requestId: "r" });
     api.getPublicPlanCatalog.mockResolvedValue({ data: { plans: [] } });
-    api.getBilling.mockResolvedValue({
-      data: {
-        plan: { code: "free", name: "Free", monthly_minor: "0", currency: "PHP", physical_assets_max: 20, frontdesk_seats_max: 0, trial_days: 0 },
-        subscription: { status: "active", trial_ends_at: null, read_only_until: null, current_period_end: null },
-        access: { level: "full", reason: "free", ends_at: null, days_left: null, pending_payment: false, storefront_online: true, storefront_offline_at: null, read_only_until: null },
-        can_pay: true,
-        can_start_trial: false,
-        payment_methods: [],
-        payments: [],
-      },
-    });
+    api.getBilling.mockResolvedValue({ data: { can_start_trial: false } });
   });
 
   it("publishes without an online payment method and opens upgrade from Customer requirements", async () => {
@@ -119,7 +109,7 @@ describe("Free storefront feature gates", () => {
       data: settings({ policy: { version: 2, effective_at: "2026-10-15T00:00:00.000Z", rules: deliveryPolicy, image_urls: {} } }),
       requestId: "r",
     });
-    renderPage(<StorefrontBookingSettingsPage />);
+    renderPage(<StorefrontPoliciesPage />);
 
     expect(await screen.findByText("Your saved delivery settings are inactive on Free and will return if you upgrade.")).toBeVisible();
     const delivery = await screen.findByRole("switch", { name: "Offer delivery" });
@@ -162,7 +152,8 @@ describe("Free storefront feature gates", () => {
     const fittings = await screen.findByRole("switch", { name: /Take fitting requests online/ });
     expect(fittings).toHaveAttribute("aria-disabled", "true");
     fireEvent.click(fittings);
-    await expectUpgradeDialog("storefront fitting requests");
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Upgrade to unlock" })).toBeVisible());
+    expect(screen.getByText("storefront fitting requests is not included in Free. Choose a paid plan to continue.")).toBeVisible();
   });
 
   it("keeps Delivery editable on paid plans", async () => {
@@ -171,89 +162,12 @@ describe("Free storefront feature gates", () => {
       data: settings({ policy: { version: 2, effective_at: "2026-10-15T00:00:00.000Z", rules: { ...deliveryPolicy, delivery: { enabled: false, fee_minor: "0", notes: null } }, image_urls: {} } }),
       requestId: "r",
     });
-    renderPage(<StorefrontBookingSettingsPage />);
+    renderPage(<StorefrontPoliciesPage />);
 
     const delivery = await screen.findByRole("switch", { name: "Offer delivery" });
     fireEvent.click(delivery);
     expect(delivery).toBeChecked();
     expect(screen.queryByRole("heading", { name: "Upgrade to unlock" })).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Save delivery settings" }));
-    await waitFor(() => expect(api.publishStorefrontPolicy).toHaveBeenCalledWith(
-      expect.objectContaining({
-        expected_version: 2,
-        rules: expect.objectContaining({
-          ...deliveryPolicy,
-          delivery: { enabled: true, fee_minor: "0", notes: null },
-        }),
-      }),
-      expect.any(String),
-    ));
-    expect(api.updateStorefront).not.toHaveBeenCalled();
-  });
-
-  it("removes Delivery from Rental policies", async () => {
-    renderPage(<StorefrontPoliciesPage />);
-
-    await screen.findByRole("heading", { name: "Rental policies" });
-    expect(screen.queryByRole("switch", { name: "Offer delivery" })).toBeNull();
-  });
-
-  it("requires a published rental policy before editing delivery", async () => {
-    access.free = false;
-    api.getStorefront.mockResolvedValue({ data: settings(), requestId: "r" });
-    renderPage(<StorefrontBookingSettingsPage />);
-
-    expect(await screen.findByText(/Publish a rental policy before changing delivery settings/)).toBeVisible();
-    expect(screen.getByRole("link", { name: "Go to Rental policies" })).toHaveAttribute("href", "/storefront/policies");
-    expect(screen.getByRole("switch", { name: "Offer delivery" })).toBeDisabled();
-  });
-
-  it("saves booking settings before delivery and keeps the delivery draft for retry on failure", async () => {
-    access.free = false;
-    const current = settings({
-      policy: { version: 2, effective_at: "2026-10-15T00:00:00.000Z", rules: { ...deliveryPolicy, delivery: { enabled: false, fee_minor: "0", notes: null } }, image_urls: {} },
-    });
-    api.getStorefront.mockResolvedValue({ data: current, requestId: "r" });
-    const updatedDocument = structuredClone(current.document);
-    updatedDocument.checkout.reservation_requests = !updatedDocument.checkout.reservation_requests;
-    api.updateStorefront.mockResolvedValueOnce({ data: settings({ ...current, version: 4, document: updatedDocument }), requestId: "r" });
-    api.publishStorefrontPolicy.mockRejectedValueOnce(new Error("temporary failure"));
-    renderPage(<StorefrontBookingSettingsPage />);
-
-    fireEvent.click(await screen.findByRole("switch", { name: /Take reservations online/ }));
-    fireEvent.click(screen.getByRole("switch", { name: "Offer delivery" }));
-    fireEvent.change(screen.getByRole("textbox", { name: "Delivery notes" }), { target: { value: "North side only" } });
-    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
-
-    await waitFor(() => expect(api.publishStorefrontPolicy).toHaveBeenCalledTimes(1));
-    expect(api.updateStorefront).toHaveBeenCalledTimes(1);
-    const documentSaveOrder = api.updateStorefront.mock.invocationCallOrder[0] ?? 0;
-    const policySaveOrder = api.publishStorefrontPolicy.mock.invocationCallOrder[0] ?? 0;
-    expect(documentSaveOrder).toBeGreaterThan(0);
-    expect(policySaveOrder).toBeGreaterThan(documentSaveOrder);
-    expect(screen.getByRole("textbox", { name: "Delivery notes" })).toHaveValue("North side only");
-    expect(await screen.findByRole("button", { name: "Save delivery settings" })).toBeEnabled();
-
-    api.publishStorefrontPolicy.mockResolvedValueOnce({
-      data: settings({
-        ...current,
-        version: 4,
-        policy: {
-          ...current.policy,
-          version: 3,
-          rules: { ...deliveryPolicy, delivery: { enabled: true, fee_minor: "0", notes: "North side only" } },
-        },
-      }),
-      requestId: "retry",
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Save delivery settings" }));
-    await waitFor(() => expect(screen.getByText("Saved")).toBeVisible());
-    expect(api.publishStorefrontPolicy).toHaveBeenCalledTimes(2);
-    expect(api.updateStorefront).toHaveBeenCalledTimes(1);
-    expect(api.publishStorefrontPolicy.mock.calls[1]?.[0].rules.delivery).toEqual({
-      enabled: true,
-      fee_minor: "0",
-      notes: "North side only",
-    });
+    expect(await screen.findByRole("button", { name: "Publish new version" })).toBeEnabled();
   });
 });
