@@ -12,14 +12,13 @@ export const metadata: Metadata = {
 
 export default function TermsPage() {
   return (
-    <LegalLayout title="Terms of Service" updated="October 2, 2026">
+    <LegalLayout title="Terms of Service" updated="October 20, 2026">
       <p>
         These Terms of Service govern access to and use of Drezivo, a hosted software platform for
-        clothing rental businesses. Drezivo is currently operated in the Philippines by{' '}
-        <strong>Ryanny Romero</strong> and <strong>Vergel Bautista</strong>. References to
-        &quot;Drezivo,&quot; &quot;we,&quot; &quot;us,&quot; or &quot;our&quot; refer to the current
-        operators of the service until Drezivo begins operating through a separate registered legal
-        entity.
+        clothing rental businesses. Drezivo is currently operated in the Philippines by its
+        co-founders. Until Drezivo operates through a separate registered legal entity, references
+        to &quot;Drezivo,&quot; &quot;we,&quot; &quot;us,&quot; or &quot;our&quot; refer to its
+        co-founders in their role as the service operators.
       </p>
       <p>
         Questions, support requests, account-closure requests, and legal notices may be sent to{' '}
@@ -168,8 +167,8 @@ export default function TermsPage() {
         described in the <a href="/privacy">Privacy Policy</a>.
       </p>
       <p>
-        Third-party outages, network failures, or changes outside Drezivo&apos;s reasonable control may
-        temporarily affect the service. Drezivo remains responsible for its own obligations when
+        Third-party outages, network failures, or changes outside Drezivo&apos;s reasonable control
+        may temporarily affect the service. Drezivo remains responsible for its own obligations when
         selecting and configuring service providers.
       </p>
 
@@ -218,9 +217,9 @@ export default function TermsPage() {
       <h2>13. Disclaimers and limitation of liability</h2>
       <p>
         To the maximum extent permitted by Philippine law, Drezivo does not warrant that the service
-        will meet every business requirement, prevent every loss, or replace a business&apos;s legal,
-        accounting, tax, insurance, security, payment-verification, or operational controls. Rental
-        businesses remain responsible for the merchant decisions described in these Terms.
+        will meet every business requirement, prevent every loss, or replace a business&apos;s
+        legal, accounting, tax, insurance, security, payment-verification, or operational controls.
+        Rental businesses remain responsible for the merchant decisions described in these Terms.
       </p>
       <p>
         To the maximum extent permitted by law, Drezivo and its current operators will not be liable
@@ -264,12 +263,14 @@ export default function TermsPage() {
 
       <h2>17. Contact</h2>
       <p>
-        <strong>Operator:</strong> Drezivo, currently operated by Ryanny Romero and Vergel Bautista
+        <strong>Operator:</strong> Drezivo, currently operated by its co-founders
         <br />
         <strong>Location:</strong> Philippines
         <br />
         <strong>Support and legal contact:</strong>{' '}
         <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>
+        <br />
+        <strong>Phone:</strong> <a href="tel:+639453097473">09453097473</a>
       </p>
     </LegalLayout>
   );
