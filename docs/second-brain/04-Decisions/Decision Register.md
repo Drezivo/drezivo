@@ -13,6 +13,7 @@ tags: [drezivo, decisions, adr]
 - [[Monorepo Consolidation]] - one root Git repository with five deployable workspaces.
 - [[Drizzle and PostgreSQL]] - Drizzle plus reviewed SQL for PostgreSQL constraints and RLS.
 - [[Supabase Managed PostgreSQL]] - Supabase hosts PostgreSQL only; Drezivo keeps Clerk, Express authorization, and restricted runtime roles.
+- [[Fittings Backend Decision Record]] - approved Fittings domain and backend behavior.
 - [[Cloudflare R2 Object Storage]] - production object storage targets Cloudflare R2; local development keeps MinIO behind the same S3-compatible boundary.
 - [[Single Standard Pilot Plan]] - one sellable Standard offer at PHP 300/month, internally backed by `starter` v1.
 - [[Shared Contracts Package]] - workspace package `@drezivo/contracts` as the API contract authority.

@@ -1,7 +1,7 @@
 ---
 title: Dashboard V1 End-to-End Checklist
 type: implementation-checklist
-status: in-progress
+status: archived
 owner: Drezivo team
 updated: 2026-09-30
 tags: [drezivo, v1, dashboard, operations, checklist]

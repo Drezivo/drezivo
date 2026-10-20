@@ -1,7 +1,7 @@
 ---
 title: Guest Reservation Email Verification Removal Plan
 type: implementation-plan
-status: superseded
+status: archived
 owner: Drezivo team
 source: "Owner request (2026-10-04); ../../decisions/0010-storefront-cms-and-guest-requests.md"
 updated: 2026-10-05

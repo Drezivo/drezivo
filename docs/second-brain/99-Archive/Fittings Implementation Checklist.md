@@ -1,7 +1,7 @@
 ---
 title: Fittings V1.1 Implementation Checklist
 type: implementation-checklist
-status: in-progress
+status: archived
 owner: Drezivo team
 updated: 2026-10-01
 tags: [drezivo, v1.1, fittings, frontend, backend, implementation, checklist]
@@ -711,7 +711,7 @@ The fitting frontend prototype is complete when:
     - [x] Every BE-0 decision is recorded in [[Fittings Backend Decision Record]] and reflected in canonical PRD/TRD/Data Model/ERD.
     - [x] `Fittings Prototype Review Gate.md` is updated to point to the approved backend decisions and production deltas.
     - [x] No unresolved behavior required for BE-1/BE-2 schema and contract design remains implicit.
-  - **Evidence:** `docs/second-brain/05-Operations/Fittings Backend Decision Record.md`, plus the aligned canonical documents.
+  - **Evidence:** `docs/second-brain/04-Decisions/Fittings Backend Decision Record.md`, plus the aligned canonical documents.
 
 **BE-0 exit gate:** **PASSED 2026-09-26.** BE-1 contract/API-surface work may begin. Database migrations still wait for the BE-1 contracts to be approved as required by BE-2.
 

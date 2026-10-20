@@ -1,3 +1,11 @@
+---
+title: Fittings Prototype Review Gate
+type: review-gate
+status: archived
+updated: 2026-10-21
+tags: [drezivo, fittings, archive]
+---
+
 # Fittings Prototype Review Gate
 
 ## Purpose

@@ -3,7 +3,7 @@ title: Fittings Backend Decision Record
 type: product-domain-decision-record
 status: approved-for-implementation
 owner: Drezivo team
-updated: 2026-10-01
+updated: 2026-10-21
 tags: [drezivo, v1.1, fittings, backend, decisions, domain]
 ---
 
