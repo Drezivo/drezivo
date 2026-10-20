@@ -421,6 +421,22 @@ export function monthWindow(month: Date): { startDate: string; endDate: string }
   };
 }
 
+/** The staff availability calendar API serves at most this many days per request. */
+const AVAILABILITY_WINDOW_MAX_DAYS = 62;
+
+/**
+ * Days to load availability for: the visible month, reaching back to a pickup date chosen in an
+ * earlier month. The range calendar treats a day without availability as disabled and starts a
+ * new range when one falls inside the selection, so once staff moved on from a late-October pickup
+ * to November, every November click became a new pickup date instead of the return date.
+ */
+export function availabilityWindow(month: Date, pickupDate: string): { startDate: string; endDate: string } {
+  const window = monthWindow(month);
+  if (!pickupDate || pickupDate >= window.startDate) return window;
+  const earliest = addIsoDays(window.endDate, -(AVAILABILITY_WINDOW_MAX_DAYS - 1));
+  return { startDate: pickupDate > earliest ? pickupDate : earliest, endDate: window.endDate };
+}
+
 export function todayInTimeZone(timeZone: string, now = new Date()): string {
   const parts = Object.fromEntries(
     new Intl.DateTimeFormat("en-US", {
