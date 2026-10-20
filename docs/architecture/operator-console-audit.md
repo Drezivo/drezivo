@@ -1,8 +1,6 @@
 # Operator console audit projection
 
-Status: operator application released on 2026-10-16. Preview has migrations 0085 and 0086. The
-first production migration attempt rolled back 0085 after finding duplicate legacy session events;
-migration 0084_session_audit_uniqueness_repair.sql is the forward correction.
+Status: implemented and tested locally on 2026-10-15; no hosted migration or release.
 Owner instruction: two individual Superadmins (the founder and Ryanny) with equal permissions.
 
 The operator console reads platform billing and operator accountability, and excludes merchant
@@ -23,25 +21,10 @@ Payment review snapshots record the opaque payer membership, amount, currency, v
 reviewer and resulting due date when available. Missing attribution is never guessed.
 
 Existing append-only global audit storage records session events and operator command replay
-results. Migration `0084_session_audit_uniqueness_repair.sql` preserves every legacy session row,
-marks one canonical row for each operator/session/action, and limits the uniqueness index to those
-canonical and future rows. The runtime role cannot set the canonical marker. This lets existing
-duplicates remain as evidence while new sequential and concurrent retries collapse to one event.
-The migration runs in filename order before 0085 in production. Environments with exactly this one
-history gap can target it explicitly; staging and preview, which already recorded 0085 and 0086,
-use the broader 0087 operator-migration closure to apply it together with the pgcrypto search-path
-fix. All paths converge on the same index definition.
-
-Partial unique indexes enforce one future event per operator/session/action and one global command
-result per operator/intent hash. Tenant commands gain a nullable request fingerprint so a changed
-request cannot silently replay another intent. Existing readers and business writes remain
-compatible. New operator code requires migrations 0084 through 0086 before use.
-
-Rollback keeps the additive database migrations and audit rows. Before a migration commits, its
-transaction rollback leaves the database unchanged. After commit, roll the operator API and web
-application back together to their recorded known-good deployment if the console is unhealthy. A
-database correction ships as another forward migration; never remove an applied migration file,
-rewrite its ledger row, drop audit evidence, or assume an application rollback reverses schema.
+results. Partial unique indexes enforce one event per operator/session/action and one global
+command result per operator/intent hash. Tenant commands gain a nullable request fingerprint so a
+changed request cannot silently replay another intent. Existing readers and business writes remain
+compatible. New operator code requires this migration before rollout.
 
 Support grants are read-only, reason-coded, self-attributed, revocable and limited to eight hours.
 Job retries accept only terminal dead jobs. Notification retry rejects ambiguous provider acceptance

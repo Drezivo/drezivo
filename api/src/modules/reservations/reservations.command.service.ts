@@ -107,8 +107,6 @@ export async function createStaffReservationCommand(
         actor: { kind: 'staff', key: context.principalId },
         eventDate: request.event_date ?? null,
         fulfillmentMethod: request.fulfillment_method,
-        pickupTimeUnspecified: request.pickup_time_unspecified ?? false,
-        returnTimeUnspecified: request.return_time_unspecified ?? false,
         quote,
         assetId: firstClaimedLine.assetId,
         lines: claimedLines,
@@ -377,8 +375,6 @@ export async function createHeldReservation(
     actor: { kind: 'staff' | 'guest'; key: string };
     eventDate: string | null;
     fulfillmentMethod: StaffReservationCreateRequest['fulfillment_method'];
-    pickupTimeUnspecified?: boolean;
-    returnTimeUnspecified?: boolean;
     quote: ReservationQuote;
     assetId: string;
     lines?: ClaimedReservationLine[];
@@ -434,8 +430,6 @@ export async function createHeldReservation(
     eventDate: input.eventDate,
     pickupAt: input.quote.pickup_at,
     dueAt: input.quote.due_at,
-    pickupTimeUnspecified: input.pickupTimeUnspecified ?? false,
-    returnTimeUnspecified: input.returnTimeUnspecified ?? false,
     timezoneSnapshot: input.quote.timezone_snapshot,
     customerSnapshot: input.customer
       ? {

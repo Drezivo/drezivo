@@ -123,8 +123,6 @@ const staffReservationCreateBase = z.object({
   requested_interval: instantInterval,
   event_date: isoDate.optional(),
   fulfillment_method: fulfillmentMethod,
-  pickup_time_unspecified: z.boolean().optional(),
-  return_time_unspecified: z.boolean().optional(),
   payment_method_id: paymentMethodId,
 });
 
@@ -148,20 +146,6 @@ export const staffReservationCreateRequest = staffReservationCreateBase
   })
   .strict()
   .superRefine((value, ctx) => {
-    if (
-      value.fulfillment_method !== 'pickup' &&
-      (value.pickup_time_unspecified === true || value.return_time_unspecified === true)
-    ) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: [
-          value.pickup_time_unspecified === true
-            ? 'pickup_time_unspecified'
-            : 'return_time_unspecified',
-        ],
-        message: 'Unspecified pickup and return times are only supported for staff pickup reservations.',
-      });
-    }
     if (value.lines && value.additional_variant_ids !== undefined) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,

@@ -11047,10 +11047,6 @@ paths:
                 fulfillment_method:
                   type: string
                   enum: *a37
-                pickup_time_unspecified:
-                  type: boolean
-                return_time_unspecified:
-                  type: boolean
                 payment_method_id:
                   type: string
                   format: uuid
@@ -16464,8 +16460,6 @@ paths:
                                     - pending_confirmation
                                     - confirmed
                                     - picked_up
-                                time_unspecified:
-                                  type: boolean
                               required:
                                 - id
                                 - source
@@ -32747,19 +32741,6 @@ paths:
                           - storefront_online
                           - storefront_offline_at
                           - read_only_until
-                        additionalProperties: false
-                      usage:
-                        type: object
-                        properties:
-                          active_garments:
-                            type: integer
-                            minimum: 0
-                          frontdesk_seats_used:
-                            type: integer
-                            minimum: 0
-                        required:
-                          - active_garments
-                          - frontdesk_seats_used
                         additionalProperties: false
                       can_pay:
                         type: boolean

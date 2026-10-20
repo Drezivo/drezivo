@@ -55,9 +55,7 @@ function renderPage() {
 
 async function waitForDefaultGuideLoaded() {
   await waitFor(() => expect(api.getDefaultMeasurementGuide).toHaveBeenCalled());
-  await waitFor(() =>
-    expect(screen.getByRole("button", { name: "Use default for all" })).toBeEnabled()
-  );
+  await waitFor(() => expect(screen.getByRole("button", { name: "Use default for all" })).toBeEnabled());
 }
 
 describe("AddClothingPage", () => {
@@ -142,10 +140,7 @@ describe("AddClothingPage", () => {
   it("defaults to one flexible-fit variant rather than using the mode as a piece count", () => {
     renderPage();
 
-    expect(screen.getByRole("button", { name: "One flexible-fit variant" })).toHaveAttribute(
-      "aria-pressed",
-      "true"
-    );
+    expect(screen.getByRole("button", { name: "One flexible-fit variant" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByText(/1 selected · 1 Total Piece/)).toBeVisible();
     expect(screen.getAllByText("Flexible fit").length).toBeGreaterThanOrEqual(1);
     expect(screen.getByLabelText("Fits sizes (optional)")).toBeVisible();
@@ -271,9 +266,7 @@ describe("AddClothingPage", () => {
     expect(screen.getByLabelText("Flexible fit waist")).toBeVisible();
     expect(screen.getByLabelText("Flexible fit length")).toBeVisible();
     for (const field of ["bust", "waist", "length"]) {
-      const labels = Array.from(
-        measurementGrid!.querySelectorAll(`label[for="FREE_SIZE-${field}-measurement"]`)
-      );
+      const labels = Array.from(measurementGrid!.querySelectorAll(`label[for="FREE_SIZE-${field}-measurement"]`));
       expect(labels).toHaveLength(2);
       expect(labels.some((element) => element.classList.contains("lg:block"))).toBe(true);
       expect(labels.some((element) => element.classList.contains("lg:hidden"))).toBe(true);
@@ -298,9 +291,10 @@ describe("AddClothingPage", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "Open Default Size Guide image preview" }));
     expect(screen.getByRole("dialog", { name: "Image preview" })).toBeVisible();
-    expect(
-      screen.getByRole("img", { name: "Default Size Guide full-size preview" })
-    ).toHaveAttribute("src", "https://images.example.test/default-size-guide.png");
+    expect(screen.getByRole("img", { name: "Default Size Guide full-size preview" })).toHaveAttribute(
+      "src",
+      "https://images.example.test/default-size-guide.png"
+    );
     fireEvent.click(screen.getByRole("button", { name: "Close image preview" }));
     expect(screen.queryByText("Default measurement image preview")).not.toBeInTheDocument();
   });
@@ -345,11 +339,7 @@ describe("AddClothingPage", () => {
     if (!("arrayBuffer" in File.prototype)) {
       Object.defineProperty(File.prototype, "arrayBuffer", {
         configurable: true,
-        value: vi
-          .fn()
-          .mockResolvedValue(
-            new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]).buffer
-          ),
+        value: vi.fn().mockResolvedValue(new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]).buffer),
       });
     }
 
@@ -393,18 +383,12 @@ describe("AddClothingPage", () => {
     fireEvent.change(screen.getByLabelText("Guide Name"), {
       target: { value: "Luna Standard Size Guide" },
     });
-    const guideFile = new File(
-      [new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3])],
-      "guide.png",
-      { type: "image/png" }
-    );
+    const guideFile = new File([new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3])], "guide.png", { type: "image/png" });
     fireEvent.change(screen.getByLabelText("Default size guide image"), {
       target: { files: [guideFile] },
     });
     // The image is read at pick time; Save stays disabled until that finishes.
-    await waitFor(() =>
-      expect(screen.getByRole("button", { name: "Save Default Size Guide" })).toBeEnabled()
-    );
+    await waitFor(() => expect(screen.getByRole("button", { name: "Save Default Size Guide" })).toBeEnabled());
     fireEvent.click(screen.getByRole("button", { name: "Save Default Size Guide" }));
 
     await waitFor(() => expect(api.authorizeUpload).toHaveBeenCalledTimes(1));
@@ -422,9 +406,7 @@ describe("AddClothingPage", () => {
     });
 
     expect(screen.getByRole("button", { name: "Use default for all" })).toBeEnabled();
-    expect(
-      screen.queryByRole("button", { name: "Add Default Size Guide" })
-    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Add Default Size Guide" })).not.toBeInTheDocument();
     expect(screen.queryByText("Luna Standard Size Guide")).not.toBeInTheDocument();
     const customTrigger = screen.getByRole("button", { name: "Custom" });
     customTrigger.focus();
@@ -438,10 +420,7 @@ describe("AddClothingPage", () => {
     await waitForDefaultGuideLoaded();
 
     expect(screen.getByText("1 day recovery after return")).toBeVisible();
-    expect(screen.getByRole("button", { name: /Rental Timing/ })).toHaveAttribute(
-      "aria-expanded",
-      "true"
-    );
+    expect(screen.getByRole("button", { name: /Rental Timing/ })).toHaveAttribute("aria-expanded", "true");
     expect(screen.queryByLabelText("Prep Days Before Rental")).not.toBeInTheDocument();
     expect(screen.getByLabelText("Recovery Days After Return")).toHaveValue("1");
   });
@@ -466,9 +445,7 @@ describe("AddClothingPage", () => {
     expect(screen.getByRole("button", { name: "Add Clothing" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Save as Draft" })).toBeEnabled();
     expect(
-      screen.getByText(
-        "Add at least 1 photo to activate this clothing. You can still save it as a draft."
-      )
+      screen.getByText("Add at least 1 photo to activate this clothing. You can still save it as a draft.")
     ).toBeVisible();
   });
 
@@ -484,9 +461,7 @@ describe("AddClothingPage", () => {
     expect(await screen.findByRole("dialog")).toBeVisible();
     expect(screen.getByText("Discard unsaved changes?")).toBeVisible();
     expect(
-      screen.getByText(
-        "You have changes that haven't been saved as a draft. Leaving this page will discard them."
-      )
+      screen.getByText("You have changes that haven't been saved as a draft. Leaving this page will discard them.")
     ).toBeVisible();
 
     fireEvent.click(screen.getByRole("button", { name: "Stay on page" }));
@@ -535,9 +510,7 @@ describe("AddClothingPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Multiple labeled sizes" }));
 
     fireEvent.click(screen.getByRole("button", { name: "Use default for all" }));
-    await waitFor(() =>
-      expect(screen.getAllByRole("button", { name: "Default guide" })).toHaveLength(4)
-    );
+    await waitFor(() => expect(screen.getAllByRole("button", { name: "Default guide" })).toHaveLength(4));
     const defaultGuideTrigger = screen.getAllByRole("button", { name: "Default guide" })[0]!;
     defaultGuideTrigger.focus();
     fireEvent.keyDown(defaultGuideTrigger, { key: "ArrowDown" });
@@ -546,10 +519,7 @@ describe("AddClothingPage", () => {
     fireEvent.change(screen.getByLabelText("Clothing Name *"), {
       target: { value: "Emerald Evening Gown" },
     });
-    expect(screen.getByRole("button", { name: /Rental Timing/ })).toHaveAttribute(
-      "aria-expanded",
-      "true"
-    );
+    expect(screen.getByRole("button", { name: /Rental Timing/ })).toHaveAttribute("aria-expanded", "true");
     fireEvent.change(screen.getByLabelText("Recovery Days After Return"), {
       target: { value: "2" },
     });
@@ -673,9 +643,7 @@ describe("AddClothingPage", () => {
     fireEvent.change(screen.getByLabelText("Flexible fit bust"), { target: { value: "34" } });
 
     fireEvent.click(screen.getByRole("button", { name: "Save as Draft" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      "The request timed out. Please try again."
-    );
+    expect(await screen.findByRole("alert")).toHaveTextContent("The request timed out. Please try again.");
     const firstKey = api.createClothing.mock.calls[0]?.[1];
 
     fireEvent.click(screen.getByRole("button", { name: "Save as Draft" }));
@@ -731,11 +699,7 @@ describe("AddClothingPage", () => {
     if (!("arrayBuffer" in File.prototype)) {
       Object.defineProperty(File.prototype, "arrayBuffer", {
         configurable: true,
-        value: vi
-          .fn()
-          .mockResolvedValue(
-            new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]).buffer
-          ),
+        value: vi.fn().mockResolvedValue(new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]).buffer),
       });
     }
 
@@ -785,12 +749,7 @@ describe("AddClothingPage", () => {
 
     const files = Array.from(
       { length: 11 },
-      (_, index) =>
-        new File(
-          [new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3])],
-          `photo-${index + 1}.png`,
-          { type: "image/png" }
-        )
+      (_, index) => new File([new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3])], `photo-${index + 1}.png`, { type: "image/png" })
     );
     fireEvent.change(screen.getByLabelText("Clothing photos"), {
       target: { files },
@@ -800,9 +759,7 @@ describe("AddClothingPage", () => {
     expect(screen.getByText("5/5 photos")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Add Photos" })).not.toBeInTheDocument();
     await waitFor(() =>
-      expect(
-        screen.getAllByRole("button", { name: /^Open photo-\d+\.png photo preview$/ })
-      ).toHaveLength(5)
+      expect(screen.getAllByRole("img", { name: /photo-\d+\.png preview/ })).toHaveLength(5)
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Add Clothing" }));
@@ -822,9 +779,7 @@ describe("AddClothingPage", () => {
     expect(uploadFetch).toHaveBeenCalledTimes(5);
     for (const [, options] of uploadFetch.mock.calls) {
       const uploadedBody = options?.body as Blob;
-      expect(Array.from(new Uint8Array(await uploadedBody.arrayBuffer()))).toEqual([
-        0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3,
-      ]);
+      expect(Array.from(new Uint8Array(await uploadedBody.arrayBuffer()))).toEqual([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
     }
     await waitFor(() => expect(navigation.replace).toHaveBeenCalledWith("/inventory"));
     expect(navigation.push).not.toHaveBeenCalled();
@@ -833,60 +788,6 @@ describe("AddClothingPage", () => {
     const beforeUnload = new Event("beforeunload", { cancelable: true });
     expect(window.dispatchEvent(beforeUnload)).toBe(true);
     expect(beforeUnload.defaultPrevented).toBe(false);
-  });
-
-  it("opens the clicked clothing photo in a navigable lightbox", async () => {
-    let previewSequence = 0;
-    let photoIdSequence = 0;
-    vi.stubGlobal("crypto", {
-      randomUUID: vi.fn(
-        () => `00000000-0000-4000-8000-${String(++photoIdSequence).padStart(12, "0")}`
-      ),
-      subtle: { digest: vi.fn().mockResolvedValue(new Uint8Array(32).buffer) },
-    });
-    Object.defineProperty(URL, "createObjectURL", {
-      configurable: true,
-      value: vi.fn(() => `blob:photo-${++previewSequence}`),
-    });
-    const createPhoto = (name: string) => {
-      const bytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1]);
-      const file = new File([bytes], name, { type: "image/png" });
-      Object.defineProperty(file, "arrayBuffer", {
-        configurable: true,
-        value: vi.fn().mockResolvedValue(bytes.buffer),
-      });
-      return file;
-    };
-
-    renderPage();
-    await waitForDefaultGuideLoaded();
-    fireEvent.change(screen.getByLabelText("Clothing photos"), {
-      target: { files: [createPhoto("front.png"), createPhoto("back.png")] },
-    });
-
-    const previewButtons = await screen.findAllByRole("button", {
-      name: /^Open (front|back)\.png photo preview$/,
-    });
-    expect(previewButtons).toHaveLength(2);
-
-    fireEvent.click(previewButtons[1]!);
-    const dialog = await screen.findByRole("dialog", { name: "Image preview" });
-    expect(within(dialog).getByRole("img", { name: "back.png full-size preview" })).toHaveAttribute(
-      "src",
-      "blob:photo-2"
-    );
-
-    fireEvent.click(within(dialog).getByRole("button", { name: "Previous image" }));
-    expect(
-      within(dialog).getByRole("img", { name: "front.png full-size preview" })
-    ).toHaveAttribute("src", "blob:photo-1");
-    fireEvent.click(within(dialog).getByRole("button", { name: "Close image preview" }));
-
-    fireEvent.click(previewButtons[0]!);
-    const reopenedDialog = await screen.findByRole("dialog", { name: "Image preview" });
-    expect(
-      within(reopenedDialog).getByRole("img", { name: "front.png full-size preview" })
-    ).toHaveAttribute("src", "blob:photo-1");
   });
 
   it("shows local-copy guidance when a picked photo cannot be read and allows reselecting it", async () => {
@@ -899,21 +800,12 @@ describe("AddClothingPage", () => {
       value: vi.fn(),
     });
 
-    const selectedFile = new File(
-      [new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 4, 5, 6])],
-      "phone-screenshot.png",
-      {
-        type: "image/png",
-      }
-    );
-    const readFile = vi
-      .fn()
-      .mockRejectedValueOnce(
-        new DOMException("The requested file could not be read", "NotReadableError")
-      )
-      .mockResolvedValueOnce(
-        new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 4, 5, 6]).buffer
-      );
+    const selectedFile = new File([new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 4, 5, 6])], "phone-screenshot.png", {
+      type: "image/png",
+    });
+    const readFile = vi.fn()
+      .mockRejectedValueOnce(new DOMException("The requested file could not be read", "NotReadableError"))
+      .mockResolvedValueOnce(new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 4, 5, 6]).buffer);
     Object.defineProperty(selectedFile, "arrayBuffer", { configurable: true, value: readFile });
 
     renderPage();
@@ -937,9 +829,7 @@ describe("AddClothingPage", () => {
     expect(photoInput).toHaveValue("");
 
     fireEvent.change(photoInput, { target: { files: [selectedFile] } });
-    expect(
-      await screen.findByRole("button", { name: "Open phone-screenshot.png photo preview" })
-    ).toBeVisible();
+    expect(await screen.findByRole("img", { name: "phone-screenshot.png preview" })).toBeVisible();
     expect(readFile).toHaveBeenCalledTimes(2);
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Add Clothing" })).toBeEnabled();
@@ -954,10 +844,7 @@ describe("AddClothingPage", () => {
         subtle: { digest: vi.fn().mockResolvedValue(new Uint8Array(32).buffer) },
       });
       vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true }));
-      Object.defineProperty(URL, "createObjectURL", {
-        configurable: true,
-        value: vi.fn(() => "blob:photo"),
-      });
+      Object.defineProperty(URL, "createObjectURL", { configurable: true, value: vi.fn(() => "blob:photo") });
       Object.defineProperty(URL, "revokeObjectURL", { configurable: true, value: vi.fn() });
       api.authorizeUpload.mockResolvedValue({
         data: {
@@ -988,30 +875,22 @@ describe("AddClothingPage", () => {
     async function pickAndAdd(photo: File, afterPick: () => void = () => undefined) {
       renderPage();
       await waitForDefaultGuideLoaded();
-      fireEvent.change(screen.getByLabelText("Clothing Name *"), {
-        target: { value: "Alara dress" },
-      });
+      fireEvent.change(screen.getByLabelText("Clothing Name *"), { target: { value: "Alara dress" } });
       fireEvent.change(screen.getByLabelText("Flexible fit bust"), { target: { value: "34" } });
       fireEvent.change(screen.getByLabelText("Clothing photos"), { target: { files: [photo] } });
-      await waitFor(() =>
-        expect(screen.getByRole("button", { name: "Add Clothing" })).toBeEnabled()
-      );
+      await waitFor(() => expect(screen.getByRole("button", { name: "Add Clothing" })).toBeEnabled());
       afterPick();
       fireEvent.click(screen.getByRole("button", { name: "Add Clothing" }));
       await waitFor(() => expect(api.createClothing).toHaveBeenCalledTimes(1));
     }
 
     it("saves when the picked file becomes unreadable before Save (NotReadableError)", async () => {
-      const photo = new File([new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 0x10])], "dress.jpg", {
-        type: "image/jpeg",
-      });
+      const photo = new File([new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 0x10])], "dress.jpg", { type: "image/jpeg" });
       // Readable while the picker grant lasts; afterwards every read fails, as Chrome reports it.
       let accessLapsed = false;
       const read = vi.fn(() =>
         accessLapsed
-          ? Promise.reject(
-              new DOMException("The requested file could not be read", "NotReadableError")
-            )
+          ? Promise.reject(new DOMException("The requested file could not be read", "NotReadableError"))
           : Promise.resolve(new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 0x10]).buffer)
       );
       Object.defineProperty(photo, "arrayBuffer", { configurable: true, value: read });
@@ -1025,16 +904,11 @@ describe("AddClothingPage", () => {
     });
 
     it("declares a JPEG named .webp as image/jpeg so finalize accepts it", async () => {
-      const photo = new File([new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 0x10])], "dress.webp", {
-        type: "image/webp",
-      });
+      const photo = new File([new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 0x10])], "dress.webp", { type: "image/webp" });
 
       await pickAndAdd(photo);
 
-      expect(api.authorizeUpload.mock.calls[0]?.[0]).toMatchObject({
-        content_type: "image/jpeg",
-        byte_size: 6,
-      });
+      expect(api.authorizeUpload.mock.calls[0]?.[0]).toMatchObject({ content_type: "image/jpeg", byte_size: 6 });
     });
 
     it("blocks a HEIC photo at pick time with a message that says what to do", async () => {
@@ -1042,14 +916,10 @@ describe("AddClothingPage", () => {
       renderPage();
       await waitForDefaultGuideLoaded();
       fireEvent.change(screen.getByLabelText("Clothing photos"), {
-        target: {
-          files: [new File([new Uint8Array(heic)], "IMG_2041.jpg", { type: "image/jpeg" })],
-        },
+        target: { files: [new File([new Uint8Array(heic)], "IMG_2041.jpg", { type: "image/jpeg" })] },
       });
 
-      expect(await screen.findByRole("alert")).toHaveTextContent(
-        "“IMG_2041.jpg” is a HEIC image. Save it as JPG or PNG"
-      );
+      expect(await screen.findByRole("alert")).toHaveTextContent("“IMG_2041.jpg” is a HEIC image. Save it as JPG or PNG");
       expect(screen.getByRole("button", { name: "Add Clothing" })).toBeDisabled();
       expect(api.authorizeUpload).not.toHaveBeenCalled();
     });

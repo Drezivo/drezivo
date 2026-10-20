@@ -8,7 +8,7 @@ import { shouldApplyMigrations } from "./migration-action.mjs";
 const workflow = readFileSync(
   fileURLToPath(new URL("../workflows/ci.yml", import.meta.url)),
   "utf8",
-).replaceAll("\r\n", "\n");
+);
 
 function migrationJob(name) {
   const start = workflow.indexOf(`  ${name}:`);
@@ -70,13 +70,13 @@ test("each migration job reports the exact gap and applies it before the normal 
     ["production-migrations", "production"],
   ];
   const targetedStatus =
-    "npm run db:migrate:status --workspace @drezivo/api -- --through 0087_operator_functions_pgcrypto_path.sql";
+    "npm run db:migrate:status --workspace @drezivo/api -- --through 0080_file_image_variants_backfill.sql";
 
   for (const [jobName, environment] of stages) {
     const job = migrationJob(jobName);
     const statusIndex = job.indexOf(targetedStatus);
     const targetedApplyIndex = job.indexOf(
-      "npm run db:migrate --workspace @drezivo/api -- --through 0087_operator_functions_pgcrypto_path.sql",
+      "npm run db:migrate --workspace @drezivo/api -- --through 0080_file_image_variants_backfill.sql",
     );
     const fullApplyIndex = job.indexOf(
       "npm run db:migrate --workspace @drezivo/api\n",

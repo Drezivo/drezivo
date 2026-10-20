@@ -47,12 +47,4 @@ describe('billing overview plan contract', () => {
       }).success,
     ).toBe(true);
   });
-
-  it('reads usage when an API sends it and still reads a response from an API without it', () => {
-    const usage = billingOverview.shape.usage;
-    expect(usage.safeParse(undefined).success).toBe(true);
-    expect(usage.safeParse({ active_garments: 12, frontdesk_seats_used: 0 }).success).toBe(true);
-    expect(usage.safeParse({ active_garments: -1, frontdesk_seats_used: 0 }).success).toBe(false);
-    expect(usage.safeParse({ active_garments: 1, frontdesk_seats_used: 0, extra: 1 }).success).toBe(false);
-  });
 });

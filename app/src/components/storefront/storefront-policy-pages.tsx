@@ -43,36 +43,34 @@ export function minorToPesos(minor: string): string {
   return value % 100 === 0 ? String(value / 100) : (value / 100).toFixed(2);
 }
 
-/** Editable starter wording for a new storefront's privacy notice. Publishing remains explicit. */
+/** Editable starter wording for a new shop's privacy notice. Publishing remains an explicit action. */
 const EXAMPLE_TEXT = {
   rental: "Rentals run 3 days from pickup. Pick up from 10 AM and return by 10 AM on your return date.",
   deposit: "A refundable deposit is paid with your booking and returned within 3 days after inspection.",
   cancellation: "Cancel at least 7 days before pickup for a full refund of the rental fee.",
   damage: "Late returns are charged one extra day per day late. Damage beyond normal wear is charged at the cost of repair.",
+  privacy_notice: "Your shop uses the information you provide, such as your name, email, phone number, rental or fitting details, and, for reservations, your pickup or delivery address, to manage your request, arrange pickup or delivery, and contact you. Depending on your request, this may also include the selected item and dates, event date, social-media handle, fitting note, and any payment proof you submit. Drezivo processes this information for the shop to provide the booking service. Contact the shop through its storefront details with privacy questions.",
 } as const;
 
-function exampleText(storeName: string) {
-  return {
-    ...EXAMPLE_TEXT,
-    privacy_notice: `${storeName} uses the information you provide, such as your name, email, phone number, rental or fitting details, and, for reservations, your pickup or delivery address, to manage your request, arrange pickup or delivery, and contact you. Depending on your request, this may also include the selected item and dates, event date, social-media handle, fitting note, and any payment proof you submit. Drezivo processes this information for the shop to provide the booking service. Contact the shop through its storefront details with privacy questions.`,
-  };
-}
-
-function rulesWithPrivacyStarter(saved: StorefrontPolicyRules | null, examples: ReturnType<typeof exampleText>): StorefrontPolicyRules {
+function rulesWithPrivacyStarter(saved: StorefrontPolicyRules | null): StorefrontPolicyRules {
   const rules = saved ?? EMPTY_RULES;
-  return rules.privacy_notice.trim() ? rules : { ...rules, privacy_notice: examples.privacy_notice };
+  return rules.privacy_notice.trim() ? rules : { ...rules, privacy_notice: EXAMPLE_TEXT.privacy_notice };
 }
 
 export function StorefrontPoliciesPage() {
   const editor = useStorefrontEditor();
+  const actor = useVerifiedActorContext();
+  const requestUpgrade = useRequestPlanUpgrade();
+  const deliveryLocked = actor?.entitlements.features.storefront_reservations === false;
   const saved = editor.settings?.policy.rules ?? null;
   const version = editor.settings?.policy.version;
-  const examples = exampleText(editor.settings?.document.branding.display_name ?? "Your rental business");
-  const [rules, setRules] = useState<StorefrontPolicyRules>(() => rulesWithPrivacyStarter(saved, examples));
+  const [rules, setRules] = useState<StorefrontPolicyRules>(() => rulesWithPrivacyStarter(saved));
+  const [fee, setFee] = useState(minorToPesos(saved?.delivery.fee_minor ?? "0"));
   const [uploadingImages, setUploadingImages] = useState(false);
 
   useEffect(() => {
-    setRules(rulesWithPrivacyStarter(saved, examples));
+    setRules(rulesWithPrivacyStarter(saved));
+    setFee(minorToPesos(saved?.delivery.fee_minor ?? "0"));
     // Reset only when a new policy version arrives from the server.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [version]);
@@ -85,14 +83,16 @@ export function StorefrontPoliciesPage() {
     editor.markEdited();
   };
   const err = (path: string) => editor.fieldErrors[`policy.${path}`] ?? null;
-  const dirty = JSON.stringify(rules) !== JSON.stringify(saved ?? EMPTY_RULES);
+  const feeMinor = pesosToMinor(fee);
+  const next: StorefrontPolicyRules = { ...rules, delivery: { ...rules.delivery, fee_minor: feeMinor ?? "invalid" } };
+  const dirty = JSON.stringify(next) !== JSON.stringify(saved ?? EMPTY_RULES);
   const text = (key: "rental" | "deposit" | "cancellation" | "privacy_notice", label: string, hint: string, max: number) => (
     <Field label={label} hint={hint} error={err(key)} count={{ value: rules[key].length, max }}>
-      {(props) => <Textarea {...props} rows={4} maxLength={max} placeholder={key === "privacy_notice" ? undefined : examples[key]} value={rules[key]} onChange={(e) => update({ [key]: e.target.value })} />}
+      {(props) => <Textarea {...props} rows={4} maxLength={max} placeholder={key === "privacy_notice" ? undefined : EXAMPLE_TEXT[key]} value={rules[key]} onChange={(e) => update({ [key]: e.target.value })} />}
     </Field>
   );
   const blank = !saved && !rules.rental && !rules.deposit && !rules.cancellation && !rules.damage &&
-    (!rules.privacy_notice || rules.privacy_notice === examples.privacy_notice);
+    (!rules.privacy_notice || rules.privacy_notice === EXAMPLE_TEXT.privacy_notice);
   const imageTerms = rules.format === "images";
 
   return (
@@ -107,7 +107,7 @@ export function StorefrontPoliciesPage() {
           {saved ? `You are editing version ${editor.settings.policy.version}.` : "You have not written a policy yet. Your storefront cannot go live without one."}
         </span>
         {blank && !imageTerms ? (
-          <Button type="button" variant="secondary" size="sm" className="shrink-0" onClick={() => update({ ...examples })}>
+          <Button type="button" variant="secondary" size="sm" className="shrink-0" onClick={() => update({ ...EXAMPLE_TEXT })}>
             Start from example text
           </Button>
         ) : null}
@@ -161,6 +161,28 @@ export function StorefrontPoliciesPage() {
           )}
         </Section>
 
+        <Section icon={Truck} title="Delivery" description={deliveryLocked ? "Free storefronts support availability checks and shop contact only." : "Pickup is always available. Turn on delivery to let renters choose it."}>
+          <Switch
+            label="Offer delivery"
+            checked={deliveryLocked ? false : rules.delivery.enabled}
+            onChange={(enabled) => update({ delivery: { ...rules.delivery, enabled } })}
+            onLocked={deliveryLocked ? () => requestUpgrade("storefront delivery") : undefined}
+          />
+          {rules.delivery.enabled && !deliveryLocked ? (
+            <div className="mt-3 grid gap-4 sm:grid-cols-[200px_minmax(0,1fr)]">
+              <Field label="Delivery fee (₱)" error={feeMinor === null ? "Enter an amount like 150 or 150.50." : err("delivery.fee_minor")}>
+                {(props) => <Input {...props} inputMode="decimal" value={fee} onChange={(e) => { setFee(e.target.value); editor.markEdited(); }} />}
+              </Field>
+              <Field label="Delivery notes" hint="Areas you cover and how it is arranged." error={err("delivery.notes")}>
+                {(props) => <Textarea {...props} rows={2} maxLength={600} value={rules.delivery.notes ?? ""} onChange={(e) => update({ delivery: { ...rules.delivery, notes: e.target.value.trim() ? e.target.value : null } })} />}
+              </Field>
+            </div>
+          ) : null}
+          {rules.delivery.enabled && deliveryLocked ? (
+            <p className="mt-2 text-xs text-dashboard-muted">Your saved delivery settings are inactive on Free and will return if you upgrade.</p>
+          ) : null}
+        </Section>
+
         <Section icon={ShieldCheck} title="Privacy notice" description="How you use renter details. Shown at checkout.">
           {text("privacy_notice", "Privacy notice", "Keep it plain and specific.", 2000)}
         </Section>
@@ -173,8 +195,8 @@ export function StorefrontPoliciesPage() {
         label={saved ? "Publish new version" : "Publish policy"}
         blockedReason={uploadingImages ? "Wait for the pages to finish uploading." : null}
         onSave={() => {
-          if (uploadingImages) return;
-          void editor.savePolicy(rules);
+          if (feeMinor === null || uploadingImages) return;
+          void editor.savePolicy(next);
         }}
       />
     </PageShell>
@@ -221,8 +243,7 @@ function useCheckoutDraft() {
   const editor = useStorefrontEditor();
   const checkout = useDocumentDraft("checkout");
   const save = (draft: StorefrontCheckout) => {
-    if (!editor.settings) return Promise.resolve(false);
-    return editor.saveDocument({ ...editor.settings.document, checkout: draft });
+    if (editor.settings) void editor.saveDocument({ ...editor.settings.document, checkout: draft });
   };
   return { editor, checkout, save };
 }
@@ -268,39 +289,12 @@ export function StorefrontBookingSettingsPage() {
   const requestUpgrade = useRequestPlanUpgrade();
   const reservationsLocked = actor?.entitlements.features.storefront_reservations === false;
   const fittingsLocked = actor?.entitlements.features.fittings === false;
-  const savedPolicy = editor.settings?.policy.rules ?? null;
-  const policyVersion = editor.settings?.policy.version;
-  const [delivery, setDelivery] = useState(() => savedPolicy?.delivery ?? EMPTY_RULES.delivery);
-  const [fee, setFee] = useState(() => minorToPesos(savedPolicy?.delivery.fee_minor ?? "0"));
-  useEffect(() => {
-    setDelivery(savedPolicy?.delivery ?? EMPTY_RULES.delivery);
-    setFee(minorToPesos(savedPolicy?.delivery.fee_minor ?? "0"));
-    // Reset delivery edits only when the saved policy version changes.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [policyVersion]);
   if (!editor.settings || !checkout.draft) {
     return <PageShell>{editor.loadError ? <ErrorState message={editor.loadError} onRetry={editor.reload} /> : <LoadingState label="Loading…" />}</PageShell>;
   }
   const draft = checkout.draft;
   const err = (path: string) => editor.fieldErrors[`checkout.${path}`] ?? null;
-  const policyErr = (path: string) => editor.fieldErrors[`policy.${path}`] ?? null;
-  const feeMinor = pesosToMinor(fee);
-  const deliveryDirty = Boolean(savedPolicy && (
-    delivery.enabled !== savedPolicy.delivery.enabled ||
-    feeMinor !== savedPolicy.delivery.fee_minor ||
-    delivery.notes !== savedPolicy.delivery.notes
-  ));
-  const deliveryLocked = reservationsLocked;
   const halfHours = Array.from({ length: 48 }, (_, index) => `${String(Math.floor(index / 2)).padStart(2, "0")}:${index % 2 ? "30" : "00"}`);
-  const updateDelivery = (patch: Partial<StorefrontPolicyRules["delivery"]>) => {
-    setDelivery((current) => ({ ...current, ...patch }));
-    editor.markEdited();
-  };
-  const saveChanges = async () => {
-    if (checkout.dirty && !(await save(draft))) return;
-    if (!deliveryDirty || !savedPolicy || feeMinor === null) return;
-    await editor.savePolicy({ ...savedPolicy, delivery: { ...delivery, fee_minor: feeMinor } });
-  };
 
   return (
     <PageShell>
@@ -318,33 +312,6 @@ export function StorefrontBookingSettingsPage() {
             <p className="mt-2 text-xs text-dashboard-muted">
               Your storefront stays live with your collection, prices, and contact details. You can still create reservations from the Reservations page.
             </p>
-          ) : null}
-        </Section>
-        <Section icon={Truck} title="Delivery" description={deliveryLocked ? "Free storefronts support availability checks and shop contact only." : "Pickup is always available. Turn on delivery to let renters choose it."}>
-          {!savedPolicy ? (
-            <p className="mb-2 text-sm text-dashboard-muted">
-              Publish a rental policy before changing delivery settings. <Link href="/storefront/policies" className="font-medium text-dashboard-accent hover:underline">Go to Rental policies</Link>.
-            </p>
-          ) : null}
-          <Switch
-            label="Offer delivery"
-            checked={deliveryLocked ? false : delivery.enabled}
-            disabled={!savedPolicy && !deliveryLocked}
-            onChange={(enabled) => updateDelivery({ enabled })}
-            onLocked={deliveryLocked ? () => requestUpgrade("storefront delivery") : undefined}
-          />
-          {delivery.enabled && !deliveryLocked && savedPolicy ? (
-            <div className="mt-3 grid gap-4 sm:grid-cols-[200px_minmax(0,1fr)]">
-              <Field label="Delivery fee (₱)" error={feeMinor === null ? "Enter an amount like 150 or 150.50." : policyErr("delivery.fee_minor")}>
-                {(props) => <Input {...props} inputMode="decimal" value={fee} onChange={(e) => { setFee(e.target.value); editor.markEdited(); }} />}
-              </Field>
-              <Field label="Delivery notes" hint="Areas you cover and how it is arranged." error={policyErr("delivery.notes")}>
-                {(props) => <Textarea {...props} rows={2} maxLength={600} value={delivery.notes ?? ""} onChange={(e) => updateDelivery({ notes: e.target.value.trim() ? e.target.value : null })} />}
-              </Field>
-            </div>
-          ) : null}
-          {delivery.enabled && deliveryLocked ? (
-            <p className="mt-2 text-xs text-dashboard-muted">Your saved delivery settings are inactive on Free and will return if you upgrade.</p>
           ) : null}
         </Section>
         <Section icon={CalendarClock} title="Rental timing">
@@ -396,13 +363,7 @@ export function StorefrontBookingSettingsPage() {
           </p>
         </Section>
       </div>
-      <SaveBar
-        dirty={checkout.dirty || deliveryDirty}
-        saving={editor.saving}
-        state={editor.saveState}
-        label={deliveryDirty && !checkout.dirty ? "Save delivery settings" : "Save changes"}
-        onSave={() => { void saveChanges(); }}
-      />
+      <SaveBar dirty={checkout.dirty} saving={editor.saving} state={editor.saveState} onSave={() => save(draft)} />
     </PageShell>
   );
 }

@@ -25,7 +25,6 @@ import {
   ValidationError,
 } from '../../shared/errors.js';
 import { runIdempotentCommand, type CommandResult } from '../../shared/idempotent-command.js';
-import { countActivePhysicalAssets, countReservedFrontdeskSeats } from '../entitlements/entitlements.repository.js';
 import { resolvePlanEntitlements, resolveTenantEntitlements } from '../entitlements/entitlements.service.js';
 import { accessOf } from './access.js';
 import { TRIAL_DURATION_DAYS } from './billing.constants.js';
@@ -86,8 +85,6 @@ export function getBillingOverview(actor: BillingActor): Promise<BillingOverview
     const entitlements = await resolveTenantEntitlements(client, actor.tenantId);
     const methods = await listActivePlatformPaymentMethods(client);
     const payments = await listSubscriptionPayments(client, actor.tenantId, PAYMENT_HISTORY_LIMIT);
-    const activeGarments = await countActivePhysicalAssets(client, actor.tenantId);
-    const frontdeskSeatsUsed = await countReservedFrontdeskSeats(client, actor.tenantId);
     const canStartTrial =
       actor.role === 'owner' &&
       entitlements.planCode === 'free' &&
@@ -111,7 +108,6 @@ export function getBillingOverview(actor: BillingActor): Promise<BillingOverview
         current_period_end: subscription.current_period_end?.toISOString() ?? null,
       },
       access: accessOf(subscription, subscription.now),
-      usage: { active_garments: activeGarments, frontdesk_seats_used: frontdeskSeatsUsed },
       can_pay: actor.role === 'owner',
       can_start_trial: canStartTrial,
       payment_methods: methods.map((method) => ({

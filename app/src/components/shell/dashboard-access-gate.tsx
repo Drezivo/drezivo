@@ -1,16 +1,14 @@
 "use client";
 
 import { useAuth, useClerk } from "@clerk/nextjs";
-import { LogOut, RefreshCw, ShieldCheck } from "lucide-react";
+import { Loader2, LogOut, RefreshCw, ShieldCheck } from "lucide-react";
 import { useRouter } from "next/navigation";
 import type { ActorContext } from "@drezivo/contracts";
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 
-import { WorkspaceOpening } from "@/components/auth/workspace-opening";
 import { Button } from "@/components/ui/button";
 import { createDrezivoApiClient, DrezivoApiError } from "@/lib/drezivo-api";
 import { invitationStateOf, resolveStaffLanding } from "@/lib/resolve-staff-landing";
-import { takeResolvedWorkspace } from "@/lib/workspace-handoff";
 
 type GateState =
   | { kind: "checking" }
@@ -66,13 +64,6 @@ export function DashboardAccessGate({ children }: { children: React.ReactNode })
 
     setState({ kind: "checking" });
     try {
-      // Straight after sign-in the resolver already chose and activated this workspace; only the
-      // actor context (authorized by the API) is still needed.
-      if (takeResolvedWorkspace(orgId)) {
-        const actor = await createDrezivoApiClient(() => getTokenRef.current()).getActorContext();
-        setState({ kind: "ready", actor: actor.data });
-        return;
-      }
       const resolution = await resolveStaffLanding({
         activeOrganizationId: orgId,
         getToken: () => getTokenRef.current(),
@@ -135,13 +126,12 @@ export function DashboardAccessGate({ children }: { children: React.ReactNode })
     );
   }
 
-  if (state.kind === "checking") return <WorkspaceOpening />;
-
   return (
     <main className="flex min-h-svh items-center justify-center bg-dashboard-canvas px-5 py-10 text-dashboard-navy sm:px-8">
       <section
         className="w-full max-w-lg rounded-2xl border border-dashboard-border bg-dashboard-surface p-7 shadow-sm sm:p-9"
-        role="alert"
+        aria-live="polite"
+        {...(state.kind === "error" ? { role: "alert" } : {})}
       >
         <div className="flex items-center gap-3">
           <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-dashboard-gold-soft text-dashboard-gold-text">
@@ -155,35 +145,51 @@ export function DashboardAccessGate({ children }: { children: React.ReactNode })
           </div>
         </div>
 
-        <div className="mt-8">
-          <h1 className="font-display text-2xl sm:text-3xl">Workspace access needs attention</h1>
-          <p className="mt-3 text-sm leading-6 text-dashboard-muted">{state.error.message}</p>
-          {state.error.requestId ? (
-            <p className="mt-3 rounded-md border border-dashboard-border bg-dashboard-canvas px-3 py-2 text-xs text-dashboard-muted">
-              Support reference: {state.error.requestId}
+        {state.kind === "checking" ? (
+          <div className="mt-8">
+            <div className="flex items-center gap-3">
+              <Loader2 className="h-5 w-5 animate-spin text-dashboard-accent" aria-hidden="true" />
+              <h1 className="font-display text-2xl sm:text-3xl">Opening your workspace</h1>
+            </div>
+            <p className="mt-3 max-w-md text-sm leading-6 text-dashboard-muted">
+              We&apos;re confirming your account, workspace membership, and current access before
+              loading the dashboard.
             </p>
-          ) : null}
-          {signOutError ? (
-            <p className="mt-4 text-sm text-dashboard-danger" role="status">
-              We couldn&apos;t sign you out. Please try again.
-            </p>
-          ) : null}
-          <div className="mt-7 flex flex-wrap gap-3">
-            <Button disabled={isSigningOut} onClick={() => void verifyAccess()}>
-              <RefreshCw className="h-4 w-4" aria-hidden="true" />
-              Check access again
-            </Button>
-            <Button
-              variant="secondary"
-              isPending={isSigningOut}
-              pendingLabel="Signing out…"
-              onClick={() => void handleSignOut()}
-            >
-              <LogOut className="h-4 w-4" aria-hidden="true" />
-              Sign out
-            </Button>
+            <div className="mt-7 h-1.5 overflow-hidden rounded-full bg-dashboard-border">
+              <div className="h-full w-2/3 animate-pulse rounded-full bg-dashboard-accent" />
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="mt-8">
+            <h1 className="font-display text-2xl sm:text-3xl">Workspace access needs attention</h1>
+            <p className="mt-3 text-sm leading-6 text-dashboard-muted">{state.error.message}</p>
+            {state.error.requestId ? (
+              <p className="mt-3 rounded-md border border-dashboard-border bg-dashboard-canvas px-3 py-2 text-xs text-dashboard-muted">
+                Support reference: {state.error.requestId}
+              </p>
+            ) : null}
+            {signOutError ? (
+              <p className="mt-4 text-sm text-dashboard-danger" role="status">
+                We couldn&apos;t sign you out. Please try again.
+              </p>
+            ) : null}
+            <div className="mt-7 flex flex-wrap gap-3">
+              <Button disabled={isSigningOut} onClick={() => void verifyAccess()}>
+                <RefreshCw className="h-4 w-4" aria-hidden="true" />
+                Check access again
+              </Button>
+              <Button
+                variant="secondary"
+                isPending={isSigningOut}
+                pendingLabel="Signing out…"
+                onClick={() => void handleSignOut()}
+              >
+                <LogOut className="h-4 w-4" aria-hidden="true" />
+                Sign out
+              </Button>
+            </div>
+          </div>
+        )}
       </section>
     </main>
   );

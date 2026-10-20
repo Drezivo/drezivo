@@ -5,10 +5,8 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 import { AuthBrand } from "@/components/auth/auth-brand";
-import { WorkspaceOpening } from "@/components/auth/workspace-opening";
 import { DrezivoApiError } from "@/lib/drezivo-api";
 import { invitationStateOf, resolveStaffLanding } from "@/lib/resolve-staff-landing";
-import { rememberResolvedWorkspace } from "@/lib/workspace-handoff";
 import { WORKSPACE_HOME } from "@/lib/workspace-routes";
 
 type ResolveState = { kind: "resolving" } | { kind: "error"; error: DrezivoApiError };
@@ -78,8 +76,6 @@ export function PostAuthResolver() {
           });
           return;
         }
-        // The dashboard gate would otherwise repeat this whole resolution right after the reload.
-        if (resolution.kind === "workspace") rememberResolvedWorkspace(resolution.workspace.clerk_org_id);
         const destination =
           resolution.kind === "workspace"
             ? WORKSPACE_HOME
@@ -92,26 +88,36 @@ export function PostAuthResolver() {
       .finally(() => clearTimeout(timer));
   }, [isLoaded, isSignedIn, router]);
 
-  if (state.kind === "resolving") return <WorkspaceOpening />;
-
   return (
     <main className="flex min-h-svh items-center justify-center bg-auth-night px-6 text-auth-text">
       <section className="w-full max-w-md text-center" aria-live="polite">
         <AuthBrand />
-        <h1 className="mt-10 font-display text-3xl">We could not resolve your workspace</h1>
-        <p className="mt-3 text-sm leading-6 text-auth-dark-muted">{state.error.message}</p>
-        {state.error.requestId ? (
-          <p className="mt-2 text-xs text-auth-dark-muted">
-            Support reference: {state.error.requestId}
-          </p>
-        ) : null}
-        <button
-          type="button"
-          onClick={() => window.location.reload()}
-          className="mt-7 inline-flex min-h-10 items-center justify-center rounded-full bg-auth-button px-6 text-sm font-semibold text-auth-button-ink transition hover:bg-auth-button-hover"
-        >
-          Try again
-        </button>
+        {state.kind === "resolving" ? (
+          <>
+            <div className="mx-auto mt-10 h-10 w-10 animate-spin rounded-full border-2 border-auth-line border-t-auth-gold" />
+            <h1 className="mt-7 font-display text-3xl">Opening your workspace</h1>
+            <p className="mt-3 text-sm leading-6 text-auth-dark-muted">
+              We&apos;re checking your Drezivo access and setup.
+            </p>
+          </>
+        ) : (
+          <>
+            <h1 className="mt-10 font-display text-3xl">We could not resolve your workspace</h1>
+            <p className="mt-3 text-sm leading-6 text-auth-dark-muted">{state.error.message}</p>
+            {state.error.requestId ? (
+              <p className="mt-2 text-xs text-auth-dark-muted">
+                Support reference: {state.error.requestId}
+              </p>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="mt-7 inline-flex min-h-10 items-center justify-center rounded-full bg-auth-button px-6 text-sm font-semibold text-auth-button-ink transition hover:bg-auth-button-hover"
+            >
+              Try again
+            </button>
+          </>
+        )}
       </section>
     </main>
   );

@@ -633,19 +633,12 @@ describe("ReservationMutationActions", () => {
       await waitFor(() => expect(api.completeStaffReservation).toHaveBeenCalledTimes(1));
     });
 
-    it("shows an attached receipt while logging a walk-in payment without requiring confirmation", async () => {
+    it("lets staff log a walk-in payment without a receipt or a confirmation prompt", async () => {
       renderActions(pendingManual("walk_in"));
 
       expect(screen.queryByRole("button", { name: "Verify Payment" })).not.toBeInTheDocument();
       fireEvent.click(screen.getAllByRole("button", { name: "Log Payment" }).at(-1)!);
-      const receipt = await screen.findByRole("button", {
-        name: "View proof of payment 1 full size",
-      });
-      expect(api.getReservationPaymentReceipts).toHaveBeenCalledWith(confirmedDetail.id);
-      fireEvent.click(receipt);
-      expect(await screen.findByRole("img", { name: "Proof of payment 1" })).toBeVisible();
-      fireEvent.click(screen.getByRole("button", { name: "Close image preview" }));
-
+      expect(api.getReservationPaymentReceipts).not.toHaveBeenCalled();
       fireEvent.change(screen.getByLabelText("Merchant reference"), {
         target: { value: "MAYA-123" },
       });
@@ -658,47 +651,6 @@ describe("ReservationMutationActions", () => {
         merchant_reference: "MAYA-123",
       });
       expect(screen.queryByText("Is this payment verified?")).not.toBeInTheDocument();
-    });
-
-    it("keeps Log Payment available when no receipt is attached", async () => {
-      api.getReservationPaymentReceipts.mockResolvedValue({
-        data: { receipts: [] },
-        requestId: "req-no-receipt",
-      });
-      renderActions(pendingManual("walk_in"));
-
-      fireEvent.click(screen.getAllByRole("button", { name: "Log Payment" }).at(-1)!);
-      await waitFor(() => expect(api.getReservationPaymentReceipts).toHaveBeenCalledTimes(1));
-      expect(screen.queryByText(/No receipt is attached/i)).not.toBeInTheDocument();
-      expect(screen.getByLabelText("Merchant reference")).toBeEnabled();
-      fireEvent.click(screen.getByRole("button", { name: "Log Payment & Confirm" }));
-
-      await waitFor(() => expect(api.verifyReservationPayment).toHaveBeenCalledTimes(1));
-    });
-
-    it("keeps PDF receipts as external links while logging payment", async () => {
-      api.getReservationPaymentReceipts.mockResolvedValue({
-        data: {
-          receipts: [
-            {
-              file_id: "00000000-0000-4000-8000-000000000902",
-              content_type: "application/pdf",
-              url: "https://files.test/walk-in-receipt.pdf",
-              submitted_at: "2026-10-10T02:05:00.000Z",
-              evidence_status: "uploaded",
-            },
-          ],
-        },
-        requestId: "req-pdf-receipt",
-      });
-      renderActions(pendingManual("walk_in"));
-
-      fireEvent.click(screen.getAllByRole("button", { name: "Log Payment" }).at(-1)!);
-      const receipt = await screen.findByRole("link", { name: /PDF proof/ });
-
-      expect(receipt).toHaveAttribute("href", "https://files.test/walk-in-receipt.pdf");
-      expect(receipt).toHaveAttribute("target", "_blank");
-      expect(receipt).toHaveAttribute("rel", "noopener noreferrer");
     });
 
     it("lets authorized staff record payment after completion without reopening the reservation", async () => {

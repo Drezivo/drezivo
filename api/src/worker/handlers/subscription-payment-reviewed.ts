@@ -53,12 +53,7 @@ async function readReviewedPayment(client: PoolClient, tenantId: string, payment
   return result.rows[0] ?? null;
 }
 
-/**
- * Activate a Free-to-paid manual upgrade once, after the operator's verified decision. This is the
- * only activation path: for a Free workspace the operator API records the approval and leaves the
- * subscription untouched (Drezivo/drezivo-operator tenant-admin-db reviewPayment), so the plan and
- * its first paid month start here, in one transaction with this row's event and audit record.
- */
+/** Activate a Free-to-paid manual upgrade once, after the operator's verified decision. */
 async function activateApprovedFreeUpgrade(
   client: PoolClient,
   tenantId: string,
@@ -123,7 +118,8 @@ async function activateApprovedFreeUpgrade(
         SET plan_id = $3, status = 'active', trial_ends_at = NULL,
             current_period_start = statement_timestamp(),
             current_period_end = statement_timestamp() + interval '1 month',
-            grace_ends_at = NULL, cancel_at_period_end = false
+            grace_ends_at = NULL, cancel_at_period_end = false,
+            updated_at = statement_timestamp()
       WHERE tenant_id = $1 AND id = $2 AND plan_id = $4
         AND status = 'active' AND current_period_end IS NULL
       RETURNING current_period_end`,

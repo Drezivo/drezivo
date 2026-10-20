@@ -207,23 +207,6 @@ describe("CalendarAvailabilityPage", () => {
       "aria-current",
       "page"
     );
-    expect(screen.getByRole("navigation", { name: "Calendar views" })).toHaveClass("grid-cols-2");
-
-    const dateNavigation = screen.getByRole("group", { name: "Availability date navigation" });
-    expect(within(dateNavigation).getByRole("button", { name: "Previous date range" })).toBeVisible();
-    expect(
-      within(dateNavigation).getByRole("button", { name: "Calendar availability date range" })
-    ).toBeVisible();
-    expect(within(dateNavigation).getByRole("button", { name: "Next date range" })).toBeVisible();
-
-    const filters = screen.getByRole("group", { name: "Availability filters" });
-    expect(filters).toHaveClass("flex-wrap");
-    expect(within(filters).getByRole("button", { name: "All Categories" })).toBeVisible();
-    expect(within(filters).getByRole("button", { name: "All Sizes" })).toBeVisible();
-    expect(within(filters).getByRole("button", { name: "All Statuses" })).toBeVisible();
-    expect(
-      within(filters).getByRole("button", { name: "Return to the current date range" })
-    ).toHaveTextContent("Today");
 
     await waitFor(() => expect(api.getClothingAvailabilityTimeline).toHaveBeenCalled());
     const input = api.getClothingAvailabilityTimeline.mock.calls[0]![0] as {
