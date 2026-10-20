@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 import PricingPage from '@/app/(marketing)/pricing/page';
+import PrivacyPage from '@/app/(marketing)/privacy/page';
 import TermsPage from '@/app/(marketing)/terms/page';
 import { PublicPlanShowcase } from '@/components/marketing/public-plan-showcase';
 import { MARKETING_FAQ_GROUPS } from '@/lib/marketing-content';
@@ -92,7 +93,9 @@ describe('marketing FAQ, pricing, and terms', () => {
     expect(pricingAnswer).toContain('Standard is ₱299 a month');
     expect(pricingAnswer).toContain('up to 300 active garments');
     expect(pricingAnswer).toContain('Starter and Standard include a 14-day trial');
-    const trialAnswer = answerFor('What happens when my paid-plan trial ends? Will I lose my data?');
+    const trialAnswer = answerFor(
+      'What happens when my paid-plan trial ends? Will I lose my data?',
+    );
     expect(trialAnswer).toContain('Free has no trial or expiry');
     expect(trialAnswer).toContain('read-only for up to 30 days');
   });
@@ -100,7 +103,7 @@ describe('marketing FAQ, pricing, and terms', () => {
   it('keeps the terms aligned with the current pilot subscription lifecycle', () => {
     render(<TermsPage />);
 
-    expect(screen.getByText('Last updated: October 2, 2026')).toBeTruthy();
+    expect(screen.getByText('Last updated: October 20, 2026')).toBeTruthy();
     expect(screen.getByText(/14-day free trial/)).toBeTruthy();
     expect(screen.getByText(/read-only for up to/).textContent).toContain('30 days');
     expect(screen.getByText(/public storefront may remain online/).textContent).toContain('3 days');
@@ -116,5 +119,30 @@ describe('marketing FAQ, pricing, and terms', () => {
       supportLinks.every((link) => link.getAttribute('href') === 'mailto:drezivoshop@gmail.com'),
     ).toBe(true);
     expect(screen.queryByText(/\[INSERT/i)).toBeNull();
+    expect(screen.getByRole('link', { name: '09453097473' }).getAttribute('href')).toBe(
+      'tel:+639453097473',
+    );
+    expect(document.body.textContent).not.toMatch(/Ryanny Romero|Vergel Bautista/);
+  });
+
+  it('keeps the privacy contact details current without identifying the co-founders by name', () => {
+    render(<PrivacyPage />);
+
+    expect(screen.getByText('Last updated: October 20, 2026')).toBeTruthy();
+    const privacyEmailLinks = screen.getAllByRole('link', { name: 'drezivoshop@gmail.com' });
+    expect(
+      privacyEmailLinks.every(
+        (link) => link.getAttribute('href') === 'mailto:drezivoshop@gmail.com',
+      ),
+    ).toBe(true);
+    expect(
+      screen
+        .getByRole('link', { name: 'National Privacy Commission of the Philippines' })
+        .getAttribute('href'),
+    ).toBe('https://privacy.gov.ph/');
+    expect(screen.getByRole('link', { name: '09453097473' }).getAttribute('href')).toBe(
+      'tel:+639453097473',
+    );
+    expect(document.body.textContent).not.toMatch(/Ryanny Romero|Vergel Bautista/);
   });
 });
