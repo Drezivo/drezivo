@@ -8,7 +8,7 @@ export const metadata: Metadata = {
 
 export default function PrivacyPage() {
   return (
-    <LegalLayout title="Privacy Policy" updated="October 3, 2026">
+    <LegalLayout title="Privacy Policy" updated="October 20, 2026">
       <p>
         Drezivo is a software platform for clothing rental businesses. This Privacy Policy explains
         how personal information is processed through Drezivo&apos;s websites, business dashboard,
@@ -16,12 +16,11 @@ export default function PrivacyPage() {
         channels, and related services.
       </p>
       <p>
-        Drezivo is currently operated in the Philippines by <strong>Ryanny Romero</strong> and{' '}
-        <strong>Vergel Bautista</strong>. Until Drezivo is operated through a separate registered
-        legal entity, references in this policy to &quot;Drezivo,&quot; &quot;we,&quot;
-        &quot;us,&quot; or &quot;our&quot; refer to the current operators of the service. Privacy
-        questions and requests may be sent to{' '}
-        <a href="mailto:drezivoshop@gmail.com">drezivoshop@gmail.com</a>.
+        Drezivo is currently operated in the Philippines by its co-founders. Until Drezivo operates
+        through a separate registered legal entity, references in this policy to
+        &quot;Drezivo,&quot; &quot;we,&quot; &quot;us,&quot; or &quot;our&quot; refer to its
+        co-founders in their role as the service operators. Privacy questions and requests may be
+        sent to <a href="mailto:drezivoshop@gmail.com">drezivoshop@gmail.com</a>.
       </p>
 
       <h2>1. Our role and the rental business&apos;s role</h2>
@@ -64,11 +63,10 @@ export default function PrivacyPage() {
         </li>
         <li>
           <strong>Customer and reservation information:</strong> full name, email address provided
-          as contact information (not verified by guest checkout),
-          mobile number where collected, reservation or delivery address, optional social-media
-          contact information, selected garment or size, rental dates, pickup and return details,
-          optional event date, fulfillment method, reservation status, and related operational
-          history.
+          as contact information (not verified by guest checkout), mobile number where collected,
+          reservation or delivery address, optional social-media contact information, selected
+          garment or size, rental dates, pickup and return details, optional event date, fulfillment
+          method, reservation status, and related operational history.
         </li>
         <li>
           <strong>Fitting information:</strong> customer name and contact information, appointment
@@ -163,9 +161,9 @@ export default function PrivacyPage() {
         A guest must provide an email address as contact information when requesting a reservation
         or fitting, but Drezivo does not verify the address or email a guest a verification code,
         reservation proof/link, receipt acknowledgement, or reservation/fitting status update. A
-        reservation proof is shown on the storefront after receipt submission and is protected by
-        an HttpOnly cookie scoped to that reservation on the API host. The customer is asked to
-        save a screenshot before leaving the page.
+        reservation proof is shown on the storefront after receipt submission and is protected by an
+        HttpOnly cookie scoped to that reservation on the API host. The customer is asked to save a
+        screenshot before leaving the page.
       </p>
       <p>
         Drezivo uses Cloudflare Turnstile to protect public reservation and fitting submissions
@@ -266,8 +264,9 @@ export default function PrivacyPage() {
       </p>
       <p>
         Short-lived security credentials and technical authorizations, such as guest access cookies
-        and upload authorizations, expire according to their technical purpose. Backups are removed through their applicable rolling-expiry process rather than
-        being used as an indefinite archive.
+        and upload authorizations, expire according to their technical purpose. Backups are removed
+        through their applicable rolling-expiry process rather than being used as an indefinite
+        archive.
       </p>
 
       <h2>12. Security</h2>
@@ -372,18 +371,20 @@ export default function PrivacyPage() {
 
       <h2>19. Contact and complaints</h2>
       <p>
-        <strong>Operator:</strong> Drezivo, currently operated by Ryanny Romero and Vergel Bautista
+        <strong>Operator:</strong> Drezivo, currently operated by its co-founders
         <br />
         <strong>Location:</strong> Philippines
         <br />
         <strong>Privacy contact:</strong>{' '}
         <a href="mailto:drezivoshop@gmail.com">drezivoshop@gmail.com</a>
+        <br />
+        <strong>Phone:</strong> <a href="tel:+639453097473">09453097473</a>
       </p>
       <p>
-        Because Drezivo is not yet operated through a separate registered legal entity, Ryanny
-        Romero and Vergel Bautista are the current operators responsible for Drezivo&apos;s own
-        processing to the extent required by law. This section will be updated if Drezivo begins
-        operating through a registered business or juridical entity.
+        Because Drezivo does not yet operate through a separate registered legal entity, its
+        co-founders are responsible for Drezivo&apos;s own processing to the extent required by law.
+        This section will be updated if Drezivo begins operating through a registered business or
+        juridical entity.
       </p>
       <p>
         If a privacy concern is not adequately resolved, a data subject may contact the{' '}
