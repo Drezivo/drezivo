@@ -3,17 +3,19 @@ title: Drezivo Product Brief
 type: product
 status: current
 source: ../../product/Drezivo-PRD.md
-updated: 2026-10-02
+updated: 2026-10-21
 tags: [drezivo, product, prd]
 ---
 
 # Drezivo Product Brief
 
 Drezivo is a Philippines-first clothing-rental operations SaaS for small and medium businesses,
-with a path to multi-branch and enterprise operation. The pilot sells one Standard plan at PHP
-300/month, with up to 1,000 active physical assets and 10 Front Desk seats. Its internal plan code
-is `starter`; future plans are undecided. See the current [PRD](../../product/Drezivo-PRD.md) and
-[ADR 0011](../../decisions/0011-single-standard-pilot-plan.md).
+with a path to multi-branch and enterprise operation. The current catalog offers Free at ₱0 with
+20 active garments and no Front Desk seats, Starter at ₱149/month with 125 active garments and no
+Front Desk seats, and Standard at ₱299/month with 300 active garments and up to three Front Desk
+seats. Free access is ongoing; paid plans use the existing fourteen-day lifetime trial. See the
+current [PRD](../../product/Drezivo-PRD.md) and [ADR 0015](../../decisions/0015-starter-and-standard-plans.md)
+for authoritative catalog details.
 
 V1 focuses on one branch, catalogue and physical garments, guest single-garment booking, expiring
 holds, manual cash or QR evidence review, pickup, return inspection, cleaning readiness, deposits,
