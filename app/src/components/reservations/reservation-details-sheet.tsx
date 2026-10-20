@@ -151,11 +151,12 @@ function ReservationDetails({
   const [failedImageLines, setFailedImageLines] = useState<Set<string>>(() => new Set());
   const [editing, setEditing] = useState(false);
   const [paymentReceiptViewerOpen, setPaymentReceiptViewerOpen] = useState(false);
-  const canViewCompletedPaymentReceipts =
-    detail.status === "completed" &&
+  const canViewPaymentReceipts =
+    detail.payment !== null &&
+    detail.payment.rail !== "cash" &&
     permissionCodes.includes("payments.manage") &&
     permissionCodes.includes("evidence.verify");
-  const paymentProof = usePaymentProof(detail.id, canViewCompletedPaymentReceipts);
+  const paymentProof = usePaymentProof(detail.id, canViewPaymentReceipts);
   const canEdit =
     detail.status === "confirmed" &&
     customer !== null &&
@@ -279,8 +280,8 @@ function ReservationDetails({
             {detail.lines.map((line, index) => (
               <div key={line.id}>
                 {index > 0 ? <Separator className="mb-4" /> : null}
-                <div className="flex items-start gap-3">
-                  <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-dashboard-active text-dashboard-accent">
+                <div className="grid grid-cols-[5rem_minmax(0,1fr)] gap-x-3">
+                  <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-dashboard-active text-dashboard-accent sm:row-span-2">
                     {line.variant.image_url && !failedImageLines.has(line.id) ? (
                       // eslint-disable-next-line @next/next/no-img-element -- API-provided signed URLs are short-lived and dynamic.
                       <img
@@ -301,15 +302,16 @@ function ReservationDetails({
                       <Shirt className="h-5 w-5" aria-hidden="true" />
                     )}
                   </div>
-                  <div className="min-w-0 flex-1">
+                  <div className="min-w-0">
                     <p className="font-semibold text-dashboard-navy">{line.name_snapshot}</p>
                     <p className="mt-1 text-xs text-dashboard-muted">Line {line.line_number}</p>
-                    <div className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
+                  </div>
+                  <div className="col-span-2 min-w-0 sm:col-span-1 sm:col-start-2">
+                    <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
                       <DetailValue
                         label="Variant"
                         value={`${displaySizeLabel(line.variant.size_label)}${line.variant.color_label ? ` · ${line.variant.color_label}` : ""}`}
                       />
-                      <DetailValue label="SKU" value={line.variant.sku} />
                       <DetailValue
                         label="Rental"
                         value={formatMinorMoney(
@@ -384,7 +386,7 @@ function ReservationDetails({
         ) : null}
 
         <DetailCard title="Price and payment" icon={CreditCard}>
-          <dl className="grid gap-3 text-sm sm:grid-cols-3">
+          <dl className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-3">
             <DetailValue
               label="Rental total"
               value={formatMinorMoney(
@@ -399,13 +401,15 @@ function ReservationDetails({
                 detail.price_snapshot.currency
               )}
             />
-            <DetailValue
-              label="Due now"
-              value={formatMinorMoney(
-                detail.price_snapshot.due_now_minor,
-                detail.price_snapshot.currency
-              )}
-            />
+            <div className="col-span-2 sm:col-span-1">
+              <DetailValue
+                label="Due now"
+                value={formatMinorMoney(
+                  detail.price_snapshot.due_now_minor,
+                  detail.price_snapshot.currency
+                )}
+              />
+            </div>
           </dl>
 
           <PaymentDifferenceNote detail={detail} />
@@ -413,84 +417,93 @@ function ReservationDetails({
           <Separator className="my-4" />
 
           {detail.payment ? (
-            <div className="grid gap-3 sm:grid-cols-2">
-              <DetailValue
-                label="Payment method"
-                value={`${detail.payment.method_name}${
-                  detail.payment.rail === "cash"
-                    ? " · Cash"
-                    : detail.payment.rail === "manual_qr"
-                      ? " · Manual QR"
-                      : " · Manual transfer"
-                }`}
-              />
-              <div>
-                <p className="text-xs text-dashboard-muted">Payment status</p>
-                <Badge
-                  variant="outline"
-                  className={cn(
-                    "mt-1.5 px-2 py-1 text-xs",
-                    PAYMENT_STATUS_CLASSES[detail.payment.status]
-                  )}
-                >
-                  {PAYMENT_STATUS_LABELS[detail.payment.status]}
-                </Badge>
+            <div className="grid gap-4 sm:grid-cols-[8rem_minmax(0,1fr)]">
+              {canViewPaymentReceipts ? (
+                <PaymentProof
+                  state={paymentProof}
+                  viewerOpen={paymentReceiptViewerOpen}
+                  onViewerOpenChange={setPaymentReceiptViewerOpen}
+                  heading="Payment receipt"
+                />
+              ) : null}
+              <div
+                className={cn(
+                  "grid grid-cols-2 gap-3 sm:grid-cols-2",
+                  !canViewPaymentReceipts && "sm:col-span-2"
+                )}
+              >
+                <div className="col-span-2 sm:col-span-1">
+                  <DetailValue
+                    label="Payment method"
+                    value={`${detail.payment.method_name}${
+                      detail.payment.rail === "cash"
+                        ? " · Cash"
+                        : detail.payment.rail === "manual_qr"
+                          ? " · Manual QR"
+                          : " · Manual transfer"
+                    }`}
+                  />
+                </div>
+                <div>
+                  <p className="text-xs text-dashboard-muted">Payment status</p>
+                  <Badge
+                    variant="outline"
+                    className={cn(
+                      "mt-1.5 px-2 py-1 text-xs",
+                      PAYMENT_STATUS_CLASSES[detail.payment.status]
+                    )}
+                  >
+                    {PAYMENT_STATUS_LABELS[detail.payment.status]}
+                  </Badge>
+                </div>
+                <DetailValue
+                  label="Evidence"
+                  value={
+                    detail.payment.rail !== "cash" &&
+                    detail.payment.status === "paid" &&
+                    detail.payment.verified_at &&
+                    detail.payment.evidence_status === "awaiting_upload"
+                      ? "Not provided (optional)"
+                      : PAYMENT_EVIDENCE_LABELS[detail.payment.evidence_status]
+                  }
+                />
+                <div className="col-span-2 sm:col-span-1">
+                  <DetailValue
+                    label="Verified at"
+                    value={
+                      detail.payment.verified_at
+                        ? formatDateTime(detail.payment.verified_at, effectiveTimeZone)
+                        : "Not verified"
+                    }
+                  />
+                </div>
+                <DetailValue
+                  label="Recorded amount"
+                  value={formatMinorMoney(detail.payment.amount_minor, detail.payment.currency)}
+                />
+                {detail.payment.rail === "cash" && detail.payment.cash_tendered_minor !== null ? (
+                  <DetailValue
+                    label="Cash tendered"
+                    value={formatMinorMoney(
+                      detail.payment.cash_tendered_minor,
+                      detail.payment.currency
+                    )}
+                  />
+                ) : null}
+                {detail.payment.rail === "cash" && detail.payment.change_due_minor !== null ? (
+                  <DetailValue
+                    label="Change due"
+                    value={formatMinorMoney(
+                      detail.payment.change_due_minor,
+                      detail.payment.currency
+                    )}
+                  />
+                ) : null}
               </div>
-              <DetailValue
-                label="Evidence"
-                value={
-                  detail.payment.rail !== "cash" &&
-                  detail.payment.status === "paid" &&
-                  detail.payment.verified_at &&
-                  detail.payment.evidence_status === "awaiting_upload"
-                    ? "Not provided (optional)"
-                    : PAYMENT_EVIDENCE_LABELS[detail.payment.evidence_status]
-                }
-              />
-              <DetailValue
-                label="Recorded amount"
-                value={formatMinorMoney(detail.payment.amount_minor, detail.payment.currency)}
-              />
-              {detail.payment.rail === "cash" && detail.payment.cash_tendered_minor !== null ? (
-                <DetailValue
-                  label="Cash tendered"
-                  value={formatMinorMoney(
-                    detail.payment.cash_tendered_minor,
-                    detail.payment.currency
-                  )}
-                />
-              ) : null}
-              {detail.payment.rail === "cash" && detail.payment.change_due_minor !== null ? (
-                <DetailValue
-                  label="Change due"
-                  value={formatMinorMoney(detail.payment.change_due_minor, detail.payment.currency)}
-                />
-              ) : null}
-              <DetailValue
-                label="Verified"
-                value={
-                  detail.payment.verified_at
-                    ? formatDateTime(detail.payment.verified_at, effectiveTimeZone)
-                    : "Not verified"
-                }
-              />
             </div>
           ) : (
             <p className="text-sm text-dashboard-muted">No payment intent is recorded yet.</p>
           )}
-          {canViewCompletedPaymentReceipts &&
-          detail.payment &&
-          !(paymentProof.kind === "ready" && paymentProof.receipts.length === 0) ? (
-            <>
-              <Separator className="my-4" />
-              <PaymentProof
-                state={paymentProof}
-                viewerOpen={paymentReceiptViewerOpen}
-                onViewerOpenChange={setPaymentReceiptViewerOpen}
-                heading="Payment receipt"
-              />
-            </>
-          ) : null}
         </DetailCard>
 
         <DetailCard title="Reservation lifecycle" icon={Clock3}>

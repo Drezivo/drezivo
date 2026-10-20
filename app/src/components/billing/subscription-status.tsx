@@ -8,7 +8,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import type { SubscriptionAccess } from "@drezivo/contracts";
 
 import { SubscribeDialog } from "@/components/billing/subscribe-dialog";
-import { PlanUpgradeProvider } from "@/components/billing/plan-upgrade-dialog";
+import { PlanUpgradeProvider, useRequestPlanUpgrade } from "@/components/billing/plan-upgrade-dialog";
 import { Button } from "@/components/ui/button";
 
 /**
@@ -114,12 +114,15 @@ const TONE_CLASS: Record<Tone, string> = {
 };
 
 const SubscribeContext = createContext<() => void>(() => undefined);
-/** Opens the Subscribe dialog from anywhere inside the dashboard. */
+/**
+ * Opens the owner's next billing step from anywhere inside the dashboard: the plan picker on Free
+ * (Free has nothing to pay for), otherwise the Subscribe dialog for the current plan.
+ */
 export const useOpenSubscribe = () => useContext(SubscribeContext);
 
 /**
- * Owns the Subscribe dialog, the view-only prompt, and the banner for the dashboard shell.
- * `onChanged` reloads the actor context after a payment is submitted.
+ * Owns the Subscribe dialog, the plan picker, the view-only prompt, and the banner for the
+ * dashboard shell. `onChanged` reloads the actor context after a trial starts or a payment is sent.
  */
 export function SubscriptionProvider({
   access,
@@ -130,11 +133,35 @@ export function SubscriptionProvider({
   onChanged: () => void;
   children: React.ReactNode;
 }) {
+  return (
+    <PlanUpgradeProvider onChanged={onChanged}>
+      <SubscribeRouting access={access} onChanged={onChanged}>
+        {children}
+      </SubscribeRouting>
+    </PlanUpgradeProvider>
+  );
+}
+
+function SubscribeRouting({
+  access,
+  onChanged,
+  children,
+}: {
+  access: SubscriptionAccess | null;
+  onChanged: () => void;
+  children: React.ReactNode;
+}) {
+  const requestUpgrade = useRequestPlanUpgrade();
   const [subscribeOpen, setSubscribeOpen] = useState(false);
-  const openSubscribe = useCallback(() => setSubscribeOpen(true), []);
+  // A Free owner with a payment under review goes straight to its status instead of the picker.
+  const choosePlan = access?.reason === "free" && !access.pending_payment;
+  const openSubscribe = useCallback(() => {
+    if (choosePlan) requestUpgrade();
+    else setSubscribeOpen(true);
+  }, [choosePlan, requestUpgrade]);
   return (
     <SubscribeContext.Provider value={openSubscribe}>
-      <PlanUpgradeProvider onChanged={onChanged}>{children}</PlanUpgradeProvider>
+      {children}
       <SubscriptionPrompt access={access} onPay={openSubscribe} />
       <SubscribeDialog
         open={subscribeOpen}
@@ -168,7 +195,7 @@ export function SubscriptionBanner({ access }: { access: SubscriptionAccess | nu
         onClick={openSubscribe}
         className="shrink-0 text-sm font-semibold text-dashboard-accent underline underline-offset-4"
       >
-        {access.pending_payment ? "Payment status" : "Subscribe"}
+        {access.pending_payment ? "Payment status" : access.reason === "free" ? "Upgrade" : "Subscribe"}
       </button>
     </div>
   );

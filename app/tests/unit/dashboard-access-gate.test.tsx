@@ -2,6 +2,8 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DashboardAccessGate } from "@/components/shell/dashboard-access-gate";
+import { DrezivoApiError } from "@/lib/drezivo-api";
+import { rememberResolvedWorkspace } from "@/lib/workspace-handoff";
 
 const clerk = vi.hoisted(() => ({
   getToken: vi.fn(),
@@ -13,6 +15,7 @@ const clerk = vi.hoisted(() => ({
 
 const router = vi.hoisted(() => ({ replace: vi.fn() }));
 const resolver = vi.hoisted(() => ({ resolveStaffLanding: vi.fn() }));
+const api = vi.hoisted(() => ({ getActorContext: vi.fn() }));
 
 vi.mock("@clerk/nextjs", () => ({
   useAuth: clerk.useAuth,
@@ -21,6 +24,11 @@ vi.mock("@clerk/nextjs", () => ({
 
 vi.mock("next/navigation", () => ({
   useRouter: () => router,
+}));
+
+vi.mock("@/lib/drezivo-api", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/drezivo-api")>()),
+  createDrezivoApiClient: () => api,
 }));
 
 vi.mock("@/lib/resolve-staff-landing", () => ({
@@ -38,6 +46,64 @@ describe("DashboardAccessGate", () => {
     });
     clerk.useClerk.mockReturnValue({ setActive: clerk.setActive, signOut: clerk.signOut });
     clerk.signOut.mockResolvedValue(undefined);
+    sessionStorage.clear();
+  });
+
+  describe("straight after sign-in", () => {
+    function signedInTo(orgId: string) {
+      clerk.useAuth.mockReturnValue({ getToken: clerk.getToken, isLoaded: true, isSignedIn: true, orgId });
+    }
+
+    it("skips the second workspace resolution and only loads the actor context", async () => {
+      signedInTo("org_123");
+      rememberResolvedWorkspace("org_123");
+      api.getActorContext.mockResolvedValue({ data: { tenant: { id: "tenant_123" } } });
+
+      render(
+        <DashboardAccessGate>
+          <div>Private dashboard</div>
+        </DashboardAccessGate>
+      );
+
+      expect(await screen.findByText("Private dashboard")).toBeVisible();
+      expect(api.getActorContext).toHaveBeenCalledTimes(1);
+      expect(resolver.resolveStaffLanding).not.toHaveBeenCalled();
+      expect(clerk.setActive).not.toHaveBeenCalled();
+    });
+
+    it("resolves normally when the hand-off was for another workspace", async () => {
+      signedInTo("org_123");
+      rememberResolvedWorkspace("org_other");
+      resolver.resolveStaffLanding.mockResolvedValue({
+        kind: "workspace",
+        workspace: { clerk_org_id: "org_123", tenant: { id: "tenant_123" } },
+      });
+
+      render(
+        <DashboardAccessGate>
+          <div>Private dashboard</div>
+        </DashboardAccessGate>
+      );
+
+      expect(await screen.findByText("Private dashboard")).toBeVisible();
+      expect(resolver.resolveStaffLanding).toHaveBeenCalledTimes(1);
+      expect(api.getActorContext).not.toHaveBeenCalled();
+    });
+
+    it("fails closed when the API refuses the actor context", async () => {
+      signedInTo("org_123");
+      rememberResolvedWorkspace("org_123");
+      api.getActorContext.mockRejectedValue(new DrezivoApiError("Access revoked.", { status: 403 }));
+
+      render(
+        <DashboardAccessGate>
+          <div>Private dashboard</div>
+        </DashboardAccessGate>
+      );
+
+      expect(await screen.findByText("Access revoked.")).toBeVisible();
+      expect(screen.queryByText("Private dashboard")).not.toBeInTheDocument();
+    });
   });
 
   it("redirects authenticated users without a workspace to onboarding instead of rendering the dashboard", async () => {

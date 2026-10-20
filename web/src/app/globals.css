@@ -115,12 +115,12 @@
 }
 
 :root {
-  --font-bodoni: 'Bodoni Moda Variable';
+  --font-playfair: 'Playfair Display Variable';
   --font-atelier-jost: 'Jost Variable';
   --font-atelier-hand: 'Caveat Variable';
   --font-newsreader: 'Newsreader Variable';
   --font-jost: 'Jost Variable';
-  --font-nf-display: 'Bodoni Moda Variable';
+  --font-nf-display: 'Playfair Display Variable';
   --font-nf-body: 'Jost Variable';
 }
 
@@ -134,8 +134,15 @@
   }
 }
 
-* {
-  border-color: var(--color-border);
+/*
+ * Default border colour, in the base layer so border colour utilities (border-transparent,
+ * border-sf-ink, ...) still win. Unlayered, this beat every utility: a storefront's page links all
+ * showed a border and the current page looked like the rest.
+ */
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
 }
 
 body {
