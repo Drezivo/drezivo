@@ -87,7 +87,7 @@ vi.mock("@/components/reservations/reservation-availability-calendar", () => ({
       </button>
     </div>
   ),
-  monthWindow: () => ({ startDate: "2026-10-01", endDate: "2026-10-31" }),
+  availabilityWindow: () => ({ startDate: "2026-10-01", endDate: "2026-10-31" }),
   parseCalendarDate: (value: string) => {
     const [year, month, day] = value.split("-").map(Number);
     return year && month && day ? new Date(year, month - 1, day) : null;

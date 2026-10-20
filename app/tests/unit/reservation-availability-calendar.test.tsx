@@ -4,7 +4,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { staffReservationAvailabilityCalendarResponse } from "@drezivo/contracts";
 
-import { ReservationAvailabilityCalendar } from "@/components/reservations/reservation-availability-calendar";
+import {
+  availabilityWindow,
+  ReservationAvailabilityCalendar,
+} from "@/components/reservations/reservation-availability-calendar";
 
 const availability = staffReservationAvailabilityCalendarResponse.parse({
   variant_id: "00000000-0000-4000-8000-000000000101",
@@ -418,6 +421,69 @@ describe("ReservationAvailabilityCalendar", () => {
 
       // Oct 12 is fully reserved in this fixture, so no 3-day range from Oct 10 is possible.
       expect(onRangeChange).toHaveBeenLastCalledWith({ pickupDate: "2026-10-10", dueDate: "" });
+    });
+  });
+
+  describe("a range that crosses into the next month", () => {
+    const day = (date: string) => ({
+      date,
+      state: "available" as const,
+      active_assets: 2,
+      ready_assets: 2,
+      available_assets: 2,
+      reserved_assets: 0,
+      rented_assets: 0,
+      fitting_assets: 0,
+      maintenance_assets: 0,
+      transfer_assets: 0,
+    });
+    const isoDays = (from: string, to: string) => {
+      const days: string[] = [];
+      for (let date = new Date(`${from}T00:00:00Z`); date <= new Date(`${to}T00:00:00Z`); date.setUTCDate(date.getUTCDate() + 1)) {
+        days.push(date.toISOString().slice(0, 10));
+      }
+      return days;
+    };
+
+    it("loads the visible month back to a pickup chosen in an earlier month, within the API's 62 days", () => {
+      expect(availabilityWindow(new Date(2026, 10, 1), "")).toEqual({ startDate: "2026-11-01", endDate: "2026-11-30" });
+      expect(availabilityWindow(new Date(2026, 10, 1), "2026-11-05")).toEqual({ startDate: "2026-11-01", endDate: "2026-11-30" });
+      expect(availabilityWindow(new Date(2026, 10, 1), "2026-10-28")).toEqual({ startDate: "2026-10-28", endDate: "2026-11-30" });
+      // Never wider than 62 days: Dec 31 - 61 days = Oct 31.
+      expect(availabilityWindow(new Date(2026, 11, 1), "2026-10-28")).toEqual({ startDate: "2026-10-31", endDate: "2026-12-31" });
+    });
+
+    it("makes a November click the return date for an October pickup", () => {
+      const onRangeChange = vi.fn();
+      const window = availabilityWindow(new Date(2026, 10, 1), "2026-10-28");
+      const crossMonth = staffReservationAvailabilityCalendarResponse.parse({
+        ...availability,
+        window: { start_date: window.startDate, end_date: window.endDate },
+        days: isoDays(window.startDate, window.endDate).map(day),
+      });
+      function Harness() {
+        const [range, setRange] = useState({ pickupDate: "2026-10-28", dueDate: "" });
+        return (
+          <ReservationAvailabilityCalendar
+            availabilityItems={[{ label: "Rosalie · Flexible fit", response: crossMonth }]}
+            loading={false}
+            error={null}
+            month={new Date(2026, 10, 1)}
+            onMonthChange={vi.fn()}
+            pickupDate={range.pickupDate}
+            dueDate={range.dueDate}
+            onRangeChange={(next) => {
+              setRange(next);
+              onRangeChange(next);
+            }}
+          />
+        );
+      }
+      render(<Harness />);
+
+      fireEvent.click(screen.getByRole("button", { name: /November 3(rd)?,.*Available/i }));
+
+      expect(onRangeChange).toHaveBeenLastCalledWith({ pickupDate: "2026-10-28", dueDate: "2026-11-03" });
     });
   });
 });
