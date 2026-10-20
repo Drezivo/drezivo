@@ -1,7 +1,7 @@
 ---
 title: R2 Image Replacement Cleanup Checklist
 type: implementation-checklist
-status: in-progress
+status: archived
 owner: Drezivo team
 source: "Owner request; API route/reference re-scan, cleanup implementation, and migration ordering review, 2026-10-10"
 updated: 2026-10-10
@@ -105,7 +105,6 @@ Keep these protected or versioned references intact:
 ## Related notes and sources
 
 - [[00-Home/Drezivo Home]]
-- [[05-Operations/API Security Review 2026-10-07]]
 - [Accepted R2 storage decision](../../decisions/0010-cloudflare-r2-object-storage.md)
 - [Replacement cleanup rollout and operations runbook](../../runbooks/file-object-cleanup.md)
 - [File-object schema](../../../api/src/db/schema/files.ts)

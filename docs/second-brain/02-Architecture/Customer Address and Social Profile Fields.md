@@ -46,4 +46,4 @@ Source: [PRD Operations](../../product/Drezivo-PRD.md) and
 [TRD reservation commands](../../architecture/Drezivo-TRD.md).
 
 See [[02-Architecture/Drezivo Architecture]] for the API and tenant boundary, and
-[[05-Operations/Reservations Checklist]] for the reservation lifecycle.
+[[99-Archive/Reservations Checklist]] for the reservation lifecycle.

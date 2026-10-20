@@ -1,7 +1,7 @@
 ---
 title: Rental Calendar End-to-End Implementation Checklist
 type: implementation-checklist
-status: in-progress
+status: archived
 owner: Drezivo team
 updated: 2026-10-01
 tags: [drezivo, calendar, schedule, reservations, fittings, operations, checklist]

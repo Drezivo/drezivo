@@ -1,3 +1,11 @@
+---
+title: Business Hours and Fittings Schedule Refactor Tasks
+type: implementation-plan
+status: archived
+updated: 2026-10-21
+tags: [drezivo, fittings, business-hours, archive]
+---
+
 <!-- 1. --> Freeze the ownership rule that branch Business Hours are the single source of truth for when the active branch is open.
 <!-- 2. --> Freeze the ownership rule that Fitting Settings only control whether fittings are accepted, simultaneous fitting capacity, appointment duration, and fitting fee.
 <!-- 3. --> Freeze the ownership rule that Calendar reads Business Hours for its visible daily time range and does not own a separate schedule.

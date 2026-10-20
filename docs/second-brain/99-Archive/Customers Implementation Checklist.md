@@ -1,7 +1,7 @@
 ---
 title: Customers Implementation Checklist
 type: implementation-checklist
-status: planned
+status: archived
 owner: Drezivo team
 updated: 2026-09-28
 tags: [drezivo, customers, frontend, backend, reservations, fittings]

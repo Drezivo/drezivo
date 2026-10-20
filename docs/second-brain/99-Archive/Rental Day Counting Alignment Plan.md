@@ -1,7 +1,7 @@
 ---
 title: Rental Day Counting Alignment Implementation Plan
 type: implementation-plan
-status: implemented
+status: archived
 owner: Drezivo team
 updated: 2026-10-03
 tags: [drezivo, reservations, pricing, rental-days, availability, storefront, operations]
