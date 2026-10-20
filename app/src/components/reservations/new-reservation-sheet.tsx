@@ -44,7 +44,7 @@ import type {
 
 import {
   ReservationAvailabilityCalendar,
-  monthWindow,
+  availabilityWindow,
   parseCalendarDate,
   todayInTimeZone,
   type ReservationCalendarAvailabilityItem,
@@ -303,6 +303,11 @@ export function NewReservationSheet({
     [calendarSelection]
   );
   const calendarVariantKey = calendarVariantIds.join("|");
+  // Keeps a pickup chosen in an earlier month loaded while staff pick the return date.
+  const { startDate: calendarWindowStart, endDate: calendarWindowEnd } = availabilityWindow(
+    calendarMonth,
+    pickupDate
+  );
   const calendarAvailabilityItems = useMemo<ReservationCalendarAvailabilityItem[]>(
     () =>
       calendarSelection.flatMap((item) => {
@@ -717,7 +722,6 @@ export function NewReservationSheet({
       return;
     }
     let cancelled = false;
-    const window = monthWindow(calendarMonth);
     setCalendarLoading(true);
     setCalendarAvailabilityByVariant({});
     setCalendarAvailabilityError(null);
@@ -726,8 +730,8 @@ export function NewReservationSheet({
       variantIds.map(async (variantId) => {
         const result = await api.getStaffReservationAvailabilityCalendar({
           variant_id: variantId as ProductVariantId,
-          start_date: window.startDate,
-          end_date: window.endDate,
+          start_date: calendarWindowStart,
+          end_date: calendarWindowEnd,
         });
         return [variantId, result.data] as const;
       })
@@ -747,7 +751,7 @@ export function NewReservationSheet({
     return () => {
       cancelled = true;
     };
-  }, [availabilityReloadVersion, calendarMonth, calendarVariantKey, getToken, open, step]);
+  }, [availabilityReloadVersion, calendarVariantKey, calendarWindowEnd, calendarWindowStart, getToken, open, step]);
 
   useEffect(() => {
     if (
