@@ -13,6 +13,14 @@ vi.mock("@clerk/nextjs", () => ({
   useAuth: () => ({ getToken: auth.getToken, isLoaded: true, isSignedIn: true }),
 }));
 
+vi.mock("next/link", async () => {
+  const React = await import("react");
+  return {
+    default: ({ href, children, ...props }: React.ComponentProps<"a">) =>
+      React.createElement("a", { ...props, href }, children),
+  };
+});
+
 vi.mock("@/lib/drezivo-api", () => ({
   createDrezivoApiClient: () => ({ getDashboardOverview: dashboardApi.getDashboardOverview }),
   DrezivoApiError: class DrezivoApiError extends Error {
@@ -120,6 +128,11 @@ const overview: DashboardOverviewResponse = {
   },
 };
 
+function chooseMonth(label: "Start month" | "End month", month: string, year = 2026) {
+  fireEvent.click(screen.getByLabelText(label));
+  fireEvent.click(screen.getByRole("button", { name: `${month} ${year}` }));
+}
+
 describe("DashboardOverview", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -160,11 +173,7 @@ describe("DashboardOverview", () => {
     for (const [name, href] of metricLinks) {
       expect(within(metrics).getByRole("link", { name })).toHaveAttribute("href", href);
     }
-    expect(metrics).toHaveClass(
-      "grid-cols-2",
-      "md:grid-cols-3",
-      "min-[1440px]:grid-cols-6"
-    );
+    expect(metrics).toHaveClass("grid-cols-2", "md:grid-cols-3", "min-[1440px]:grid-cols-6");
     expect(metrics).not.toHaveClass("[&>*:last-child]:col-span-2");
 
     expect(screen.getByText("₱48,500.00")).toBeVisible();
@@ -179,10 +188,16 @@ describe("DashboardOverview", () => {
         /Completed Rental Value is month-to-date; Projected Rental Value combines completed/
       )
     ).not.toBeInTheDocument();
-    expect(screen.getByText("Projected Rental Value")).toBeVisible();
+    expect(screen.getByLabelText("Start month")).toHaveTextContent("Select month");
+    expect(screen.getByLabelText("End month")).toHaveTextContent("Select month");
+    expect(screen.getByRole("button", { name: "Clear month filters" })).toBeDisabled();
+    expect(dashboardApi.getDashboardOverview).toHaveBeenCalledWith({ all_time: "true" });
+    expect(screen.getByText("Expected Total Sales")).toBeVisible();
     expect(screen.getByText("₱12,500.00")).toBeVisible();
     expect(
-      screen.getByText("Completed rental fees to date + 4 upcoming confirmed reservations")
+      screen.getByText(
+        "Completed and overdue rental fees + 4 upcoming confirmed bookings across all time"
+      )
     ).toBeVisible();
     expect(screen.getByText("Projected Sales This Month")).toBeVisible();
     expect(screen.getByText("₱53,000.00")).toBeVisible();
@@ -193,7 +208,7 @@ describe("DashboardOverview", () => {
     expect(screen.queryByText(/sample|prototype|maria|2025/i)).not.toBeInTheDocument();
   });
 
-  it("leaves out the projection card when an older API does not send it", async () => {
+  it("leaves out Expected Total Sales when an older API does not send the projection", async () => {
     const { projected_rental_value: _omitted, ...olderPerformance } = overview.business_performance;
     dashboardApi.getDashboardOverview.mockResolvedValue({
       data: { ...overview, business_performance: olderPerformance },
@@ -201,7 +216,7 @@ describe("DashboardOverview", () => {
     render(<DashboardOverview />);
 
     expect(await screen.findByText("Completed Rental Value")).toBeVisible();
-    expect(screen.queryByText("Projected Rental Value")).not.toBeInTheDocument();
+    expect(screen.queryByText("Expected Total Sales")).not.toBeInTheDocument();
   });
 
   it("explains the projection when there are no upcoming confirmed reservations", async () => {
@@ -217,8 +232,155 @@ describe("DashboardOverview", () => {
     render(<DashboardOverview />);
 
     expect(
-      await screen.findByText("Completed rental fees to date, with no upcoming confirmed bookings")
+      await screen.findByText(
+        "Completed and overdue rental fees + no upcoming confirmed bookings across all time"
+      )
     ).toBeVisible();
+  });
+
+  it("recomputes the total for each month selection and clears both bounds with one action", async () => {
+    const responseWithTotal = (current_minor: string) => ({
+      data: {
+        ...overview,
+        business_performance: {
+          ...overview.business_performance,
+          projected_rental_value: { current_minor, reservations: 0 },
+        },
+      },
+    });
+    dashboardApi.getDashboardOverview
+      .mockResolvedValueOnce(responseWithTotal("500000"))
+      .mockResolvedValueOnce(responseWithTotal("350000"))
+      .mockResolvedValueOnce(responseWithTotal("500000"))
+      .mockResolvedValueOnce(responseWithTotal("200000"))
+      .mockResolvedValueOnce(responseWithTotal("50000"))
+      .mockResolvedValueOnce(responseWithTotal("150000"))
+      .mockResolvedValueOnce(responseWithTotal("500000"));
+
+    render(<DashboardOverview />);
+    await screen.findByText("Expected Total Sales");
+    expect(await screen.findByText("₱5,000.00")).toBeVisible();
+    expect(dashboardApi.getDashboardOverview).toHaveBeenLastCalledWith({ all_time: "true" });
+
+    chooseMonth("Start month", "October");
+    await waitFor(() =>
+      expect(dashboardApi.getDashboardOverview).toHaveBeenLastCalledWith({
+        start_month: "2026-10",
+      })
+    );
+    expect(await screen.findByText("₱3,500.00")).toBeVisible();
+
+    fireEvent.click(screen.getByRole("button", { name: "Clear month filters" }));
+    await waitFor(() =>
+      expect(dashboardApi.getDashboardOverview).toHaveBeenLastCalledWith({ all_time: "true" })
+    );
+    chooseMonth("End month", "October");
+    await waitFor(() =>
+      expect(dashboardApi.getDashboardOverview).toHaveBeenLastCalledWith({
+        end_month: "2026-10",
+      })
+    );
+    expect(await screen.findByText("₱2,000.00")).toBeVisible();
+
+    chooseMonth("Start month", "October");
+    await waitFor(() =>
+      expect(dashboardApi.getDashboardOverview).toHaveBeenLastCalledWith({
+        start_month: "2026-10",
+        end_month: "2026-10",
+      })
+    );
+    expect(await screen.findByText("₱500.00")).toBeVisible();
+
+    chooseMonth("End month", "November");
+    await waitFor(() =>
+      expect(dashboardApi.getDashboardOverview).toHaveBeenLastCalledWith({
+        start_month: "2026-10",
+        end_month: "2026-11",
+      })
+    );
+    expect(await screen.findByText("₱1,500.00")).toBeVisible();
+
+    fireEvent.click(screen.getByRole("button", { name: "Clear month filters" }));
+    await waitFor(() =>
+      expect(dashboardApi.getDashboardOverview).toHaveBeenLastCalledWith({ all_time: "true" })
+    );
+    expect(screen.getByLabelText("Start month")).toHaveTextContent("Select month");
+    expect(screen.getByLabelText("End month")).toHaveTextContent("Select month");
+    expect(screen.getByText("₱5,000.00")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Clear month filters" })).toBeDisabled();
+    expect(screen.getByText("Completed Rental Value")).toBeVisible();
+    expect(screen.getByText("Projected Sales This Month")).toBeVisible();
+  });
+
+  it("keeps the last total and avoids a request for reversed bounds, then requests a valid cross-month range", async () => {
+    dashboardApi.getDashboardOverview.mockResolvedValue({
+      data: {
+        ...overview,
+        business_performance: {
+          ...overview.business_performance,
+          projected_rental_value: { current_minor: "150000", reservations: 1 },
+        },
+      },
+    });
+    dashboardApi.getDashboardOverview.mockResolvedValueOnce({ data: overview });
+    render(<DashboardOverview />);
+    await screen.findByText("Expected Total Sales");
+
+    chooseMonth("End month", "October");
+    await waitFor(() =>
+      expect(dashboardApi.getDashboardOverview).toHaveBeenLastCalledWith({ end_month: "2026-10" })
+    );
+    expect(await screen.findByText("₱1,500.00")).toBeVisible();
+
+    chooseMonth("Start month", "November");
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Start month must be on or before End month."
+    );
+    expect(dashboardApi.getDashboardOverview).toHaveBeenCalledTimes(2);
+    expect(screen.getByText("₱1,500.00")).toBeVisible();
+
+    chooseMonth("End month", "November");
+    await waitFor(() =>
+      expect(dashboardApi.getDashboardOverview).toHaveBeenLastCalledWith({
+        start_month: "2026-11",
+        end_month: "2026-11",
+      })
+    );
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(await screen.findByText("₱1,500.00")).toBeVisible();
+
+    chooseMonth("Start month", "September");
+    await waitFor(() =>
+      expect(dashboardApi.getDashboardOverview).toHaveBeenLastCalledWith({
+        start_month: "2026-09",
+        end_month: "2026-11",
+      })
+    );
+    chooseMonth("End month", "October");
+    await waitFor(() =>
+      expect(dashboardApi.getDashboardOverview).toHaveBeenLastCalledWith({
+        start_month: "2026-09",
+        end_month: "2026-10",
+      })
+    );
+
+    dashboardApi.getDashboardOverview.mockResolvedValueOnce({
+      data: {
+        ...overview,
+        business_performance: {
+          ...overview.business_performance,
+          projected_rental_value: { current_minor: "200000", reservations: 0 },
+        },
+      },
+    });
+    chooseMonth("End month", "August");
+    await waitFor(() =>
+      expect(dashboardApi.getDashboardOverview).toHaveBeenLastCalledWith({ end_month: "2026-08" })
+    );
+    expect(screen.getByLabelText("Start month")).toHaveTextContent("Select month");
+    expect(screen.getByLabelText("End month")).toHaveTextContent("August 2026");
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(await screen.findByText("₱2,000.00")).toBeVisible();
   });
 
   it("shows dashboard skeletons without presenting fabricated dashboard values", () => {
@@ -309,8 +471,10 @@ describe("DashboardOverview", () => {
     render(<DashboardOverview />);
 
     expect(await screen.findByText("No schedule activity today.")).toBeVisible();
-    expect(screen.getByText("No upcoming rentals in this window.")).toBeVisible();
-    expect(screen.getByText("No upcoming fitting appointments in this window.")).toBeVisible();
+    expect(screen.getAllByText("No upcoming rentals in this window.").length).toBeGreaterThan(0);
+    expect(
+      screen.getAllByText("No upcoming fitting appointments in this window.").length
+    ).toBeGreaterThan(0);
   });
 
   it("shows an explicit retryable error and reloads instead of falling back to fixtures", async () => {
@@ -339,6 +503,7 @@ describe("DashboardOverview", () => {
         completed_rentals: { current: 0, previous: 0 },
         average_rental_value: { current_minor: null, previous_minor: null },
         projected_sales_current_month: { current_minor: "0", reservations: 0 },
+        projected_rental_value: { current_minor: "0", reservations: 0 },
         new_customers: { current: 0, previous: 0 },
       },
     } satisfies DashboardOverviewResponse;
@@ -352,7 +517,9 @@ describe("DashboardOverview", () => {
       expect(screen.getAllByText("No prior-month baseline").length).toBeGreaterThan(0)
     );
     expect(
-      screen.getByText("Completed rental fees + no upcoming confirmed bookings this month")
+      screen.getByText(
+        "Completed and overdue rental fees + no upcoming confirmed bookings across all time"
+      )
     ).toBeVisible();
   });
 });

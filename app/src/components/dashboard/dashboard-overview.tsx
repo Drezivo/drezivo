@@ -11,6 +11,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { MonthPickerField } from "@/components/ui/month-picker-field";
 import {
   Table,
   TableBody,
@@ -103,9 +104,15 @@ function StatusBadge({ status }: { status: string }) {
 export function DashboardOverview() {
   const { getToken, isLoaded, isSignedIn } = useAuth();
   const [overview, setOverview] = useState<DashboardOverviewResponse | null>(null);
+  const [startMonth, setStartMonth] = useState<string | null>(null);
+  const [endMonth, setEndMonth] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<DrezivoApiError | null>(null);
   const [reloadVersion, setReloadVersion] = useState(0);
+  const rangeError =
+    startMonth && endMonth && startMonth > endMonth
+      ? "Start month must be on or before End month."
+      : null;
 
   useEffect(() => {
     if (!isLoaded) return;
@@ -116,13 +123,26 @@ export function DashboardOverview() {
       return;
     }
 
+    if (rangeError) {
+      setIsLoading(false);
+      return;
+    }
+
     let cancelled = false;
     setIsLoading(true);
     setError(null);
+    const query =
+      startMonth === null && endMonth === null
+        ? { all_time: "true" as const }
+        : {
+            ...(startMonth ? { start_month: startMonth } : {}),
+            ...(endMonth ? { end_month: endMonth } : {}),
+          };
     void createDrezivoApiClient(getToken)
-      .getDashboardOverview()
+      .getDashboardOverview(query)
       .then(({ data }) => {
-        if (!cancelled) setOverview(data);
+        if (cancelled) return;
+        setOverview(data);
       })
       .catch((caughtError: unknown) => {
         if (cancelled) return;
@@ -136,7 +156,7 @@ export function DashboardOverview() {
     return () => {
       cancelled = true;
     };
-  }, [getToken, isLoaded, isSignedIn, reloadVersion]);
+  }, [getToken, isLoaded, isSignedIn, reloadVersion, startMonth, endMonth, rangeError]);
 
   if (!isLoaded || (isLoading && overview === null)) {
     return <DashboardLoadingState />;
@@ -195,6 +215,10 @@ export function DashboardOverview() {
       overview.window.timezone
     ),
   };
+  const monthPickerDefaultYear = getCalendarYear(
+    overview.window.current_month.start,
+    overview.window.timezone
+  );
 
   return (
     <div className="min-h-full px-ws-gutter py-5 sm:py-6" aria-busy={isLoading || undefined}>
@@ -224,7 +248,10 @@ export function DashboardOverview() {
                 aria-label={`View ${metric.label}`}
                 className="group block h-full rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dashboard-accent focus-visible:ring-offset-2 focus-visible:ring-offset-dashboard-canvas"
               >
-                <Card data-mobile-card="keep" className="min-h-36 justify-between py-4 transition-colors group-hover:border-dashboard-accent/50 group-focus-visible:border-dashboard-accent max-xl:h-full sm:min-h-[166px] sm:py-5">
+                <Card
+                  data-mobile-card="keep"
+                  className="min-h-36 justify-between py-4 transition-colors group-hover:border-dashboard-accent/50 group-focus-visible:border-dashboard-accent max-xl:h-full sm:min-h-[166px] sm:py-5"
+                >
                   <CardContent className="flex h-full flex-col justify-between px-4 sm:px-5 max-xl:h-auto max-xl:justify-start max-xl:gap-4">
                     <div className="flex items-center justify-between">
                       <div
@@ -244,7 +271,10 @@ export function DashboardOverview() {
                       <CardTitle as="h2" className="text-3xl tabular-nums text-dashboard-navy">
                         {value.toLocaleString("en-PH")}
                       </CardTitle>
-                      <CardTitle as="h3" className="mt-1 text-sm font-medium text-dashboard-navy/80">
+                      <CardTitle
+                        as="h3"
+                        className="mt-1 text-sm font-medium text-dashboard-navy/80"
+                      >
                         {metric.label}
                       </CardTitle>
                     </div>
@@ -287,7 +317,8 @@ export function DashboardOverview() {
                                 className="break-words text-xs text-dashboard-muted"
                                 key={`${item.name}-${index}`}
                               >
-                                {item.name} · {formatRentalItemPrice(item.rental_minor, item.currency)}
+                                {item.name} ·{" "}
+                                {formatRentalItemPrice(item.rental_minor, item.currency)}
                                 {" / "}
                                 {event.rental_days} {event.rental_days === 1 ? "day" : "days"}
                               </p>
@@ -330,7 +361,9 @@ export function DashboardOverview() {
                                 items
                               ) : (
                                 <p className="text-xs text-dashboard-muted">
-                                  {event.source === "reservation" ? "Rental" : "Fitting appointment"}
+                                  {event.source === "reservation"
+                                    ? "Rental"
+                                    : "Fitting appointment"}
                                 </p>
                               )}
                             </div>
@@ -491,7 +524,10 @@ export function DashboardOverview() {
           <Card data-mobile-card="keep" className="py-0">
             <CardHeader className="border-b border-dashboard-border px-5 py-5 max-sm:flex max-sm:min-h-[46px] max-sm:items-center max-sm:justify-between max-sm:!px-[15px] max-sm:!py-0">
               <div>
-                <CardTitle as="h2" className="text-base text-dashboard-navy max-sm:text-[13px] max-sm:font-medium">
+                <CardTitle
+                  as="h2"
+                  className="text-base text-dashboard-navy max-sm:text-[13px] max-sm:font-medium"
+                >
                   Upcoming Fitting Appointments
                 </CardTitle>
                 <p className="mt-1 text-xs text-dashboard-muted max-sm:hidden">
@@ -504,7 +540,11 @@ export function DashboardOverview() {
                   aria-label="View all fitting appointments"
                   className="flex items-center gap-1 whitespace-nowrap text-sm font-semibold text-dashboard-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-dashboard-accent max-sm:text-[11px]"
                 >
-                  View all <ArrowRight className="h-4 w-4 max-sm:h-[13px] max-sm:w-[13px]" aria-hidden="true" />
+                  View all{" "}
+                  <ArrowRight
+                    className="h-4 w-4 max-sm:h-[13px] max-sm:w-[13px]"
+                    aria-hidden="true"
+                  />
                 </Link>
               </CardAction>
             </CardHeader>
@@ -524,7 +564,9 @@ export function DashboardOverview() {
                     </div>
                     <div className="mt-[9px] space-y-2">
                       <div className="min-w-0">
-                        <p className="mb-0.5 text-[11px] leading-[1.2] text-dashboard-muted">Customer</p>
+                        <p className="mb-0.5 text-[11px] leading-[1.2] text-dashboard-muted">
+                          Customer
+                        </p>
                         <p className="break-words text-xs font-medium leading-[1.3] text-dashboard-navy">
                           {appointment.customer_name}
                         </p>
@@ -536,7 +578,9 @@ export function DashboardOverview() {
                         </p>
                       </div>
                       <div className="min-w-0">
-                        <p className="mb-0.5 text-[11px] leading-[1.2] text-dashboard-muted">Clothing</p>
+                        <p className="mb-0.5 text-[11px] leading-[1.2] text-dashboard-muted">
+                          Clothing
+                        </p>
                         <p className="break-words text-xs font-medium leading-[1.3] text-dashboard-navy">
                           {appointment.garment_names.join(", ") || "—"}
                         </p>
@@ -606,7 +650,8 @@ export function DashboardOverview() {
                   Business Performance
                 </CardTitle>
                 <p className="mt-1 text-xs text-dashboard-muted">
-                  Monthly rental performance, projected sales, completed bookings, and new customers.
+                  Monthly rental performance, projected sales, completed bookings, and new
+                  customers.
                 </p>
               </div>
               <CardAction>
@@ -618,17 +663,64 @@ export function DashboardOverview() {
             <CardContent className="space-y-4 px-5 pb-5 pt-5">
               <div className="grid grid-cols-2 gap-3">
                 {overview.business_performance.projected_rental_value ? (
-                  <div className="col-span-2">
-                    <PerformanceMetric
-                      label="Projected Rental Value"
-                      value={formatMoneyMinor(
+                  <div className="col-span-2 rounded-lg border border-dashboard-border bg-dashboard-surface px-3 py-3">
+                    <div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
+                      <MonthPickerField
+                        id="expected-sales-start-month"
+                        label="Start month"
+                        value={startMonth ?? ""}
+                        defaultYear={monthPickerDefaultYear}
+                        onChange={(value) => setStartMonth(value || null)}
+                      />
+                      <MonthPickerField
+                        id="expected-sales-end-month"
+                        label="End month"
+                        value={endMonth ?? ""}
+                        defaultYear={monthPickerDefaultYear}
+                        popoverAlign="end"
+                        onChange={(value) => {
+                          const nextEndMonth = value || null;
+                          if (nextEndMonth && startMonth && nextEndMonth < startMonth) {
+                            setStartMonth(null);
+                          }
+                          setEndMonth(nextEndMonth);
+                        }}
+                      />
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        aria-label="Clear month filters"
+                        disabled={!startMonth && !endMonth}
+                        onClick={() => {
+                          setStartMonth(null);
+                          setEndMonth(null);
+                        }}
+                      >
+                        Clear filters
+                      </Button>
+                    </div>
+                    {rangeError ? (
+                      <p className="mt-2 text-xs text-destructive" role="alert">
+                        {rangeError}
+                      </p>
+                    ) : null}
+                    <p className="mt-3 text-lg font-semibold leading-tight text-dashboard-navy">
+                      {formatMoneyMinor(
                         overview.business_performance.projected_rental_value.current_minor,
                         overview.business_performance.currency
                       )}
-                      comparison={projectionNote(
-                        overview.business_performance.projected_rental_value.reservations
+                    </p>
+                    <p className="mt-1 text-xs font-medium text-dashboard-navy/80">
+                      Expected Total Sales
+                    </p>
+                    <p className="mt-1 text-xs text-dashboard-accent">
+                      {expectedSalesNote(
+                        overview.business_performance.projected_rental_value.reservations,
+                        startMonth,
+                        endMonth
                       )}
-                    />
+                    </p>
                   </div>
                 ) : null}
                 <PerformanceMetric
@@ -753,11 +845,18 @@ function ScheduleRow({
   );
 }
 
-/** Says what the projection is made of, since it is not yet earned money. */
-function projectionNote(reservations: number): string {
-  if (reservations === 0)
-    return "Completed rental fees to date, with no upcoming confirmed bookings";
-  return `Completed rental fees to date + ${reservations.toLocaleString("en-PH")} upcoming confirmed ${reservations === 1 ? "reservation" : "reservations"}`;
+/** Distinguishes realized rental fees from upcoming bookings in the estimate. */
+function expectedSalesNote(
+  reservations: number,
+  startMonth: string | null,
+  endMonth: string | null
+): string {
+  const range = startMonth || endMonth ? "for the selected months" : "across all time";
+  const upcoming =
+    reservations === 0
+      ? "no upcoming confirmed bookings"
+      : `${reservations.toLocaleString("en-PH")} upcoming confirmed ${reservations === 1 ? "booking" : "bookings"}`;
+  return `Completed and overdue rental fees + ${upcoming} ${range}`;
 }
 
 function monthlyProjectionNote(reservations: number): string {
@@ -848,6 +947,14 @@ function formatMonth(value: string, timezone: string): string {
     month: "long",
     year: "numeric",
   }).format(new Date(value));
+}
+
+function getCalendarYear(value: string, timezone: string): number {
+  return Number(
+    new Intl.DateTimeFormat("en-PH", { timeZone: timezone, year: "numeric" }).format(
+      new Date(value)
+    )
+  );
 }
 
 function formatMoneyMinor(value: string, currency: string): string {

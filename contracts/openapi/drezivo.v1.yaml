@@ -17171,11 +17171,32 @@ paths:
         - dashboard
       summary: Read the active branch dashboard overview from authoritative
         reservations, fittings, payment evidence, and customers.
+      parameters:
+        - schema:
+            type: string
+            pattern: ^\d{4}-(0[1-9]|1[0-2])$
+          required: false
+          name: start_month
+          in: query
+        - schema:
+            type: string
+            pattern: ^\d{4}-(0[1-9]|1[0-2])$
+          required: false
+          name: end_month
+          in: query
+        - schema:
+            type: string
+            enum:
+              - "true"
+          required: false
+          name: all_time
+          in: query
       responses:
         "200":
-          description: Branch-local operational counts and bounded dashboard lists, with
-            completed rental value and active customer counts for the current
-            and prior calendar months.
+          description: Branch-local operational counts and bounded dashboard lists.
+            Expected Total Sales supports optional inclusive pickup-month
+            bounds; without bounds it defaults to the current branch-local
+            month, and all_time=true selects all months.
           content:
             application/json:
               schema:
@@ -17758,10 +17779,13 @@ paths:
                               - current_minor
                               - reservations
                             additionalProperties: false
-                            description: Lifetime completed rental fees plus fees from confirmed
-                              reservations with pickup_at at or after the query
-                              database as_of timestamp. Excludes deposits;
-                              reservations counts upcoming confirmed bookings.
+                            description: Expected rental fees for the selected inclusive pickup-month range
+                              (current branch-local month by default, all time
+                              when all_time=true). Includes completed rentals,
+                              overdue confirmed/picked-up/returned bookings, and
+                              upcoming confirmed bookings; excludes deposits.
+                              reservations counts only upcoming confirmed
+                              bookings.
                         required:
                           - currency
                           - completed_rental_value
@@ -17875,6 +17899,50 @@ paths:
                   - request_id
         "409":
           description: The tenant lifecycle does not permit this operational read.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        enum: *a28
+                      message:
+                        type: string
+                        minLength: 1
+                      fields:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            field:
+                              type: string
+                              minLength: 1
+                            message:
+                              type: string
+                              minLength: 1
+                          required:
+                            - field
+                            - message
+                    required:
+                      - code
+                      - message
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - error
+                  - request_id
+        "422":
+          description: The dashboard overview month filter is invalid.
           content:
             application/json:
               schema:

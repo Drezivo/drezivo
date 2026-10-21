@@ -1,4 +1,5 @@
 import type { PoolClient } from 'pg';
+import type { DashboardOverviewQuery } from '@drezivo/contracts';
 
 /**
  * Reads the whole overview in one database statement. The branch clock is therefore consistent
@@ -33,7 +34,19 @@ export const DASHBOARD_OVERVIEW_SQL = `WITH branch_clock AS MATERIALIZED (
          local_month::timestamp AT TIME ZONE timezone AS month_start,
          (local_month + INTERVAL '1 month')::timestamp AT TIME ZONE timezone AS month_end,
          (local_month - INTERVAL '1 month')::timestamp AT TIME ZONE timezone AS previous_month_start,
-         local_month::timestamp AT TIME ZONE timezone AS previous_month_end
+         local_month::timestamp AT TIME ZONE timezone AS previous_month_end,
+         CASE
+           WHEN $5::boolean THEN NULL
+           WHEN $3::text IS NOT NULL OR $4::text IS NOT NULL THEN
+             CASE WHEN $3::text IS NOT NULL THEN to_date($3::text || '-01', 'YYYY-MM-DD') END
+           ELSE local_month
+         END AS projection_start_month,
+         CASE
+           WHEN $5::boolean THEN NULL
+           WHEN $3::text IS NOT NULL OR $4::text IS NOT NULL THEN
+             CASE WHEN $4::text IS NOT NULL THEN to_date($4::text || '-01', 'YYYY-MM-DD') END
+           ELSE local_month
+         END AS projection_end_month
        FROM branch_clock
      ),
      metrics AS (
@@ -357,24 +370,30 @@ export const DASHBOARD_OVERVIEW_SQL = `WITH branch_clock AS MATERIALIZED (
      ),
      projection AS (
        SELECT
-         (completed.rental_value_minor + upcoming.rental_value_minor)::text AS projected_value_minor,
-         upcoming.projected_reservations
+         selected.rental_value_minor::text AS projected_value_minor,
+         selected.projected_reservations
        FROM windows w
-       CROSS JOIN LATERAL (
-         SELECT COALESCE(sum(r.rental_total_minor::numeric), 0) AS rental_value_minor
-           FROM reservation r
-          WHERE r.tenant_id = $1::uuid AND r.branch_id = $2::uuid
-            AND r.status = 'completed' AND r.completed_at IS NOT NULL
-            AND r.completed_at <= w.as_of
-       ) completed
        CROSS JOIN LATERAL (
          SELECT
            COALESCE(sum(r.rental_total_minor::numeric), 0) AS rental_value_minor,
-           count(*)::int AS projected_reservations
+           count(*) FILTER (WHERE r.status = 'confirmed' AND r.pickup_at >= w.as_of)::int
+             AS projected_reservations
            FROM reservation r
           WHERE r.tenant_id = $1::uuid AND r.branch_id = $2::uuid
-            AND r.status = 'confirmed' AND r.pickup_at >= w.as_of
-       ) upcoming
+            AND (
+              r.status = 'completed'
+              OR (r.status IN ('confirmed', 'picked_up', 'returned') AND r.due_at <= w.as_of)
+              OR (r.status = 'confirmed' AND r.pickup_at >= w.as_of)
+            )
+            AND (
+              w.projection_start_month IS NULL
+              OR r.pickup_at >= (w.projection_start_month::timestamp AT TIME ZONE w.timezone)
+            )
+            AND (
+              w.projection_end_month IS NULL
+              OR r.pickup_at < ((w.projection_end_month + INTERVAL '1 month')::timestamp AT TIME ZONE w.timezone)
+            )
+       ) selected
      ),
      new_customer_counts AS (
        SELECT
@@ -465,11 +484,18 @@ export const DASHBOARD_OVERVIEW_SQL = `WITH branch_clock AS MATERIALIZED (
 
 export async function readDashboardOverview(
   client: PoolClient,
-  input: { tenantId: string; branchId: string },
+  input: {
+    tenantId: string;
+    branchId: string;
+    query: DashboardOverviewQuery;
+  },
 ): Promise<unknown> {
   const result = await client.query<{ overview: unknown }>(DASHBOARD_OVERVIEW_SQL, [
     input.tenantId,
     input.branchId,
+    input.query.start_month ?? null,
+    input.query.end_month ?? null,
+    input.query.all_time === 'true',
   ]);
 
   const row = result.rows[0];
