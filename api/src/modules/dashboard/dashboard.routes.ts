@@ -5,7 +5,10 @@ import { rateLimit } from '../../middleware/rate-limit.js';
 import { requireTenantContext } from '../../middleware/tenant-context.js';
 import { requireTenantAction } from '../tenancy/tenancy.service.js';
 import { getDashboardOverviewController } from './dashboard.controller.js';
-import { requireDashboardReadPermission } from './dashboard.middleware.js';
+import {
+  requireDashboardReadPermission,
+  validateDashboardOverviewQuery,
+} from './dashboard.middleware.js';
 
 export const dashboardRouter = Router();
 
@@ -23,5 +26,6 @@ dashboardRouter.get(
   dashboardReadRateLimit,
   requireTenantAction('existing_rental_read'),
   requireDashboardReadPermission,
+  validateDashboardOverviewQuery,
   getDashboardOverviewController,
 );

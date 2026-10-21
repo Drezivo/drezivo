@@ -129,6 +129,7 @@ import {
   clothingAvailabilityTimelineQuery,
   clothingAvailabilityTimelineResponse,
   dashboardFittingSummaryResponse,
+  dashboardOverviewQuery,
   dashboardOverviewResponse,
   operationalCalendarQuery,
   operationalCalendarResponse,
@@ -278,6 +279,7 @@ import {
   type ClothingAvailabilityTimelineQuery,
   type ClothingAvailabilityTimelineResponse,
   type DashboardFittingSummaryResponse,
+  type DashboardOverviewQuery,
   type DashboardOverviewResponse,
   type OperationalCalendarQuery,
   type OperationalCalendarResponse,
@@ -526,13 +528,21 @@ export function createDrezivoApiClient(getToken: TokenGetter) {
         responseSchema: apiEnvelope(operationalCalendarResponse),
       });
     },
-    getDashboardOverview: () =>
-      request<DashboardOverviewResponse>({
+    getDashboardOverview: (input?: DashboardOverviewQuery) => {
+      const query = dashboardOverviewQuery.parse(input ?? {});
+      const searchParams = new URLSearchParams();
+      for (const [key, value] of Object.entries(query)) {
+        if (value !== undefined) searchParams.set(key, value);
+      }
+      const queryString = searchParams.toString();
+
+      return request<DashboardOverviewResponse>({
         getToken,
         method: "GET",
-        path: "/api/v1/dashboard/overview",
+        path: `/api/v1/dashboard/overview${queryString ? `?${queryString}` : ""}`,
         responseSchema: apiEnvelope(dashboardOverviewResponse),
-      }),
+      });
+    },
     getCustomers: (input: CustomerListQuery) => {
       const query = customerListQuery.parse(input);
       const searchParams = new URLSearchParams({

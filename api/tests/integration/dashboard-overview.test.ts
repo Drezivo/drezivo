@@ -39,6 +39,7 @@ interface DashboardSeed {
   tenantId: string;
   branchId: string;
   otherBranchId: string;
+  membershipId: string;
   principalId: string;
   clerkOrgId: string;
   storefrontId: string;
@@ -106,6 +107,27 @@ const DASHBOARD_MONTHLY_METRIC_FIXTURE_SQL = `WITH branch_window AS (
      JOIN monthly_facts facts USING (reference_code)
      CROSS JOIN LATERAL generate_series(1, facts.line_count) AS line(line_number)`;
 
+function monthKeyAt(value: string, timezone: string): string {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone,
+    year: 'numeric',
+    month: '2-digit',
+  }).formatToParts(new Date(value));
+  const year = parts.find((part) => part.type === 'year')?.value;
+  const month = parts.find((part) => part.type === 'month')?.value;
+  if (!year || !month) throw new Error('Could not derive the branch-local month.');
+  return `${year}-${month}`;
+}
+
+function shiftMonth(month: string, offset: number): string {
+  const match = /^(\d{4})-(\d{2})$/.exec(month);
+  if (!match) throw new Error('A valid year-month value is required.');
+  const year = Number(match[1]);
+  const monthNumber = Number(match[2]);
+  const shifted = new Date(Date.UTC(year, monthNumber - 1 + offset, 1));
+  return `${shifted.getUTCFullYear()}-${String(shifted.getUTCMonth() + 1).padStart(2, '0')}`;
+}
+
 describe('Dashboard overview API', async () => {
   const { createApp } = await import('../../src/app.js');
   const { closePool, withTenantTransaction } = await import('../../src/db/client.js');
@@ -134,6 +156,256 @@ describe('Dashboard overview API', async () => {
     useClerk(seed);
     const forbidden = await request(createApp()).get('/api/v1/dashboard/overview');
     expect(forbidden.status).toBe(403);
+  });
+
+  it('filters expected sales by inclusive pickup months and uses all-time only when requested', async () => {
+    const seed = await seedDashboardWorkspace(
+      'dashboard_expected_sales_months',
+      'user_dashboard_expected_sales_months',
+      ['reservations.manage'],
+    );
+    useClerk(seed);
+    await insertExpectedSalesReservation(seed, {
+      label: 'Previous month completed',
+      status: 'completed',
+      monthOffset: -1,
+      amount: 150000,
+      completedMonthOffset: 0,
+    });
+    await insertExpectedSalesReservation(seed, {
+      label: 'Current month completed',
+      status: 'completed',
+      monthOffset: 0,
+      amount: 50000,
+      completedMonthOffset: -1,
+    });
+    await insertExpectedSalesReservation(seed, {
+      label: 'Next month confirmed',
+      status: 'confirmed',
+      monthOffset: 1,
+      day: -1,
+      hour: 23,
+      minute: 59,
+      second: 59,
+      amount: 100000,
+      securityRequiredAmount: 900000,
+    });
+    await insertExpectedSalesReservation(seed, {
+      label: 'Following month confirmed',
+      status: 'confirmed',
+      monthOffset: 2,
+      amount: 200000,
+    });
+
+    const read = async (query = '') => {
+      const response = await request(createApp()).get(`/api/v1/dashboard/overview${query}`);
+      expect(response.status).toBe(200);
+      return successEnvelope(dashboardOverviewResponse).parse(response.body).data;
+    };
+    const defaultMonth = await read();
+    const currentMonth = monthKeyAt(defaultMonth.window.as_of, defaultMonth.window.timezone);
+    const previousMonth = shiftMonth(currentMonth, -1);
+    const nextMonth = shiftMonth(currentMonth, 1);
+    const allTime = await read('?all_time=true');
+    const fromCurrentMonth = await read(`?start_month=${currentMonth}`);
+    const throughCurrentMonth = await read(`?end_month=${currentMonth}`);
+    const currentThroughNextMonth = await read(
+      `?start_month=${currentMonth}&end_month=${nextMonth}`,
+    );
+    const throughPreviousMonth = await read(`?end_month=${previousMonth}`);
+
+    expect(defaultMonth.business_performance.projected_rental_value).toEqual({
+      current_minor: '50000',
+      reservations: 0,
+    });
+    expect(allTime.business_performance.projected_rental_value).toEqual({
+      current_minor: '500000',
+      reservations: 2,
+    });
+    expect(fromCurrentMonth.business_performance.projected_rental_value).toEqual({
+      current_minor: '350000',
+      reservations: 2,
+    });
+    expect(throughCurrentMonth.business_performance.projected_rental_value).toEqual({
+      current_minor: '200000',
+      reservations: 0,
+    });
+    expect(currentThroughNextMonth.business_performance.projected_rental_value).toEqual({
+      current_minor: '150000',
+      reservations: 1,
+    });
+    expect(throughPreviousMonth.business_performance.projected_rental_value).toEqual({
+      current_minor: '150000',
+      reservations: 0,
+    });
+    expect(currentThroughNextMonth.business_performance).toMatchObject({
+      completed_rental_value: defaultMonth.business_performance.completed_rental_value,
+      projected_sales_current_month:
+        defaultMonth.business_performance.projected_sales_current_month,
+      completed_rentals: defaultMonth.business_performance.completed_rentals,
+      new_customers: defaultMonth.business_performance.new_customers,
+    });
+  });
+
+  it('counts completed, overdue, and upcoming eligible statuses while excluding others and other tenants', async () => {
+    const seed = await seedDashboardWorkspace(
+      'dashboard_expected_sales_statuses',
+      'user_dashboard_expected_sales_statuses',
+      ['reservations.manage'],
+    );
+    useClerk(seed);
+    const included = [
+      {
+        label: 'Completed booking',
+        status: 'completed',
+        monthOffset: -2,
+        amount: 20000,
+        completedMonthOffset: -1,
+      },
+      { label: 'Overdue confirmed booking', status: 'confirmed', monthOffset: -1, amount: 11000 },
+      { label: 'Overdue picked up booking', status: 'picked_up', monthOffset: -1, amount: 12000 },
+      { label: 'Overdue returned booking', status: 'returned', monthOffset: -1, amount: 13000 },
+      { label: 'Upcoming confirmed booking', status: 'confirmed', monthOffset: 1, amount: 14000 },
+    ] as const;
+    for (const reservation of included) {
+      await insertExpectedSalesReservation(seed, reservation);
+    }
+
+    for (const [index, status] of [
+      'held',
+      'pending_confirmation',
+      'cancelled',
+      'rejected',
+      'expired',
+    ].entries()) {
+      await insertExpectedSalesReservation(seed, {
+        label: `Excluded ${status}`,
+        status,
+        monthOffset: 0,
+        amount: 50000 + index * 1000,
+      });
+    }
+    for (const status of ['confirmed', 'picked_up', 'returned']) {
+      await insertExpectedSalesReservation(seed, {
+        label: `Not yet due ${status}`,
+        status,
+        monthOffset: -1,
+        dueDaysAfterPickup: 90,
+        amount: 16000,
+      });
+    }
+    for (const status of ['picked_up', 'returned']) {
+      await insertExpectedSalesReservation(seed, {
+        label: `Future ${status}`,
+        status,
+        monthOffset: 1,
+        amount: 17000,
+      });
+    }
+    const foreignSeed = await seedDashboardWorkspace(
+      'dashboard_expected_sales_foreign_tenant',
+      'user_dashboard_expected_sales_foreign_tenant',
+      ['reservations.manage'],
+    );
+    await insertExpectedSalesReservation(foreignSeed, {
+      label: 'Foreign tenant confirmed booking',
+      status: 'confirmed',
+      monthOffset: 1,
+      amount: 999999,
+    });
+
+    const response = await request(createApp()).get('/api/v1/dashboard/overview?all_time=true');
+    expect(response.status).toBe(200);
+    const { data } = successEnvelope(dashboardOverviewResponse).parse(response.body);
+    expect(data.business_performance.projected_rental_value).toEqual({
+      current_minor: '70000',
+      reservations: 1,
+    });
+  });
+
+  it('keeps expected sales scoped to the requested branch', async () => {
+    const seed = await seedDashboardWorkspace(
+      'dashboard_expected_sales_branch_scope',
+      'user_dashboard_expected_sales_branch_scope',
+      ['reservations.manage'],
+    );
+    useClerk(seed);
+    await insertExpectedSalesReservation(seed, {
+      label: 'Active branch confirmed booking',
+      status: 'confirmed',
+      monthOffset: 1,
+      amount: 1000,
+    });
+
+    const otherBranchSetup = await withTenantTransaction(
+      seed.tenantId,
+      seed.principalId,
+      async (client) => {
+        const storefront = await client.query<{ id: string }>(
+          `INSERT INTO storefront (tenant_id, branch_id, slug, status, branding, contact)
+           VALUES ($1, $2, $3, 'draft', '{}'::jsonb, '{}') RETURNING id`,
+          [seed.tenantId, seed.otherBranchId, `expected-sales-other-${seed.tenantId.slice(0, 8)}`],
+        );
+        const storefrontId = requireId(storefront.rows[0]?.id, 'expected sales other storefront');
+        const policy = await client.query<{ id: string }>(
+          `INSERT INTO policy_snapshot
+             (tenant_id, storefront_id, version, rental_rules, deposit_rules, cancellation_rules,
+              delivery_rules, privacy_notice, effective_at)
+           VALUES ($1, $2, 1, '{}'::jsonb, '{}'::jsonb, '{}'::jsonb, '{}'::jsonb,
+                   'dashboard fixture', statement_timestamp()) RETURNING id`,
+          [seed.tenantId, storefrontId],
+        );
+        return {
+          storefrontId,
+          policyId: requireId(policy.rows[0]?.id, 'expected sales other policy'),
+        };
+      },
+    );
+    await withTenantTransaction(seed.tenantId, seed.principalId, (client) =>
+      client.query(
+        `INSERT INTO branch_membership (tenant_id, branch_id, membership_id, permission_codes)
+         VALUES ($1, $2, $3, '["reservations.manage"]'::jsonb)`,
+        [seed.tenantId, seed.otherBranchId, seed.membershipId],
+      ),
+    );
+    await insertExpectedSalesReservation(seed, {
+      label: 'Other branch confirmed booking',
+      status: 'confirmed',
+      monthOffset: 1,
+      amount: 999999,
+      branchId: seed.otherBranchId,
+      storefrontId: otherBranchSetup.storefrontId,
+      policyId: otherBranchSetup.policyId,
+    });
+
+    const response = await request(createApp())
+      .get('/api/v1/dashboard/overview?all_time=true')
+      .set('X-Drezivo-Branch-Id', seed.otherBranchId);
+    expect(response.status).toBe(200);
+    const { data } = successEnvelope(dashboardOverviewResponse).parse(response.body);
+    expect(data.business_performance.projected_rental_value).toEqual({
+      current_minor: '999999',
+      reservations: 1,
+    });
+  });
+
+  it('rejects malformed, reversed, and conflicting month-filter queries', async () => {
+    const seed = await seedDashboardWorkspace(
+      'dashboard_invalid_expected_sales_months',
+      'user_dashboard_invalid_expected_sales_months',
+      ['reservations.manage'],
+    );
+    useClerk(seed);
+
+    for (const query of [
+      '?start_month=2026-13',
+      '?end_month=2026-00',
+      '?start_month=2026-11&end_month=2026-10',
+      '?all_time=true&start_month=2026-10',
+    ]) {
+      const response = await request(createApp()).get(`/api/v1/dashboard/overview${query}`);
+      expect(response.status).toBe(422);
+    }
   });
 
   it('counts monthly rental pieces across confirmed booking stages and isolates branch and tenant data', async () => {
@@ -300,7 +572,7 @@ describe('Dashboard overview API', async () => {
       async (client) => {
         const result = await client.query<{ 'QUERY PLAN': unknown }>(
           `EXPLAIN (ANALYZE, BUFFERS, FORMAT TEXT) ${DASHBOARD_OVERVIEW_SQL}`,
-          [seed.tenantId, seed.branchId],
+          [seed.tenantId, seed.branchId, null, null, false],
         );
         return result.rows.map((row) => String(row['QUERY PLAN'])).join('\n');
       },
@@ -344,9 +616,7 @@ describe('Dashboard overview API', async () => {
       );
     });
 
-    const response = await request(createApp()).get(
-      `/api/v1/dashboard/overview?branch_id=${seed.otherBranchId}`,
-    );
+    const response = await request(createApp()).get('/api/v1/dashboard/overview?all_time=true');
     expect(response.status).toBe(200);
     const { data } = successEnvelope(dashboardOverviewResponse).parse(response.body);
 
@@ -410,7 +680,7 @@ describe('Dashboard overview API', async () => {
       new_customers: { current: 1, previous: 1 },
     });
     expect(data.business_performance.projected_rental_value).toEqual({
-      current_minor: '35500',
+      current_minor: '52500',
       reservations: 2,
     });
 
@@ -536,6 +806,7 @@ describe('Dashboard overview API', async () => {
         tenantId: tenant.id,
         branchId,
         otherBranchId,
+        membershipId,
         principalId,
         clerkOrgId: tenant.clerkOrgId,
         storefrontId,
@@ -690,7 +961,7 @@ describe('Dashboard overview API', async () => {
         status: 'confirmed',
         pickupDayOffset: -2,
         pickupHour: 11,
-        dueDayOffset: 0,
+        dueDayOffset: -1,
         dueHour: 12,
         amount: 8000,
       });
@@ -853,6 +1124,98 @@ describe('Dashboard overview API', async () => {
       );
       expect(completeRow.rows[0]?.completed_at).toBeTruthy();
       expect(returnId).toBeTruthy();
+    });
+  }
+
+  async function insertExpectedSalesReservation(
+    seed: DashboardSeed,
+    input: {
+      label: string;
+      status: string;
+      monthOffset: number;
+      amount: number;
+      day?: number;
+      hour?: number;
+      minute?: number;
+      second?: number;
+      dueDaysAfterPickup?: number;
+      securityRequiredAmount?: number;
+      completedMonthOffset?: number;
+      branchId?: string;
+      storefrontId?: string;
+      policyId?: string;
+    },
+  ): Promise<void> {
+    await withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
+      const result = await client.query<{ id: string }>(
+        `WITH branch_clock AS (
+           SELECT timezone,
+                  date_trunc('month', statement_timestamp() AT TIME ZONE timezone)::date AS local_month
+             FROM branch
+            WHERE tenant_id = $1::uuid AND id = $2::uuid
+         ), local_times AS (
+           SELECT timezone,
+                  (
+                    CASE WHEN $10::int = -1
+                      THEN (local_month + make_interval(months => $9::int + 1) - interval '1 day')::date
+                      ELSE (local_month + make_interval(months => $9::int))::date + ($10::int - 1)
+                    END
+                  )::timestamp + make_interval(hours => $11::int, mins => $12::int, secs => $13::double precision)
+                    AS pickup_local
+             FROM branch_clock
+         )
+         INSERT INTO reservation
+           (tenant_id, branch_id, customer_id, storefront_id, policy_snapshot_id, payment_method_id,
+            reference_code, status, pickup_at, due_at, timezone_snapshot, customer_snapshot,
+            price_snapshot, currency, rental_total_minor, security_required_minor, due_now_minor,
+            completed_at)
+         SELECT $1, $2, $3, COALESCE($4::uuid, $5::uuid), COALESCE($6::uuid, $7::uuid), $8,
+                $14, $15, local_times.pickup_local AT TIME ZONE local_times.timezone,
+                (local_times.pickup_local + make_interval(days => $16::int)) AT TIME ZONE local_times.timezone,
+                local_times.timezone, '{}'::jsonb, '{}'::jsonb, 'PHP', $17, $18, $17::int + $18::int,
+                CASE WHEN $19::int IS NULL THEN NULL ELSE
+                  (((date_trunc('month', statement_timestamp() AT TIME ZONE local_times.timezone)::date
+                    + make_interval(months => $19::int))::date + 5)::timestamp AT TIME ZONE local_times.timezone)
+                END
+           FROM local_times
+         RETURNING id`,
+        [
+          seed.tenantId,
+          input.branchId ?? seed.branchId,
+          seed.customerId,
+          input.storefrontId ?? null,
+          seed.storefrontId,
+          input.policyId ?? null,
+          seed.policyId,
+          seed.paymentMethodId,
+          input.monthOffset,
+          input.day ?? 1,
+          input.hour ?? 12,
+          input.minute ?? 0,
+          input.second ?? 0,
+          input.label,
+          input.status,
+          input.dueDaysAfterPickup ?? 2,
+          input.amount,
+          input.securityRequiredAmount ?? 0,
+          input.completedMonthOffset ?? null,
+        ],
+      );
+      const reservationId = requireId(result.rows[0]?.id, `${input.label} reservation`);
+      await client.query(
+        `INSERT INTO reservation_line
+           (tenant_id, reservation_id, variant_id, line_number, name_snapshot, measurements_snapshot,
+            pricing_snapshot, rental_minor, deposit_minor, currency)
+         VALUES ($1, $2, $3, 1, $4, '{}'::jsonb, '{}'::jsonb, $5, $6, 'PHP')`,
+        [
+          seed.tenantId,
+          reservationId,
+          seed.variantId,
+          input.label,
+          input.amount,
+          input.securityRequiredAmount ?? 0,
+        ],
+      );
     });
   }
 
