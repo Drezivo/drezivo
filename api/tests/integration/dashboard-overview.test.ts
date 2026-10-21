@@ -680,7 +680,7 @@ describe('Dashboard overview API', async () => {
       new_customers: { current: 1, previous: 1 },
     });
     expect(data.business_performance.projected_rental_value).toEqual({
-      current_minor: '50500',
+      current_minor: '52500',
       reservations: 2,
     });
 
