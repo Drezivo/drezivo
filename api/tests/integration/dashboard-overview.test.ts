@@ -912,7 +912,7 @@ describe('Dashboard overview API', async () => {
       const returnId = await insertReservation({
         label: 'Today Return Gown',
         status: 'picked_up',
-        pickupDayOffset: -2,
+        pickupDayOffset: -3,
         pickupHour: 10,
         dueDayOffset: 0,
         dueHour: 0,
