@@ -644,7 +644,7 @@ describe('Dashboard overview API', async () => {
         pickupDayOffset: -2,
         pickupHour: 10,
         dueDayOffset: 0,
-        dueHour: 13,
+        dueHour: 0,
         amount: 2000,
       });
       await insertReservation({
