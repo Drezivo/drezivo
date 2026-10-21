@@ -1,20 +1,21 @@
 ---
 title: Single Standard Pilot Plan
 type: decision
-status: current
+status: superseded
 owner: Product owner
 source: "../../decisions/0011-single-standard-pilot-plan.md"
-updated: 2026-10-01
+superseded-by: "../../decisions/0015-starter-and-standard-plans.md"
+updated: 2026-10-21
 tags: [drezivo, decision, billing, pilot]
 ---
 
 # Single Standard Pilot Plan
 
-The pilot offers one Standard plan at PHP 300/month, internally backed by `starter` v1. It includes
-up to 1,000 active physical assets and 10 Front Desk seats. Eligible verified people receive one
-14-day lifetime trial. Payment after trial is manual: the owner submits a reference and receipt for
-operator review. The former three-tier offer is historical; future plans require a new owner
-decision.
+This note records the former single-Standard pilot offer: PHP 300/month, up to 1,000 active assets,
+and up to 10 Front Desk seats, internally backed by `starter` v1. It is historical, not current.
+ADR 0015 supersedes this one-plan offer with Starter and Standard tiers. Use the accepted
+[ADR 0015](../../decisions/0015-starter-and-standard-plans.md) and [current PRD](../../product/Drezivo-PRD.md)
+for active pricing, limits, and trial rules.
 
-The accepted [ADR 0011](../../decisions/0011-single-standard-pilot-plan.md) and [current PRD](../../product/Drezivo-PRD.md)
-are authoritative.
+The original [ADR 0011](../../decisions/0011-single-standard-pilot-plan.md) remains the source for
+the historical decision.

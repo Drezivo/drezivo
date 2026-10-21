@@ -1,7 +1,7 @@
 ---
 title: GitHub Rename Checklist
 type: operations
-status: planned
+status: archived
 updated: 2026-09-16
 tags: [drezivo, operations, github]
 ---

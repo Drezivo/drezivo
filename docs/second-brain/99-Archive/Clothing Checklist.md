@@ -1,7 +1,7 @@
 ---
 title: Clothing V1 End-to-End Checklist
 type: implementation-checklist
-status: phase-2-complete
+status: archived
 owner: Drezivo team
 updated: 2026-09-20
 tags: [drezivo, v1, clothing, catalogue, inventory, checklist]

@@ -27,7 +27,7 @@ tags: [drezivo, security, api, backend, remediation]
 
 Related: [[00-Home/Drezivo Home]], [[02-Architecture/API Module Boundaries and Layering]],
 [[02-Architecture/Tenancy, Onboarding, Clerk, Memberships, and Billing Foundation]],
-[[05-Operations/Reservations Checklist]]
+[[99-Archive/Reservations Checklist]]
 
 ## High-severity findings
 
@@ -195,7 +195,7 @@ failure rollback, and replay behavior remain unproven for this phase.
 ## Verification evidence
 
 | Check | Result |
-|---|---|
+| --- | --- |
 | Typecheck | Passed |
 | Build | Passed |
 | Unit tests | 82/82 passed across 20 files |

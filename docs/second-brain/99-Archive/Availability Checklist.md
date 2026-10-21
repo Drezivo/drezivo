@@ -1,7 +1,7 @@
 ---
 title: Availability V1 End-to-End Checklist
 type: implementation-checklist
-status: planned
+status: archived
 owner: Drezivo team
 updated: 2026-09-20
 tags: [drezivo, v1, availability, allocations, calendar, checklist]
