@@ -5,6 +5,41 @@ import { currencyCode, nonNegativeMoneyString } from '../common/money';
 import { ianaTimezone, instantInterval, isoInstant } from '../common/time';
 import { fittingBookingChannel } from '../fittings/state';
 
+const dashboardMonth = z
+  .string()
+  .regex(/^\d{4}-(0[1-9]|1[0-2])$/)
+  .refine((month) => month.slice(0, 4) !== '0000', 'A valid calendar month is required.');
+
+export const dashboardOverviewQuery = z
+  .object({
+    start_month: dashboardMonth.optional(),
+    end_month: dashboardMonth.optional(),
+    all_time: z.literal('true').optional(),
+  })
+  .strict()
+  .superRefine((query, context) => {
+    if (query.start_month && query.end_month && query.start_month > query.end_month) {
+      context.addIssue({
+        code: 'custom',
+        path: ['end_month'],
+        message: 'end_month must be on or after start_month.',
+      });
+    }
+
+    if (query.all_time && (query.start_month || query.end_month)) {
+      context.addIssue({
+        code: 'custom',
+        path: ['all_time'],
+        message: 'all_time cannot be combined with month bounds.',
+      });
+    }
+  })
+  .describe(
+    'Optional inclusive pickup-month bounds in YYYY-MM form. Omit both for the current branch-local month; set all_time=true with no bounds for every month.',
+  );
+
+export type DashboardOverviewQuery = z.infer<typeof dashboardOverviewQuery>;
+
 const dashboardCount = z.number().int().nonnegative().safe();
 const boundedNames = z.array(z.string().trim().min(1).max(200)).max(20);
 const customerPhone = z.string().trim().min(1).max(50).nullable();
@@ -175,16 +210,16 @@ export const dashboardOverviewResponse = z
           ),
         new_customers: z.object({ current: dashboardCount, previous: dashboardCount }).strict(),
         /**
-         * Cumulative projected rental fees: all completed rental fees to date plus the rental fees
-         * (no deposits) of confirmed bookings whose pickup has not passed, as if they complete.
-         * The count covers only those upcoming confirmed bookings. Optional so older API responses
-         * without this projection remain valid.
+         * Expected rental fees for the selected pickup-month range. Includes completed bookings,
+         * overdue confirmed/picked-up/returned bookings, and upcoming confirmed bookings; deposits
+         * are excluded. The count covers only upcoming confirmed bookings. Optional for compatibility
+         * with older API responses.
          */
         projected_rental_value: z
           .object({ current_minor: nonNegativeMoneyString, reservations: dashboardCount })
           .strict()
           .describe(
-            'Lifetime completed rental fees plus fees from confirmed reservations with pickup_at at or after the query database as_of timestamp. Excludes deposits; reservations counts upcoming confirmed bookings.',
+            'Expected rental fees for the selected inclusive pickup-month range (current branch-local month by default, all time when all_time=true). Includes completed rentals, overdue confirmed/picked-up/returned bookings, and upcoming confirmed bookings; excludes deposits. reservations counts only upcoming confirmed bookings.',
           )
           .optional(),
       })

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { dashboardOverviewResponse } from '../src/dashboard/overview';
+import { dashboardOverviewQuery, dashboardOverviewResponse } from '../src/dashboard/overview';
 
 const reservationId = '11111111-1111-4111-8111-111111111111';
 const fittingId = '22222222-2222-4222-8222-222222222222';
@@ -159,5 +159,30 @@ describe('dashboardOverviewResponse', () => {
       today_schedule: { ...fittingWithRentalPrice.today_schedule, items: [pickup, invalidFitting] },
     };
     expect(() => dashboardOverviewResponse.parse(invalidProjection)).toThrow();
+  });
+});
+
+describe('dashboardOverviewQuery', () => {
+  it('accepts inclusive one-sided and two-sided month bounds plus all-time selection', () => {
+    expect(dashboardOverviewQuery.parse({ start_month: '2026-10' })).toEqual({
+      start_month: '2026-10',
+    });
+    expect(dashboardOverviewQuery.parse({ end_month: '2026-11' })).toEqual({
+      end_month: '2026-11',
+    });
+    expect(dashboardOverviewQuery.parse({ start_month: '2026-10', end_month: '2026-11' })).toEqual({
+      start_month: '2026-10',
+      end_month: '2026-11',
+    });
+    expect(dashboardOverviewQuery.parse({ all_time: 'true' })).toEqual({ all_time: 'true' });
+    expect(dashboardOverviewQuery.parse({})).toEqual({});
+  });
+
+  it('rejects invalid or reversed month bounds and conflicting all-time selection', () => {
+    expect(() => dashboardOverviewQuery.parse({ start_month: '2026-13' })).toThrow();
+    expect(() => dashboardOverviewQuery.parse({ end_month: '0000-01' })).toThrow();
+    expect(() => dashboardOverviewQuery.parse({ start_month: '2026-11', end_month: '2026-10' })).toThrow();
+    expect(() => dashboardOverviewQuery.parse({ start_month: '2026-10', all_time: 'true' })).toThrow();
+    expect(() => dashboardOverviewQuery.parse({ unknown: 'value' })).toThrow();
   });
 });

@@ -122,7 +122,7 @@ export function DateRangePickerField({
           <Calendar
             mode="range"
             selected={draftRange}
-            defaultMonth={draftRange?.from ?? today}
+            defaultMonth={draftRange?.from ?? externalRange?.from ?? today}
             onSelect={(range) => {
               if (!range?.from) return;
 

@@ -108,6 +108,7 @@ import {
   fittingState,
   guestReservationView,
   dashboardFittingSummaryResponse,
+  dashboardOverviewQuery,
   dashboardOverviewResponse,
   guestReservationRequest,
   guestReservationCreated,
@@ -1221,15 +1222,17 @@ registry.registerPath({
   tags: ['dashboard'],
   summary:
     'Read the active branch dashboard overview from authoritative reservations, fittings, payment evidence, and customers.',
+  request: { query: dashboardOverviewQuery },
   responses: {
     200: {
       description:
-        'Branch-local operational counts and bounded dashboard lists, with completed rental value and active customer counts for the current and prior calendar months.',
+        'Branch-local operational counts and bounded dashboard lists. Expected Total Sales supports optional inclusive pickup-month bounds; without bounds it defaults to the current branch-local month, and all_time=true selects all months.',
       content: { 'application/json': { schema: successEnvelope(dashboardOverviewResponse) } },
     },
     403: jsonError('Reservation management permission is required.'),
     404: jsonError('The active branch could not be found.'),
     409: jsonError('The tenant lifecycle does not permit this operational read.'),
+    422: jsonError('The dashboard overview month filter is invalid.'),
   },
 });
 
