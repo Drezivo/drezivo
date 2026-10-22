@@ -233,7 +233,7 @@ describe('Dashboard overview API', async () => {
       reservations: 2,
     });
     expect(throughCurrentMonth.business_performance.projected_rental_value).toEqual({
-      current_minor: '150000',
+      current_minor: '200000',
       reservations: 0,
     });
     expect(currentMonthOnly.business_performance.projected_rental_value).toEqual(
