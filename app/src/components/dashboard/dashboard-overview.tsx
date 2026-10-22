@@ -856,7 +856,7 @@ function expectedSalesNote(
     reservations === 0
       ? "no upcoming confirmed bookings"
       : `${reservations.toLocaleString("en-PH")} upcoming confirmed ${reservations === 1 ? "booking" : "bookings"}`;
-  return `Completed and overdue rental fees + ${upcoming} ${range}`;
+  return `Completed rental fees + ${upcoming} ${range}`;
 }
 
 function monthlyProjectionNote(reservations: number): string {

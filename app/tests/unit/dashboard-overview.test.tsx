@@ -196,7 +196,7 @@ describe("DashboardOverview", () => {
     expect(screen.getByText("₱12,500.00")).toBeVisible();
     expect(
       screen.getByText(
-        "Completed and overdue rental fees + 4 upcoming confirmed bookings across all time"
+        "Completed rental fees + 4 upcoming confirmed bookings across all time"
       )
     ).toBeVisible();
     expect(screen.getByText("Projected Sales This Month")).toBeVisible();
@@ -233,7 +233,7 @@ describe("DashboardOverview", () => {
 
     expect(
       await screen.findByText(
-        "Completed and overdue rental fees + no upcoming confirmed bookings across all time"
+        "Completed rental fees + no upcoming confirmed bookings across all time"
       )
     ).toBeVisible();
   });
@@ -518,7 +518,7 @@ describe("DashboardOverview", () => {
     );
     expect(
       screen.getByText(
-        "Completed and overdue rental fees + no upcoming confirmed bookings across all time"
+        "Completed rental fees + no upcoming confirmed bookings across all time"
       )
     ).toBeVisible();
   });

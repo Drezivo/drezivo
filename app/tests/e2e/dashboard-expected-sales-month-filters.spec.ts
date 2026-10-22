@@ -30,10 +30,10 @@ const fixedOverview: DashboardOverviewResponse = {
   upcoming_fitting_appointments: { items: [], total: 0, truncated: false },
   business_performance: {
     currency: "PHP",
-    completed_rental_value: { current_minor: "70000", previous_minor: "60000" },
+    completed_rental_value: { current_minor: "20000", previous_minor: "60000" },
     completed_rentals: { current: 3, previous: 2 },
     average_rental_value: { current_minor: "23333", previous_minor: "30000" },
-    projected_sales_current_month: { current_minor: "480000", reservations: 4 },
+    projected_sales_current_month: { current_minor: "50000", reservations: 1 },
     new_customers: { current: 7, previous: 5 },
     projected_rental_value: { current_minor: "50000", reservations: 0 },
   },
@@ -47,7 +47,7 @@ function expectedSalesFor(url: URL): { current_minor: string; reservations: numb
   if (start === "2026-09" && end === "2026-11") return { current_minor: "250000", reservations: 1 };
   if (start === "2026-09" && end === "2026-10") return { current_minor: "200000", reservations: 0 };
   if (start === "2026-10" && end === "2026-11") return { current_minor: "150000", reservations: 1 };
-  if (start === "2026-10" && end === "2026-10") return { current_minor: "50000", reservations: 0 };
+  if (start === "2026-10" && end === "2026-10") return { current_minor: "50000", reservations: 1 };
   if (start === "2026-10") return { current_minor: "350000", reservations: 2 };
   if (end === "2026-10") return { current_minor: "200000", reservations: 0 };
   if (end === "2026-08") return { current_minor: "0", reservations: 0 };
@@ -126,15 +126,23 @@ test.describe("dashboard Expected Total Sales month filters", () => {
     await chooseMonth(page, "Start month", "October");
     await expect(page.getByText("₱3,500.00", { exact: true })).toBeVisible();
     expect(requests.at(-1)?.searchParams.get("start_month")).toBe("2026-10");
+    await chooseMonth(page, "End month", "October");
+    await expect(page.getByText("₱500.00", { exact: true })).toHaveCount(2);
+    await expect(
+      page.getByText("Expected Total Sales", { exact: true }).locator("..")
+    ).toContainText("₱500.00");
+    await expect(
+      page.getByText("Projected Sales This Month", { exact: true }).locator("..")
+    ).toContainText("₱500.00");
 
     await chooseMonth(page, "End month", "November");
     await expect(page.getByText("₱1,500.00", { exact: true })).toBeVisible();
     expect(requests.at(-1)?.searchParams.get("start_month")).toBe("2026-10");
     expect(requests.at(-1)?.searchParams.get("end_month")).toBe("2026-11");
     for (const [label, value] of [
-      ["Completed Rental Value", "₱700.00"],
+      ["Completed Rental Value", "₱200.00"],
       ["Completed Rentals", "3"],
-      ["Projected Sales This Month", "₱4,800.00"],
+      ["Projected Sales This Month", "₱500.00"],
       ["New Customers", "7"],
     ] as const) {
       await expect(page.getByText(label, { exact: true }).locator("..")).toContainText(value);
