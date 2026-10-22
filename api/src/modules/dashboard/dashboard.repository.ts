@@ -381,17 +381,29 @@ export const DASHBOARD_OVERVIEW_SQL = `WITH branch_clock AS MATERIALIZED (
            FROM reservation r
           WHERE r.tenant_id = $1::uuid AND r.branch_id = $2::uuid
             AND (
-              r.status = 'completed'
-              OR (r.status IN ('confirmed', 'picked_up', 'returned') AND r.due_at <= w.as_of)
-              OR (r.status = 'confirmed' AND r.pickup_at >= w.as_of)
-            )
-            AND (
-              w.projection_start_month IS NULL
-              OR r.pickup_at >= (w.projection_start_month::timestamp AT TIME ZONE w.timezone)
-            )
-            AND (
-              w.projection_end_month IS NULL
-              OR r.pickup_at < ((w.projection_end_month + INTERVAL '1 month')::timestamp AT TIME ZONE w.timezone)
+              (
+                r.status = 'completed'
+                AND (
+                  w.projection_start_month IS NULL
+                  OR r.completed_at >= (w.projection_start_month::timestamp AT TIME ZONE w.timezone)
+                )
+                AND (
+                  w.projection_end_month IS NULL
+                  OR r.completed_at < ((w.projection_end_month + INTERVAL '1 month')::timestamp AT TIME ZONE w.timezone)
+                )
+              )
+              OR (
+                r.status = 'confirmed'
+                AND r.pickup_at >= w.as_of
+                AND (
+                  w.projection_start_month IS NULL
+                  OR r.pickup_at >= (w.projection_start_month::timestamp AT TIME ZONE w.timezone)
+                )
+                AND (
+                  w.projection_end_month IS NULL
+                  OR r.pickup_at < ((w.projection_end_month + INTERVAL '1 month')::timestamp AT TIME ZONE w.timezone)
+                )
+              )
             )
        ) selected
      ),

@@ -158,7 +158,7 @@ describe('Dashboard overview API', async () => {
     expect(forbidden.status).toBe(403);
   });
 
-  it('filters expected sales by inclusive pickup months and uses all-time only when requested', async () => {
+  it('filters completed and upcoming expected sales by their inclusive branch-local months', async () => {
     const seed = await seedDashboardWorkspace(
       'dashboard_expected_sales_months',
       'user_dashboard_expected_sales_months',
@@ -209,33 +209,42 @@ describe('Dashboard overview API', async () => {
     const allTime = await read('?all_time=true');
     const fromCurrentMonth = await read(`?start_month=${currentMonth}`);
     const throughCurrentMonth = await read(`?end_month=${currentMonth}`);
+    const currentMonthOnly = await read(
+      `?start_month=${currentMonth}&end_month=${currentMonth}`,
+    );
     const currentThroughNextMonth = await read(
       `?start_month=${currentMonth}&end_month=${nextMonth}`,
     );
     const throughPreviousMonth = await read(`?end_month=${previousMonth}`);
 
     expect(defaultMonth.business_performance.projected_rental_value).toEqual({
-      current_minor: '50000',
+      current_minor: '150000',
       reservations: 0,
     });
+    expect(defaultMonth.business_performance.projected_rental_value).toEqual(
+      defaultMonth.business_performance.projected_sales_current_month,
+    );
     expect(allTime.business_performance.projected_rental_value).toEqual({
       current_minor: '500000',
       reservations: 2,
     });
     expect(fromCurrentMonth.business_performance.projected_rental_value).toEqual({
-      current_minor: '350000',
+      current_minor: '450000',
       reservations: 2,
     });
     expect(throughCurrentMonth.business_performance.projected_rental_value).toEqual({
-      current_minor: '200000',
+      current_minor: '150000',
       reservations: 0,
     });
+    expect(currentMonthOnly.business_performance.projected_rental_value).toEqual(
+      defaultMonth.business_performance.projected_sales_current_month,
+    );
     expect(currentThroughNextMonth.business_performance.projected_rental_value).toEqual({
-      current_minor: '150000',
+      current_minor: '250000',
       reservations: 1,
     });
     expect(throughPreviousMonth.business_performance.projected_rental_value).toEqual({
-      current_minor: '150000',
+      current_minor: '50000',
       reservations: 0,
     });
     expect(currentThroughNextMonth.business_performance).toMatchObject({
@@ -247,7 +256,7 @@ describe('Dashboard overview API', async () => {
     });
   });
 
-  it('counts completed, overdue, and upcoming eligible statuses while excluding others and other tenants', async () => {
+  it('counts completed and upcoming sales while excluding overdue and other ineligible statuses', async () => {
     const seed = await seedDashboardWorkspace(
       'dashboard_expected_sales_statuses',
       'user_dashboard_expected_sales_statuses',
@@ -318,7 +327,7 @@ describe('Dashboard overview API', async () => {
     expect(response.status).toBe(200);
     const { data } = successEnvelope(dashboardOverviewResponse).parse(response.body);
     expect(data.business_performance.projected_rental_value).toEqual({
-      current_minor: '70000',
+      current_minor: '34000',
       reservations: 1,
     });
   });
@@ -680,7 +689,7 @@ describe('Dashboard overview API', async () => {
       new_customers: { current: 1, previous: 1 },
     });
     expect(data.business_performance.projected_rental_value).toEqual({
-      current_minor: '52500',
+      current_minor: '35500',
       reservations: 2,
     });
 
