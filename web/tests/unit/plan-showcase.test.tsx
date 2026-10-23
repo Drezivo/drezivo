@@ -71,14 +71,13 @@ describe('public plans', () => {
         price: '0.00',
         trialDays: 0,
         highlighted: false,
-        features: expect.arrayContaining([
+        features: [
           'Up to 20 active garments',
           'Owner-only access (no Front Desk accounts)',
-          'Availability-only storefront with contact links',
-          'No fittings on the business app or storefront',
-          'No online storefront payment methods',
-          '2 storefront designs',
-        ]),
+          'Availability-only storefront with contact links; 2 storefront designs',
+          'Reservations, calendar & availability; customers and staff payment records',
+          'Returns & exports; no fittings on the business app or storefront; no online storefront payment methods',
+        ],
       }),
       expect.objectContaining({
         code: 'starter',
@@ -86,7 +85,13 @@ describe('public plans', () => {
         price: '149.00',
         trialDays: 14,
         highlighted: false,
-        features: expect.arrayContaining(['Up to 125 active garments']),
+        featureIntro: 'All Free plan features, plus these upgrades:',
+        features: [
+          'Up to 125 active garments',
+          'Online storefront with bookings and fittings',
+          'Online storefront payment methods',
+          'All 4 storefront designs',
+        ],
       }),
       expect.objectContaining({
         code: 'standard',
@@ -94,15 +99,23 @@ describe('public plans', () => {
         price: '299.00',
         trialDays: 14,
         highlighted: true,
-        features: expect.arrayContaining(['Up to 300 active garments', 'Up to 3 Front Desk staff']),
+        featureIntro: 'All Starter plan features, plus these upgrades:',
+        features: ['Up to 300 active garments', 'Up to 3 Front Desk staff'],
       }),
     ]);
     expect(PUBLIC_MARKETING_PLANS).toHaveLength(3);
+    expect(PUBLIC_MARKETING_PLANS.map(({ features }) => features.length)).toEqual([5, 4, 2]);
     expect(PUBLIC_MARKETING_PLANS[1]?.features.some((feature) => feature.includes('Front Desk staff'))).toBe(false);
   });
 
   it('renders all offers immediately with the correct cards and links', () => {
-    render(<PlanShowcase plans={PUBLIC_MARKETING_PLANS} signUpUrl="https://partners.example/sign-up" />);
+    const { container } = render(
+      <PlanShowcase
+        plans={PUBLIC_MARKETING_PLANS}
+        signUpUrl="https://partners.example/sign-up"
+        customPlanContactHref="mailto:hello@example.com"
+      />,
+    );
 
     expect(screen.getByText('Free')).toBeTruthy();
     expect(screen.getByText('Starter')).toBeTruthy();
@@ -111,7 +124,34 @@ describe('public plans', () => {
     expect(screen.getByText('₱149')).toBeTruthy();
     expect(screen.getByText('₱299')).toBeTruthy();
     expect(screen.getAllByRole('link', { name: /Start with/ })).toHaveLength(3);
+    expect(screen.getByRole('link', { name: 'Talk to us' }).getAttribute('href')).toBe(
+      'mailto:hello@example.com',
+    );
+    const pricingSection = container.querySelector('#pricing')!;
+    expect(pricingSection.querySelector('[data-at-reveal="lines"]')?.className).toContain(
+      'text-center',
+    );
+    expect(pricingSection.querySelector('ul[data-at-stagger]')?.className).toContain(
+      'md:grid-cols-2',
+    );
+    expect(pricingSection.querySelector('ul[data-at-stagger]')?.className).toContain(
+      'xl:grid-cols-4',
+    );
+    expect(pricingSection.querySelectorAll('a.at-button.w-full')).toHaveLength(4);
     const standardCard = screen.getByRole('link', { name: 'Start with Standard' }).closest('li');
+    for (const [name, intro, featureCount] of [
+      ['Free', undefined, 5],
+      ['Starter', 'All Free plan features, plus these upgrades:', 4],
+      ['Standard', 'All Starter plan features, plus these upgrades:', 2],
+    ] as const) {
+      const card = screen.getByRole('link', { name: `Start with ${name}` }).closest('li')!;
+      expect(within(card).getAllByRole('listitem')).toHaveLength(featureCount);
+      if (intro) expect(within(card).getByText(intro)).toBeTruthy();
+      for (const item of within(card).getAllByRole('listitem')) {
+        expect(item.className).toContain('py-1');
+        expect(item.className).not.toContain('border-t');
+      }
+    }
     expect(standardCard?.className).toContain('bg-atelier-night');
     const freeCard = screen.getByRole('link', { name: 'Start with Free' }).closest('li');
     expect(text(freeCard!)).toContain('Free forever');
