@@ -29,8 +29,9 @@ describe('marketing FAQ, pricing, and terms', () => {
     expect(pricingText).toContain('Up to 20 active garments');
     expect(pricingText).toContain('Free forever');
     expect(pricingText).toContain('Availability-only storefront with contact links');
-    expect(pricingText).toContain('No fittings on the business app or storefront');
-    expect(pricingText).toContain('No online storefront payment methods');
+    expect(pricingText).toContain(
+      'Returns & exports; no fittings on the business app or storefront; no online storefront payment methods',
+    );
     expect(pricingText).toContain('2 storefront designs');
     expect(pricingText).toContain('₱149');
     expect(pricingText).toContain('Up to 125 active garments');
@@ -39,8 +40,21 @@ describe('marketing FAQ, pricing, and terms', () => {
     expect(pricingText).toContain('₱299');
     expect(pricingText).toContain('Up to 300 active garments');
     expect(pricingText).toContain('Up to 3 Front Desk staff');
-    const starterCard = screen.getByText('Starter').closest('li');
+    expect(pricingText).toContain('Custom');
+    expect(pricingText).toContain('500 active garments or 10 Front Desk seats');
+    expect(pricingText).toContain('not available for self-service signup');
+    const customLink = screen.getByRole('link', { name: 'Talk to us' });
+    expect(customLink.getAttribute('href')).toBe(
+      'mailto:drezivoshop@gmail.com?subject=Custom%20Drezivo%20plan%20inquiry',
+    );
+    const starterCard = screen.getByRole('link', { name: 'Start with Starter' }).closest('li');
+    expect(starterCard?.textContent).toContain('All Free plan features, plus these upgrades:');
+    expect(starterCard?.textContent).toContain('Online storefront payment methods');
+    expect(starterCard?.textContent).toContain('All 4 storefront designs');
     expect(starterCard?.textContent).not.toContain('Front Desk staff');
+    const standardCard = screen.getByRole('link', { name: 'Start with Standard' }).closest('li');
+    expect(standardCard?.textContent).toContain('All Starter plan features, plus these upgrades:');
+    expect(standardCard?.querySelectorAll('ul li')).toHaveLength(2);
     expect(fetchSpy).not.toHaveBeenCalled();
     expect(screen.queryByRole('status')).toBeNull();
     expect(screen.queryByRole('alert')).toBeNull();
@@ -54,9 +68,17 @@ describe('marketing FAQ, pricing, and terms', () => {
     expect(pricing?.textContent).toContain('Starter');
     expect(pricing?.textContent).toContain('₱149');
     expect(pricing?.textContent).toContain('Up to 125 active garments');
+    expect(pricing?.textContent).toContain('All Free plan features, plus these upgrades:');
+    expect(pricing?.textContent).toContain('Online storefront payment methods');
+    expect(pricing?.textContent).toContain('All 4 storefront designs');
     expect(pricing?.textContent).toContain('Standard');
     expect(pricing?.textContent).toContain('₱299');
     expect(pricing?.textContent).toContain('Up to 300 active garments');
+    expect(pricing?.textContent).toContain('All Starter plan features, plus these upgrades:');
+    expect(pricing?.textContent).toContain('Custom');
+    expect(pricing?.querySelector('a[href^="mailto:"]')?.getAttribute('href')).toContain(
+      'Custom%20Drezivo%20plan%20inquiry',
+    );
   });
 
   it('moves billing-detail explanations to the FAQ instead of the pricing page', () => {
@@ -92,6 +114,7 @@ describe('marketing FAQ, pricing, and terms', () => {
     expect(pricingAnswer).toContain('up to 125 active garments');
     expect(pricingAnswer).toContain('Standard is ₱299 a month');
     expect(pricingAnswer).toContain('up to 300 active garments');
+    expect(pricingAnswer).toContain('monthly Custom quote');
     expect(pricingAnswer).toContain('Starter and Standard include a 14-day trial');
     const trialAnswer = answerFor(
       'What happens when my paid-plan trial ends? Will I lose my data?',

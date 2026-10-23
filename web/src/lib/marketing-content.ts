@@ -91,7 +91,7 @@ export const MARKETING_FAQ_GROUPS: readonly MarketingFaqGroup[] = [
       },
       {
         question: 'How much does Drezivo cost?',
-        answer: `Free is ₱0 with up to 20 active garments, owner-only access, two storefront designs, and an availability-only storefront without fittings or online reservations. Starter is ₱149 a month for up to 125 active garments and owner-only access. Standard is ₱299 a month for up to 300 active garments and up to 3 Front Desk staff. Starter and Standard include a ${MARKETING_TRIAL_DAYS}-day trial for eligible owners. Asset limits count active physical garments, not styles in your catalogue.`,
+        answer: `Free is ₱0 with up to 20 active garments, owner-only access, two storefront designs, and an availability-only storefront without fittings or online reservations. Starter is ₱149 a month for up to 125 active garments and owner-only access. Standard is ₱299 a month for up to 300 active garments and up to 3 Front Desk staff. Starter and Standard include a ${MARKETING_TRIAL_DAYS}-day trial for eligible owners. Shops needing higher capacity or a different mix of existing features can contact us to discuss a monthly Custom quote; custom terms are not available for self-service signup. Asset limits count active physical garments, not styles in your catalogue.`,
       },
       {
         question: 'What happens if I do not renew after the trial or a paid month?',
