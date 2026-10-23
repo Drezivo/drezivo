@@ -115,7 +115,7 @@ describe('pilot billing', async () => {
           monthly_price_minor: 29900,
           currency: 'PHP',
           trial_days: 14,
-          limits: { active_garments: 300, frontdesk_seats: 3 },
+          limits: { active_garments: 400, frontdesk_seats: 3 },
           features: {
             fittings: true,
             storefront_reservations: true,

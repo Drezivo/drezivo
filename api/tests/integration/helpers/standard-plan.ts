@@ -1,10 +1,10 @@
-/** Standard remains the legacy customer tier at its existing 299 PHP/month identity and limits. */
+/** Standard v1 catalog values for the current temporary 400-garment offer. */
 export const STANDARD_PLAN = {
   code: 'standard',
   version: 1,
   monthlyMinor: 29900,
   currency: 'PHP',
-  physicalAssetsMax: 300,
+  physicalAssetsMax: 400,
   frontdeskSeatsMax: 3,
 } as const;
 
