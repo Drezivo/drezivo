@@ -7,6 +7,7 @@ export interface PublicPlan {
   readonly price: string;
   readonly interval: 'month';
   readonly trialDays: number;
+  readonly featureIntro?: string;
   readonly features: readonly string[];
   readonly highlighted: boolean;
 }
@@ -26,12 +27,9 @@ export const PUBLIC_MARKETING_PLANS: readonly PublicPlan[] = [
     features: [
       'Up to 20 active garments',
       'Owner-only access (no Front Desk accounts)',
-      'Availability-only storefront with contact links',
-      'Reservations, calendar & availability',
-      'Customers, staff payment records, returns & exports',
-      'No fittings on the business app or storefront',
-      'No online storefront payment methods',
-      '2 storefront designs',
+      'Availability-only storefront with contact links; 2 storefront designs',
+      'Reservations, calendar & availability; customers and staff payment records',
+      'Returns & exports; no fittings on the business app or storefront; no online storefront payment methods',
     ],
     highlighted: false,
   },
@@ -42,12 +40,12 @@ export const PUBLIC_MARKETING_PLANS: readonly PublicPlan[] = [
     price: '149.00',
     interval: 'month',
     trialDays: 14,
+    featureIntro: 'All Free plan features, plus these upgrades:',
     features: [
       'Up to 125 active garments',
-      'Owner-only access (no Front Desk accounts)',
       'Online storefront with bookings and fittings',
-      'Reservations, calendar & availability',
-      'Customers, payments, returns & exports',
+      'Online storefront payment methods',
+      'All 4 storefront designs',
     ],
     highlighted: false,
   },
@@ -58,12 +56,10 @@ export const PUBLIC_MARKETING_PLANS: readonly PublicPlan[] = [
     price: '299.00',
     interval: 'month',
     trialDays: 14,
+    featureIntro: 'All Starter plan features, plus these upgrades:',
     features: [
       'Up to 300 active garments',
       'Up to 3 Front Desk staff',
-      'Online storefront with bookings and fittings',
-      'Reservations, calendar & availability',
-      'Customers, payments, returns & exports',
     ],
     highlighted: true,
   },
