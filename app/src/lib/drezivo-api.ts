@@ -7,6 +7,11 @@ import {
   bootstrapTenantRequest,
   catalogueCategory,
   catalogueCategoryList,
+  catalogueBackupExportStartResponse,
+  catalogueBackupImportCommitRequest,
+  catalogueBackupImportCommitResponse,
+  catalogueBackupImportPreview,
+  catalogueBackupImportPreviewRequest,
   createCatalogueCategoryRequest,
   createClothingVariantRequest,
   createClothingVariantResponse,
@@ -227,6 +232,9 @@ import {
   type UploadAuthorizationRequest,
   type UploadAuthorizationResponse,
   type UploadFinalizeResponse,
+  type CatalogueBackupExportStatus,
+  type CatalogueBackupImportCommitResponse,
+  type CatalogueBackupImportPreview,
   type CreateOwnerOnboardingRequest,
   type OnboardingActorContext,
   type TermsAcceptanceRequest,
@@ -1143,6 +1151,42 @@ export function createDrezivoApiClient(getToken: TokenGetter) {
         path: `/api/v1/uploads/${encodeURIComponent(fileId)}/finalize`,
         responseSchema: apiEnvelope(uploadFinalizeResponse),
       }),
+    startCatalogueBackupExport: (idempotencyKey: string) =>
+      request<{ job: CatalogueBackupExportStatus }>({
+        getToken,
+        body: {},
+        idempotencyKey,
+        method: "POST",
+        path: "/api/v1/catalogue/backup/exports",
+        responseSchema: apiEnvelope(catalogueBackupExportStartResponse),
+      }),
+    getCatalogueBackupExportStatus: (jobId: string) =>
+      request<{ job: CatalogueBackupExportStatus }>({
+        getToken,
+        method: "GET",
+        path: `/api/v1/catalogue/backup/exports/${encodeURIComponent(jobId)}`,
+        responseSchema: apiEnvelope(catalogueBackupExportStartResponse),
+      }),
+    downloadCatalogueBackupExport: (jobId: string) =>
+      fetchAuthorizedBlob(getToken, `/api/v1/catalogue/backup/exports/${encodeURIComponent(jobId)}/download`),
+    previewCatalogueBackupImport: (fileId: string, idempotencyKey: string) =>
+      request<CatalogueBackupImportPreview>({
+        getToken,
+        body: catalogueBackupImportPreviewRequest.parse({ file_id: fileId }),
+        idempotencyKey,
+        method: "POST",
+        path: "/api/v1/catalogue/backup/imports/preview",
+        responseSchema: apiEnvelope(catalogueBackupImportPreview),
+      }),
+    commitCatalogueBackupImport: (importId: string, idempotencyKey: string) =>
+      request<CatalogueBackupImportCommitResponse>({
+        getToken,
+        body: catalogueBackupImportCommitRequest.parse({}),
+        idempotencyKey,
+        method: "POST",
+        path: `/api/v1/catalogue/backup/imports/${encodeURIComponent(importId)}/commit`,
+        responseSchema: apiEnvelope(catalogueBackupImportCommitResponse),
+      }),
     getCatalogueImportCapabilities: () =>
       request<CatalogueImportCapabilities>({
         getToken,
@@ -1529,6 +1573,21 @@ async function fetchAuthorizedObjectUrl(
   if (!response.ok)
     throw new DrezivoApiError("The QR code could not be loaded.", { status: response.status });
   return URL.createObjectURL(await response.blob());
+}
+
+async function fetchAuthorizedBlob(getToken: TokenGetter, path: string): Promise<Blob> {
+  const token = await getToken();
+  if (!token) throw new DrezivoApiError("Your session has expired. Please sign in again.", { status: 401 });
+  const apiOrigin = process.env["NEXT_PUBLIC_API_ORIGIN"]?.replace(/\/$/, "");
+  if (!apiOrigin) throw new DrezivoApiError("The Drezivo API is not configured for this environment.", { status: 503 });
+  let response: Response;
+  try {
+    response = await fetch(`${apiOrigin}${path}`, { cache: "no-store", headers: { Authorization: `Bearer ${token}` } });
+  } catch {
+    throw new DrezivoApiError("We could not reach Drezivo. Check your connection and try again.", { status: 503 });
+  }
+  if (!response.ok) throw new DrezivoApiError("The inventory backup could not be downloaded.", { status: response.status });
+  return response.blob();
 }
 
 async function request<T>({

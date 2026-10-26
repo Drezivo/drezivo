@@ -6,7 +6,7 @@ import { DependencyUnavailableError } from '../../shared/errors.js';
 
 export interface FileStreamResponse {
   body: AsyncIterable<Uint8Array>;
-  mimeType: 'image/jpeg' | 'image/png' | 'image/webp' | 'application/pdf';
+  mimeType: 'image/jpeg' | 'image/png' | 'image/webp' | 'application/pdf' | 'application/zip';
   byteSize: number;
 }
 
@@ -17,6 +17,7 @@ export function streamFileResponse(
   next: NextFunction,
   file: FileStreamResponse,
   cacheControl: string,
+  downloadFileName?: string,
 ): void {
   res.status(200);
   res.setHeader('Content-Type', file.mimeType);
@@ -25,7 +26,9 @@ export function streamFileResponse(
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader(
     'Content-Disposition',
-    file.mimeType === 'application/pdf' ? 'attachment' : 'inline',
+    downloadFileName
+      ? `attachment; filename="${downloadFileName.replace(/["\\\r\n]/g, '_')}"`
+      : file.mimeType === 'application/pdf' || file.mimeType === 'application/zip' ? 'attachment' : 'inline',
   );
   res.setHeader('Referrer-Policy', 'no-referrer');
 

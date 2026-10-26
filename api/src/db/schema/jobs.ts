@@ -1,7 +1,8 @@
 import { sql } from 'drizzle-orm';
-import { index, integer, jsonb, pgEnum, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { foreignKey, index, integer, jsonb, pgEnum, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 
 import { idColumn, timestamps } from './_shared.js';
+import { branch } from './tenancy.js';
 
 /**
  * Owns: the transactional outbox, the global webhook inbox, notification delivery state, and
@@ -119,11 +120,12 @@ export const idempotencyRecord = pgTable(
 );
 
 export const importJobStatusEnum = pgEnum('import_job_status', ['previewed', 'committed', 'failed']);
-export const exportJobStatusEnum = pgEnum('export_job_status', ['pending', 'completed', 'failed']);
+export const exportJobStatusEnum = pgEnum('export_job_status', ['pending', 'running', 'completed', 'failed']);
 
 export const importJob = pgTable('import_job', {
   ...idColumn,
   tenantId: uuid('tenant_id').notNull(),
+  branchId: uuid('branch_id'),
   requestedBy: uuid('requested_by').notNull(),
   fileId: uuid('file_id').notNull(),
   status: importJobStatusEnum('status').notNull().default('previewed'),
@@ -132,7 +134,14 @@ export const importJob = pgTable('import_job', {
   resultSummary: jsonb('result_summary').$type<Record<string, unknown>>(),
   completedAt: timestamp('completed_at', { withTimezone: true }),
   ...timestamps,
-});
+}, (table) => [
+  index('import_job_tenant_branch_status_created_idx').on(table.tenantId, table.branchId, table.status, table.createdAt),
+  foreignKey({
+    columns: [table.tenantId, table.branchId],
+    foreignColumns: [branch.tenantId, branch.id],
+    name: 'import_job_branch_same_tenant_fk',
+  }),
+]);
 
 export const exportJob = pgTable('export_job', {
   ...idColumn,

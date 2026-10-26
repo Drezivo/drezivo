@@ -44,6 +44,12 @@ import {
   createClothingRequest,
   batchCreateClothingRequest,
   batchResponse,
+  catalogueBackupExportStatus,
+  catalogueBackupExportStartResponse,
+  catalogueBackupImportPreviewRequest,
+  catalogueBackupImportPreview,
+  catalogueBackupImportCommitRequest,
+  catalogueBackupImportCommitResponse,
   batchUploadAuthorizationRequest,
   batchUploadFinalizeRequest,
   catalogueImportCapabilities,
@@ -256,6 +262,9 @@ registry.register('ChangeClothingSizingModeResponse', changeClothingSizingModeRe
 registry.register('ReplaceClothingImagesRequest', replaceClothingImagesRequest);
 registry.register('ReplaceClothingImagesResponse', replaceClothingImagesResponse);
 registry.register('ClothingDetail', clothingDetail);
+registry.register('CatalogueBackupExportStatus', catalogueBackupExportStatus);
+registry.register('CatalogueBackupImportPreview', catalogueBackupImportPreview);
+registry.register('CatalogueBackupImportCommitResponse', catalogueBackupImportCommitResponse);
 
 const jsonError = (description: string) => ({
   description,
@@ -1046,6 +1055,68 @@ registry.registerPath({
     404: jsonError('The photo is not an accepted catalogue image of this shop.'),
     429: jsonError('The photo reader is rate limited; retry after Retry-After seconds.'),
     503: jsonError('Photo reading is not set up or the provider is unavailable.'),
+  },
+});
+
+// ---- branch-scoped inventory backup ---------------------------------
+registry.registerPath({
+  method: 'post',
+  path: '/catalogue/backup/exports',
+  tags: ['catalogue'],
+  summary: 'Queue an export of the active branch inventory.',
+  request: { headers: idempotencyKeyHeader },
+  responses: {
+    200: { description: 'An existing running or recently completed export.', content: { 'application/json': { schema: successEnvelope(catalogueBackupExportStartResponse) } } },
+    409: jsonError('The idempotency key is already processing or was reused for a different request.'),
+  },
+});
+registry.registerPath({
+  method: 'get',
+  path: '/catalogue/backup/exports/{jobId}',
+  tags: ['catalogue'],
+  summary: 'Read the status of an active-branch inventory export.',
+  request: { params: z.object({ jobId: z.string().uuid() }) },
+  responses: {
+    200: { description: 'Export status and next eligible export time.', content: { 'application/json': { schema: successEnvelope(z.object({ job: catalogueBackupExportStatus })) } } },
+    404: jsonError('The export does not belong to the active branch or is unavailable.'),
+  },
+});
+registry.registerPath({
+  method: 'get',
+  path: '/catalogue/backup/exports/{jobId}/download',
+  tags: ['catalogue'],
+  summary: 'Download a private, expiring branch inventory ZIP.',
+  request: { params: z.object({ jobId: z.string().uuid() }) },
+  responses: {
+    200: { description: 'Inventory backup ZIP.', content: { 'application/zip': { schema: { type: 'string', format: 'binary' } } } },
+    404: jsonError('The export is not ready, expired, or outside the active branch.'),
+  },
+});
+registry.registerPath({
+  method: 'post',
+  path: '/catalogue/backup/imports/preview',
+  tags: ['catalogue'],
+  summary: 'Validate and preview an uploaded branch inventory backup.',
+  request: { headers: idempotencyKeyHeader, body: { content: { 'application/json': { schema: catalogueBackupImportPreviewRequest } } } },
+  responses: {
+    200: { description: 'Restore counts, conflicts, and preview expiry.', content: { 'application/json': { schema: successEnvelope(catalogueBackupImportPreview) } } },
+    422: jsonError('The archive is malformed, oversized, or belongs to another branch or business.'),
+  },
+});
+registry.registerPath({
+  method: 'post',
+  path: '/catalogue/backup/imports/{importId}/commit',
+  tags: ['catalogue'],
+  summary: 'Restore missing inventory records from a reviewed backup preview.',
+  request: {
+    params: z.object({ importId: z.string().uuid() }),
+    headers: idempotencyKeyHeader,
+    body: { content: { 'application/json': { schema: catalogueBackupImportCommitRequest } } },
+  },
+  responses: {
+    200: { description: 'Additive restore completed atomically.', content: { 'application/json': { schema: successEnvelope(catalogueBackupImportCommitResponse) } } },
+    409: jsonError('The preview expired or inventory changed after preview.'),
+    422: jsonError('The restore archive is invalid or conflicts with existing records.'),
   },
 });
 
