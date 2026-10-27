@@ -27,6 +27,7 @@ import type {
 } from "@drezivo/contracts";
 
 import { ArchiveClothingDialog, archiveSuccessMessage } from "@/components/inventory/archive-clothing-dialog";
+import { CatalogueBackupControls } from "@/components/inventory/catalogue-backup-controls";
 import { InventoryLoadingState, InventorySummaryLoadingState } from "@/components/inventory/inventory-loading-state";
 import { RestoreClothingDialog, restoreSuccessMessage } from "@/components/inventory/restore-clothing-dialog";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -338,6 +339,13 @@ export function ClothingPage() {
               Add Clothing
             </Link>
           </div>
+          <CatalogueBackupControls
+            onRestored={() => {
+              setNotice("Inventory backup restored");
+              resetPagination();
+              setReloadVersion((value) => value + 1);
+            }}
+          />
         </div>
 
         {notice ? (

@@ -84,6 +84,62 @@ describe('Catalogue batch import routes', async () => {
     expectSafeError(forbidden.body, 'FORBIDDEN');
   });
 
+  it('shares the export job and seven-day cooldown across branch members, starting cooldown only on success', async () => {
+    const seed = await seedRouteTenant('org_backup_cooldown', 'user_backup_owner', ['assets.manage']);
+    const otherPrincipal = 'user_backup_frontdesk';
+    const otherMembershipId = await createTestMembership(seed.tenantId, otherPrincipal, 'frontdesk');
+    await withTenantTransaction(seed.tenantId, otherPrincipal, (client) => client.query(
+      `INSERT INTO branch_membership (tenant_id, branch_id, membership_id, permission_codes)
+       VALUES ($1, $2, $3, '["assets.manage"]'::jsonb)`,
+      [seed.tenantId, seed.branchId, otherMembershipId],
+    ).then(() => undefined));
+
+    useClerk(seed);
+    const start = (key: string) => request(createApp())
+      .post('/api/v1/catalogue/backup/exports')
+      .set('Idempotency-Key', key)
+      .send({});
+    const [first, concurrent] = await Promise.all([start('backup-export-owner-01'), start('backup-export-owner-02')]);
+    expect(first.status).toBe(200);
+    expect(concurrent.status).toBe(200);
+    const firstJob = readSuccessData<{ job: { job_id: string; status: string } }>(first.body).job;
+    const concurrentJob = readSuccessData<{ job: { job_id: string; status: string } }>(concurrent.body).job;
+    expect(firstJob.job_id).toBe(concurrentJob.job_id);
+    expect(firstJob.status).toBe('pending');
+
+    useClerk({ ...seed, principalId: otherPrincipal });
+    const shared = await start('backup-export-frontdesk-01');
+    expect(readSuccessData<{ job: { job_id: string } }>(shared.body).job.job_id).toBe(firstJob.job_id);
+
+    await withTenantTransaction(seed.tenantId, seed.principalId, (client) => client.query(
+      `UPDATE export_job SET status = 'failed', updated_at = statement_timestamp()
+        WHERE tenant_id = $1 AND id = $2`,
+      [seed.tenantId, firstJob.job_id],
+    ).then(() => undefined));
+    useClerk(seed);
+    const retry = await start('backup-export-owner-retry');
+    const retryJob = readSuccessData<{ job: { job_id: string; status: string } }>(retry.body).job;
+    expect(retryJob.status).toBe('pending');
+    expect(retryJob.job_id).not.toBe(firstJob.job_id);
+
+    await withTenantTransaction(seed.tenantId, seed.principalId, (client) => client.query(
+      `UPDATE export_job SET status = 'completed', completed_at = statement_timestamp(), updated_at = statement_timestamp()
+        WHERE tenant_id = $1 AND id = $2`,
+      [seed.tenantId, retryJob.job_id],
+    ).then(() => undefined));
+    useClerk({ ...seed, principalId: otherPrincipal });
+    const cooldown = await start('backup-export-frontdesk-cooldown');
+    const cooldownJob = readSuccessData<{ job: { job_id: string; status: string; available_at: string | null } }>(cooldown.body).job;
+    expect(cooldownJob).toMatchObject({ job_id: retryJob.job_id, status: 'completed' });
+    expect(cooldownJob.available_at).not.toBeNull();
+
+    const count = await withTenantTransaction(seed.tenantId, seed.principalId, async (client) => client.query<{ count: number }>(
+      `SELECT count(*)::int AS count FROM export_job WHERE tenant_id = $1 AND scope_snapshot ->> 'branch_id' = $2`,
+      [seed.tenantId, seed.branchId],
+    ));
+    expect(count.rows[0]?.count).toBe(2);
+  });
+
   it('creates every valid row, fails only the bad row, and replays on retry without duplicates', async () => {
     const seed = await seedRouteTenant('org_import_batch', 'user_import_batch', ['assets.manage']);
     useClerk(seed);

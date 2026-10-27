@@ -4,6 +4,7 @@ import {
   uploadAuthorizationRequest,
   uploadAuthorizationResponse,
   uploadFinalizeResponse,
+  MAX_CATALOGUE_BACKUP_BYTES,
   type PermissionCode,
   type TenantStatus,
   type UploadAuthorizationRequest,
@@ -58,6 +59,7 @@ const AUTHORIZE_UPLOAD_OPERATION = 'files.upload.authorize';
 const FINALIZE_UPLOAD_OPERATION = 'files.upload.finalize';
 const UPLOAD_EXPIRY_SECONDS = 10 * 60;
 const FILE_UPLOAD_MAX_BYTES = 10 * 1024 * 1024;
+const CATALOGUE_BACKUP_MAX_BYTES = MAX_CATALOGUE_BACKUP_BYTES;
 const CATALOGUE_IMAGE_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 const PAYMENT_RECEIPT_MIME_TYPES = new Set([
   'image/jpeg',
@@ -193,7 +195,10 @@ export async function finalizeUpload(
     throw new StateConflictError('This upload can no longer be finalized.');
   }
 
-  const uploaded = await storage.inspectUploadedObject(before.storage_key, FILE_UPLOAD_MAX_BYTES);
+  const uploaded = await storage.inspectUploadedObject(
+    before.storage_key,
+    before.purpose === 'catalogue_backup' ? CATALOGUE_BACKUP_MAX_BYTES : FILE_UPLOAD_MAX_BYTES,
+  );
   if (!uploaded) {
     throw new StateConflictError('The uploaded object is not available yet.');
   }
@@ -416,7 +421,11 @@ function assertSupportedUpload(
     request.purpose === 'catalogue_image' ||
     request.purpose === 'measurement_guide' ||
     request.purpose === 'storefront_asset';
-  if (isCataloguePurpose) {
+  if (request.purpose === 'catalogue_backup') {
+    if (request.content_type !== 'application/zip' || request.byte_size > CATALOGUE_BACKUP_MAX_BYTES) {
+      throw new ValidationError('Inventory backups must be ZIP files no larger than 64 MB.');
+    }
+  } else if (isCataloguePurpose) {
     if (!CATALOGUE_IMAGE_MIME_TYPES.has(request.content_type)) {
       throw new ValidationError('Images must be JPEG, PNG, or WebP.');
     }
@@ -433,7 +442,7 @@ function assertSupportedUpload(
       'This upload purpose is not available through the staff upload flow.',
     );
   }
-  if (request.byte_size > FILE_UPLOAD_MAX_BYTES) {
+  if (request.purpose !== 'catalogue_backup' && request.byte_size > FILE_UPLOAD_MAX_BYTES) {
     throw new ValidationError('Uploads must be 10 MB or smaller.');
   }
 }
@@ -445,7 +454,8 @@ function assertSupportedFilePurpose(row: FileObjectRow): void {
     row.purpose !== 'storefront_asset' &&
     row.purpose !== 'payment_receipt' &&
     row.purpose !== 'subscription_payment_proof' &&
-    row.purpose !== 'payment_method_material'
+    row.purpose !== 'payment_method_material' &&
+    row.purpose !== 'catalogue_backup'
   ) {
     throw new NotFoundError('The uploaded file could not be found.');
   }
@@ -482,6 +492,9 @@ function matchesFileSignature(prefix: Uint8Array, mimeType: string): boolean {
   }
   if (mimeType === 'application/pdf') {
     return prefix.length >= 5 && ascii(prefix, 0, 5) === '%PDF-';
+  }
+  if (mimeType === 'application/zip') {
+    return prefix.length >= 4 && prefix[0] === 0x50 && prefix[1] === 0x4b && prefix[2] === 0x03 && prefix[3] === 0x04;
   }
   return false;
 }

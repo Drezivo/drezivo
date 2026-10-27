@@ -5,7 +5,8 @@ export type SupportedUploadPurpose =
   | 'payment_receipt'
   | 'storefront_asset'
   | 'subscription_payment_proof'
-  | 'payment_method_material';
+  | 'payment_method_material'
+  | 'catalogue_backup';
 
 const STORAGE_FOLDER_BY_PURPOSE: Record<SupportedUploadPurpose, string> = {
   catalogue_image: 'catalogue-images',
@@ -14,6 +15,7 @@ const STORAGE_FOLDER_BY_PURPOSE: Record<SupportedUploadPurpose, string> = {
   storefront_asset: 'workspace-assets',
   subscription_payment_proof: 'billing-evidence',
   payment_method_material: 'workspace-assets',
+  catalogue_backup: 'catalogue-backups',
 };
 
 export const IMAGE_VARIANT_WIDTHS = [320, 960, 1600] as const;
