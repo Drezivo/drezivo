@@ -2,7 +2,7 @@
 
 import { useAuth } from "@clerk/nextjs";
 import { ArchiveRestore, Download, Upload } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { MAX_CATALOGUE_BACKUP_BYTES, type CatalogueBackupExportStatus, type CatalogueBackupImportPreview } from "@drezivo/contracts";
 
@@ -22,7 +22,13 @@ function sha256Base64(bytes: ArrayBuffer): string {
   return btoa(String.fromCharCode(...new Uint8Array(bytes)));
 }
 
-export function CatalogueBackupControls({ onRestored }: { onRestored: () => void }) {
+export function CatalogueBackupControls({
+  onRestored,
+  toolbarActions,
+}: {
+  onRestored: () => void;
+  toolbarActions?: ReactNode;
+}) {
   const { getToken } = useAuth();
   const fileInput = useRef<HTMLInputElement>(null);
   const [exportJob, setExportJob] = useState<CatalogueBackupExportStatus | null>(null);
@@ -139,8 +145,8 @@ export function CatalogueBackupControls({ onRestored }: { onRestored: () => void
   const exportRunning = exportJob?.status === "pending" || exportJob?.status === "running";
 
   return (
-    <div className="space-y-2 sm:max-w-2xl">
-      <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
+    <div className="min-w-0 flex-1 space-y-2">
+      <div className="flex flex-wrap items-center justify-end gap-2">
         <Button type="button" variant="secondary" onClick={() => void startExport()} disabled={busy || exportRunning}>
           <Download className="h-4 w-4" aria-hidden="true" />
           {exportRunning ? "Preparing backup…" : "Export inventory"}
@@ -163,12 +169,13 @@ export function CatalogueBackupControls({ onRestored }: { onRestored: () => void
           <Upload className="h-4 w-4" aria-hidden="true" />
           Restore backup
         </Button>
+        {toolbarActions}
       </div>
 
-      {exportRunning ? <p role="status" className="text-xs text-dashboard-muted">Your private inventory backup is being prepared.</p> : null}
-      {nextExport ? <p className="text-xs text-dashboard-muted">Next export available {nextExport}. You can download an existing backup without using another export.</p> : null}
-      {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : null}
-      {message ? <p role="status" className="text-sm text-dashboard-muted">{message}</p> : null}
+      {exportRunning ? <p role="status" className="text-right text-xs text-dashboard-muted">Your private inventory backup is being prepared.</p> : null}
+      {nextExport ? <p className="text-right text-xs text-dashboard-muted">Next export available {nextExport}. You can download an existing backup without using another export.</p> : null}
+      {error ? <p role="alert" className="text-right text-sm text-destructive">{error}</p> : null}
+      {message ? <p role="status" className="text-right text-sm text-dashboard-muted">{message}</p> : null}
 
       {preview ? (
         <div className="rounded-lg border border-dashboard-border bg-dashboard-surface p-3 text-sm">
