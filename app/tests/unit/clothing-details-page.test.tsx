@@ -13,6 +13,7 @@ const api = vi.hoisted(() => ({
   getCatalogueClothingDetail: vi.fn(),
   publishClothing: vi.fn(),
   restoreClothing: vi.fn(),
+  updateClothingVariantLifecycle: vi.fn(),
   updatePhysicalAssetState: vi.fn(),
 }));
 
@@ -150,6 +151,16 @@ describe("ClothingDetailsPage", () => {
       },
       requestId: "req-restore",
     });
+    api.updateClothingVariantLifecycle.mockResolvedValue({
+      data: {
+        variant_id: detail.variants[0]!.id,
+        product_id: productId,
+        status: "active",
+        outcome: "updated",
+        updated_at: "2026-09-22T00:00:00.000Z",
+      },
+      requestId: "req-variant-restored",
+    });
     api.updatePhysicalAssetState.mockResolvedValue({
       data: {
         asset: {
@@ -200,7 +211,7 @@ describe("ClothingDetailsPage", () => {
     expect(within(variantCard).getByText("SKU").nextElementSibling).toHaveTextContent("GWN-001-M");
     expect(within(variantCard).getByText(/Bust: Flexible fit · Waist: 72 cm · Length: 61 cm · Hips \(legacy, read-only\): 96 cm/)).toBeVisible();
     expect(variantCards).toHaveClass("md:hidden");
-    const table = screen.getByRole("table");
+    const table = screen.getAllByRole("table")[0]!;
     expect(table.parentElement?.parentElement).toHaveClass("hidden", "md:block");
     expect(within(table).getByRole("columnheader", { name: "SKU" })).toBeInTheDocument();
     expect(screen.getByText("AST-GWN-001-M-01")).toBeVisible();
@@ -244,7 +255,7 @@ describe("ClothingDetailsPage", () => {
     expect(within(fixedCard).getByText(/₱2,000 \/ 3 days/)).toBeVisible();
     expect(within(fixedCard).getByText("₱250 / extra day")).toBeVisible();
     expect(within(fixedCard).getByText("None")).toBeVisible();
-    expect(within(fixedCard).getByText(longMeasurement)).toHaveClass("break-words");
+    expect(within(fixedCard).getByText(new RegExp(`Bust: ${longMeasurement}`))).toHaveClass("break-words");
     expect(within(fixedCard).getByText(longSku)).toHaveClass("break-all");
     expect(fixedCard.querySelector("dl")).toHaveClass("grid-cols-2");
   });
@@ -260,8 +271,11 @@ describe("ClothingDetailsPage", () => {
 
     render(<ClothingDetailsPage productId={productId} />);
 
-    const fitRange = await screen.findByText(/Fits Small to Large/);
-    expect(fitRange).toHaveTextContent(/^Fits Small to Large · Bust:/);
+    const fitRanges = await screen.findAllByText(/Fits Small to Large/);
+    expect(fitRanges.length).toBeGreaterThan(0);
+    for (const fitRange of fitRanges) {
+      expect(fitRange).toHaveTextContent(/^Fits Small to Large · Bust:/);
+    }
     expect(screen.queryByText(/Fits Fits Small to Large/)).not.toBeInTheDocument();
   });
 
@@ -401,17 +415,134 @@ describe("ClothingDetailsPage", () => {
     const cards = await screen.findByRole("list", { name: "Variant pricing cards" });
     const card = within(cards).getByRole("listitem", { name: "M no color variant" });
     expect(within(card).getByText("Color: —")).toBeVisible();
-    const row = within(screen.getByRole("table")).getByRole("row", { name: /GWN-001-M/ });
+    const row = within(screen.getAllByRole("table")[0]!).getByRole("row", { name: /GWN-001-M/ });
     expect(within(row).getByText("—")).toBeVisible();
   });
 
   it("hides archived variants from current summaries and pricing while retaining their physical-piece history", async () => {
+    const activeVariant = {
+      ...detail.variants[0]!,
+      assets: [{ ...detail.variants[0]!.assets[0]!, readiness: "ready" as const }],
+    };
+    const archivedVariant = {
+      ...activeVariant,
+      id: "00000000-0000-4000-8000-000000000030",
+      sku: "GWN-001-ARCHIVED-XS",
+      size_label: "XS",
+      rental_price_minor: "999999",
+      status: "archived" as const,
+      assets: [
+        {
+          ...activeVariant.assets[0]!,
+          id: "00000000-0000-4000-8000-000000000031",
+          variant_id: "00000000-0000-4000-8000-000000000030",
+          asset_code: "AST-GWN-001-ARCHIVED-XS-01",
+        },
+      ],
+    };
+    api.getCatalogueClothingDetail.mockResolvedValueOnce({
+      data: { ...detail, variants: [activeVariant, archivedVariant] },
+      requestId: "req-detail-with-archived-variant",
+    });
+
+    render(<ClothingDetailsPage productId={productId} />);
+
+    expect(await screen.findByRole("heading", { name: "Emerald Evening Gown" })).toBeVisible();
+    expect(within(screen.getByRole("list", { name: "Variant pricing cards" })).getByText("GWN-001-M")).toBeVisible();
+    expect(screen.queryByText("GWN-001-ARCHIVED-XS")).not.toBeInTheDocument();
+    expect(screen.getByText("AST-GWN-001-ARCHIVED-XS-01")).toBeVisible();
+    const archivedPieceRow = screen.getByText("AST-GWN-001-ARCHIVED-XS-01").closest("tr");
+    expect(archivedPieceRow).not.toBeNull();
+    expect(within(archivedPieceRow!).getByText("Archived · Unavailable")).toBeVisible();
+    expect(within(archivedPieceRow!).getByText("Active")).toBeVisible();
+    expect(within(archivedPieceRow!).getByText("Ready")).toBeVisible();
+    expect(screen.getByText("Active Pieces").nextElementSibling).toHaveTextContent("1");
+    expect(screen.getByText("Ready Pieces").nextElementSibling).toHaveTextContent("1");
+    expect(screen.getByRole("button", { name: "Restore size XS · Emerald" })).toBeEnabled();
+    expect(screen.getAllByText(/1,500/).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/9,999/)).not.toBeInTheDocument();
+
+    const summary = screen.getByText("Sizes").parentElement;
+    expect(summary).toHaveTextContent("M");
+    expect(summary).not.toHaveTextContent("XS");
+    expect(screen.getByText("Variants").parentElement).toHaveTextContent("1");
+  });
+
+  it("confirms and restores an archived size as active before reloading authoritative detail", async () => {
     const archivedVariant = {
       ...detail.variants[0]!,
       id: "00000000-0000-4000-8000-000000000030",
       sku: "GWN-001-ARCHIVED-XS",
       size_label: "XS",
-      rental_price_minor: "999999",
+      status: "archived" as const,
+      assets: [
+        {
+          ...detail.variants[0]!.assets[0]!,
+          id: "00000000-0000-4000-8000-000000000031",
+          variant_id: "00000000-0000-4000-8000-000000000030",
+          asset_code: "AST-GWN-001-ARCHIVED-XS-01",
+          readiness: "ready" as const,
+        },
+      ],
+    };
+    const beforeRestore = { ...detail, variants: [...detail.variants, archivedVariant] };
+    const afterRestore = {
+      ...beforeRestore,
+      variants: [...detail.variants, { ...archivedVariant, status: "active" as const }],
+    };
+    api.getCatalogueClothingDetail
+      .mockResolvedValueOnce({
+        data: beforeRestore,
+        requestId: "req-detail-before-variant-restore",
+      })
+      .mockResolvedValueOnce({ data: afterRestore, requestId: "req-detail-after-variant-restore" });
+    api.updateClothingVariantLifecycle.mockResolvedValueOnce({
+      data: {
+        variant_id: archivedVariant.id,
+        product_id: productId,
+        status: "active",
+        outcome: "updated",
+        updated_at: "2026-09-22T00:00:00.000Z",
+      },
+      requestId: "req-variant-restored",
+    });
+
+    render(<ClothingDetailsPage productId={productId} />);
+
+    const restoreButton = await screen.findByRole("button", { name: "Restore size XS · Emerald" });
+    fireEvent.click(restoreButton);
+    const dialog = await screen.findByRole("dialog");
+    expect(
+      within(dialog).getByRole("heading", { name: "Restore size XS · Emerald?" })
+    ).toBeVisible();
+    expect(api.updateClothingVariantLifecycle).not.toHaveBeenCalled();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Restore size" }));
+
+    await waitFor(() => expect(api.updateClothingVariantLifecycle).toHaveBeenCalledTimes(1));
+    expect(api.updateClothingVariantLifecycle).toHaveBeenCalledWith(
+      productId,
+      archivedVariant.id,
+      { expected_updated_at: archivedVariant.updated_at, status: "active" },
+      expect.any(String)
+    );
+    await waitFor(() => expect(api.getCatalogueClothingDetail).toHaveBeenCalledTimes(2));
+    expect(await screen.findAllByText("GWN-001-ARCHIVED-XS")).not.toHaveLength(0);
+    expect(
+      screen.queryByRole("button", { name: "Restore size XS · Emerald" })
+    ).not.toBeInTheDocument();
+    expect(screen.getByText("Active Pieces").nextElementSibling).toHaveTextContent("2");
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "Size restored as active. Piece readiness and allocations still determine rental availability."
+    );
+  });
+
+  it("keeps an archived size unavailable when its restore request is rejected", async () => {
+    const { DrezivoApiError } = await import("@/lib/drezivo-api");
+    const archivedVariant = {
+      ...detail.variants[0]!,
+      id: "00000000-0000-4000-8000-000000000030",
+      sku: "GWN-001-ARCHIVED-XS",
+      size_label: "XS",
       status: "archived" as const,
       assets: [
         {
@@ -426,20 +557,27 @@ describe("ClothingDetailsPage", () => {
       data: { ...detail, variants: [...detail.variants, archivedVariant] },
       requestId: "req-detail-with-archived-variant",
     });
+    api.updateClothingVariantLifecycle.mockRejectedValueOnce(
+      new DrezivoApiError("This size changed since it was loaded.", {
+        code: "STALE_VERSION",
+        status: 409,
+        requestId: "req-stale-variant",
+      })
+    );
 
     render(<ClothingDetailsPage productId={productId} />);
 
-    expect(await screen.findByRole("heading", { name: "Emerald Evening Gown" })).toBeVisible();
-    expect(within(screen.getByRole("list", { name: "Variant pricing cards" })).getByText("GWN-001-M")).toBeVisible();
-    expect(screen.queryByText("GWN-001-ARCHIVED-XS")).not.toBeInTheDocument();
-    expect(screen.getByText("AST-GWN-001-ARCHIVED-XS-01")).toBeVisible();
-    expect(screen.getAllByText(/1,500/).length).toBeGreaterThan(0);
-    expect(screen.queryByText(/9,999/)).not.toBeInTheDocument();
+    fireEvent.click(await screen.findByRole("button", { name: "Restore size XS · Emerald" }));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Restore size" }));
 
-    const summary = screen.getByText("Sizes").parentElement;
-    expect(summary).toHaveTextContent("M");
-    expect(summary).not.toHaveTextContent("XS");
-    expect(screen.getByText("Variants").parentElement).toHaveTextContent("1");
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent(
+      "This size changed since it was loaded. Refresh the clothing details before restoring."
+    );
+    expect(screen.queryByText("GWN-001-ARCHIVED-XS")).not.toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    expect(screen.getByRole("button", { name: "Restore size XS · Emerald" })).toBeVisible();
+    expect(api.getCatalogueClothingDetail).toHaveBeenCalledTimes(1);
   });
 
   it("keeps archived variants and physical pieces visible in archived clothing history", async () => {

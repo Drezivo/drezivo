@@ -28,6 +28,7 @@ import {
   removeClothingVariantRequest,
   restoreClothingRequest,
   restoreClothingResponse,
+  updateClothingVariantLifecycleRequest,
   reservationCancelRequest,
   reservationCancelResponse,
   reservationEditRequest,
@@ -188,6 +189,7 @@ import {
   type RemoveClothingVariantRequest,
   type RestoreClothingRequest,
   type RestoreClothingResponse,
+  type UpdateClothingVariantLifecycleRequest,
   type ReservationCancelRequest,
   type ReservationCancelResponse,
   type ReservationEditRequestInput,
@@ -1351,6 +1353,20 @@ export function createDrezivoApiClient(getToken: TokenGetter) {
         idempotencyKey,
         method: "POST",
         path: `/api/v1/catalogue/clothing/${encodeURIComponent(productId)}/variants/${encodeURIComponent(variantId)}/remove`,
+        responseSchema: apiEnvelope(updateClothingVariantLifecycleResponse),
+      }),
+    updateClothingVariantLifecycle: (
+      productId: string,
+      variantId: string,
+      input: UpdateClothingVariantLifecycleRequest,
+      idempotencyKey: string
+    ) =>
+      request<UpdateClothingVariantLifecycleResponse>({
+        getToken,
+        body: updateClothingVariantLifecycleRequest.parse(input),
+        idempotencyKey,
+        method: "PATCH",
+        path: `/api/v1/catalogue/clothing/${encodeURIComponent(productId)}/variants/${encodeURIComponent(variantId)}/lifecycle`,
         responseSchema: apiEnvelope(updateClothingVariantLifecycleResponse),
       }),
     updatePhysicalAssetState: (
