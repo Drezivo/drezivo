@@ -8,9 +8,9 @@
     "lint:links": "node scripts/check-markdown-links.mjs"
   },
   "devDependencies": {
-    "@commitlint/cli": "^21.2.3",
+    "@commitlint/cli": "^21.2.4",
     "@commitlint/config-conventional": "^21.2.2",
     "markdown-link-check": "^3.13.6",
-    "markdownlint-cli2": "^0.23.3"
+    "markdownlint-cli2": "^0.24.0"
   }
 }
