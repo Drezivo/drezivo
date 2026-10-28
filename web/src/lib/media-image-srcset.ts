@@ -5,7 +5,8 @@ export function mediaImageSrcSet(source: string | null | undefined): string | un
   if (!source) return undefined;
   try {
     const url = new URL(source, 'https://drezivo.invalid');
-    if (url.origin !== 'https://drezivo.invalid' || !url.pathname.startsWith('/api/media/')) {
+    if (url.origin !== 'https://drezivo.invalid' ||
+      (!url.pathname.startsWith('/api/media/') && !/^\/s\/[a-z0-9-]+\/media\/preview\/[0-9a-f-]{36}$/i.test(url.pathname))) {
       return undefined;
     }
     return IMAGE_WIDTHS.map((width) => {

@@ -28,3 +28,5 @@ docs/second-brain/**/secrets*/
 SECURITY-FOUNDATION.md
 
 .ship-plan-worktree/
+
+graphify-out/

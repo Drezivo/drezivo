@@ -21,6 +21,20 @@ export async function POST(request: Request): Promise<Response> {
     // revalidate can return a response after content becomes private, so delete this tenant's
     // tagged entries and let the next request reauthorize at the API.
     await dangerouslyDeleteByTag(`tenant-${input.data.tenant_id}`);
+    if (process.env['CLOUDFLARE_MEDIA_PURGE_ENABLED'] === 'true') {
+      const zone = process.env['CLOUDFLARE_MEDIA_ZONE_ID'];
+      const token = process.env['CLOUDFLARE_MEDIA_PURGE_TOKEN'];
+      if (!zone || !/^[a-f0-9]{32}$/i.test(zone) || !token) return response(503);
+      const purge = await fetch(`https://api.cloudflare.com/client/v4/zones/${zone}/purge_cache`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tags: [`tenant-${input.data.tenant_id}`] }),
+        redirect: 'manual',
+        signal: AbortSignal.timeout(10000),
+      });
+      const result = await purge.json().catch(() => null) as { success?: unknown } | null;
+      if (!purge.ok || result?.success !== true) return response(503);
+    }
   } catch {
     return response(503);
   }

@@ -5,6 +5,6 @@ export function staffFileMediaUrl(fileId: string, branchId: string): string {
 
 /** Public storefronts proxy through their own origin so preview cookies can be forwarded safely. */
 export function publicStorefrontMediaUrl(slug: string, fileId: string, preview = false): string {
-  const route = preview ? 'preview' : 'public';
-  return `/api/media/${route}/${encodeURIComponent(slug)}/${encodeURIComponent(fileId)}?w=960`;
+  if (preview) return `/s/${encodeURIComponent(slug)}/media/preview/${encodeURIComponent(fileId)}?w=960`;
+  return `/api/media/public/${encodeURIComponent(slug)}/${encodeURIComponent(fileId)}?w=960`;
 }
