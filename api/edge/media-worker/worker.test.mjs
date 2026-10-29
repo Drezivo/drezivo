@@ -26,9 +26,11 @@ test('public cache misses fetch private R2 bytes and cache hits avoid another gr
   const req = () => new Request(`https://web.example.test/api/media/public/shop/${file}?w=320`);
   const first = await handleMedia(req(), env, f.ctx, { cache: f.cache, fetch: f.network });
   assert.equal(await first.text(), 'image');
+  assert.equal(first.headers.get('x-media-cache'), 'MISS');
   await Promise.all(f.tasks);
   const second = await handleMedia(req(), env, f.ctx, { cache: f.cache, fetch: f.network });
   assert.equal(await second.text(), 'image');
+  assert.equal(second.headers.get('x-media-cache'), 'HIT');
   assert.equal(f.calls.length, 2);
   assert.equal(second.headers.get('cache-control'), 'public, max-age=0, must-revalidate');
   assert.equal(second.headers.get('cache-tag'), null);
