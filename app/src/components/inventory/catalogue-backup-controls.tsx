@@ -145,18 +145,19 @@ export function CatalogueBackupControls({
   const exportRunning = exportJob?.status === "pending" || exportJob?.status === "running";
 
   return (
-    <div className="min-w-0 flex-1 space-y-2">
-      <div className="flex flex-wrap items-center justify-end gap-2">
-        <Button type="button" variant="secondary" onClick={() => void startExport()} disabled={busy || exportRunning}>
+    <div className="min-w-0 w-full space-y-2 md:ml-auto md:max-w-3xl 2xl:flex-1 2xl:max-w-none">
+      <div className="grid grid-cols-2 gap-2 [&>*:last-child:nth-child(even)]:col-span-2 2xl:flex 2xl:flex-wrap 2xl:items-center 2xl:justify-end">
+        <Button type="button" variant="secondary" className="w-full min-w-0 2xl:w-auto 2xl:shrink-0" onClick={() => void startExport()} disabled={busy || exportRunning}>
           <Download className="h-4 w-4" aria-hidden="true" />
           {exportRunning ? "Preparing backup…" : "Export inventory"}
         </Button>
         {downloadReady ? (
-          <Button type="button" variant="secondary" onClick={() => void downloadExport()} disabled={busy}>
+          <Button type="button" variant="secondary" className="w-full min-w-0 2xl:w-auto 2xl:shrink-0" onClick={() => void downloadExport()} disabled={busy}>
             <Download className="h-4 w-4" aria-hidden="true" />
             Download backup
           </Button>
         ) : null}
+        {/* The sr-only input means an even final child index represents an odd visible action count. */}
         <input
           ref={fileInput}
           type="file"
@@ -165,7 +166,7 @@ export function CatalogueBackupControls({
           className="sr-only"
           onChange={(event) => void previewFile(event.currentTarget.files?.[0])}
         />
-        <Button type="button" variant="secondary" onClick={() => fileInput.current?.click()} disabled={busy}>
+        <Button type="button" variant="secondary" className="w-full min-w-0 2xl:w-auto 2xl:shrink-0" onClick={() => fileInput.current?.click()} disabled={busy}>
           <Upload className="h-4 w-4" aria-hidden="true" />
           Restore backup
         </Button>

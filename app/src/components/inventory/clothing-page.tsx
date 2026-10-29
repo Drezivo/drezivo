@@ -307,8 +307,8 @@ export function ClothingPage() {
   return (
     <div className="min-h-full bg-dashboard-canvas px-ws-gutter py-6">
       <div className="mx-auto flex w-full max-w-screen-2xl flex-col gap-4">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-          <div className="lg:shrink-0">
+        <div className="flex flex-col gap-4 2xl:flex-row 2xl:items-end 2xl:justify-between">
+          <div className="2xl:shrink-0">
             <h1 className="dashboard-page-title">
               Clothing
             </h1>
@@ -324,17 +324,17 @@ export function ClothingPage() {
             }}
             toolbarActions={
               <>
-                <Link href="/inventory/categories" className={buttonVariants({ variant: "secondary" })}>
+                <Link href="/inventory/categories" className={buttonVariants({ variant: "secondary", className: "w-full min-w-0 2xl:w-auto 2xl:shrink-0" })}>
                   <Tags className="h-4 w-4" aria-hidden="true" />
                   Manage Categories
                 </Link>
                 {batchAddAllowed ? (
-                  <Link href="/inventory/import" className={buttonVariants({ variant: "secondary" })}>
+                  <Link href="/inventory/import" className={buttonVariants({ variant: "secondary", className: "w-full min-w-0 2xl:w-auto 2xl:shrink-0" })}>
                     <Layers3 className="h-4 w-4" aria-hidden="true" />
                     Batch Add
                   </Link>
                 ) : null}
-                <Link href="/inventory/new" className={buttonVariants()}>
+                <Link href="/inventory/new" className={buttonVariants({ className: "w-full min-w-0 2xl:w-auto 2xl:shrink-0" })}>
                   <Plus className="h-4 w-4" aria-hidden="true" />
                   Add Clothing
                 </Link>
