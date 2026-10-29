@@ -151,6 +151,17 @@ html {
     --ws-radius-card: 1rem;
   }
 }
+
+@media (min-width: 1024px) and (max-width: 1280px) {
+  .auth-plan-selection-layout .auth-panel {
+    width: 100%;
+    clip-path: none;
+  }
+
+  .auth-plan-selection-layout .auth-image {
+    display: none;
+  }
+}
 @media (min-width: 1440px) {
   :root {
     --ws-text-small: 0.875rem;

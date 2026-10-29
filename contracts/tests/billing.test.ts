@@ -31,8 +31,27 @@ describe('billing overview plan contract', () => {
       frontdesk_seats_max: 3,
     };
 
+    const growth = {
+      ...starter,
+      code: 'growth',
+      name: 'Growth',
+      monthly_minor: '49900',
+      physical_assets_max: 500,
+      frontdesk_seats_max: 5,
+    };
+    const scale = {
+      ...starter,
+      code: 'scale',
+      name: 'Scale',
+      monthly_minor: '99900',
+      physical_assets_max: 1000,
+      frontdesk_seats_max: 8,
+    };
+
     expect(billingOverview.shape.plan.safeParse(starter).success).toBe(true);
     expect(billingOverview.shape.plan.safeParse(standard).success).toBe(true);
+    expect(billingOverview.shape.plan.safeParse(growth).success).toBe(true);
+    expect(billingOverview.shape.plan.safeParse(scale).success).toBe(true);
     expect(billingOverview.shape.plan.safeParse(free).success).toBe(true);
     expect(billingOverview.shape.plan.safeParse({ ...starter, name: 'Standard' }).success).toBe(false);
   });

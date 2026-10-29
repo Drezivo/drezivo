@@ -66,23 +66,27 @@ fitting lifecycle email rows while preserving business-directed rows. Stop old A
 processes before applying that migration so an in-flight older worker cannot deliver a queued guest
 message; deploy the updated API/worker/web release together before accepting storefront traffic.
 
-## Subscription: two plans, trial, and manual payment
+## Subscription plans, trial, and manual payment
 
 - **Starter:** ₱149 a month, up to 125 active physical clothing items and no Front Desk seats.
-- **Standard:** ₱299 a month, up to 300 active physical clothing items and 3 Front Desk seats. The
-  Owner does not consume a seat. Both plans include the same core product features and fourteen-day
-  trial, subject to lifetime eligibility. Migration `0075_starter_standard_plan_tiers.sql` keeps
-  Standard's former `starter` row identity and subscription references under the `standard` code, and
-  adds the new `starter` row. Earlier migrations `0063`, `0071`, and `0072` establish the pilot catalog
-  and Standard limits/price; the former Professional and Business rows remain historical. Applying
-  plan caps does not remove existing items or members; check usage and advise businesses above the cap
-  that new additions or invitations are blocked until usage drops below it. See [ADR 0015](../decisions/0015-starter-and-standard-plans.md).
-- **Sign-up:** an owner signs up (for example with Google), names the business, selects Starter or
-  Standard, and confirms **"Start your 14-day trial?"**. Mid-trial self-service plan changes remain
-  unavailable.
+- **Standard:** ₱299 a month, up to 300 active physical clothing items and 3 Front Desk seats.
+  This is the public/documented limit; the temporary server quota is separate from marketing copy.
+- **Growth:** ₱499 a month, up to 500 active items and 5 Front Desk seats.
+- **Scale:** ₱999 a month, up to 1,000 active items and 8 Front Desk seats.
+- Growth and Scale carry Standard's current paid features and fourteen-day trial. The Owner does not
+  consume a Front Desk seat. All paid trials are subject to lifetime eligibility. Migration
+  `0092_growth_scale_plan_tiers.sql` seeds the two app-only tiers; the public marketing site continues
+  to show only Free, Starter, and Standard. The earlier former Professional and Business rows remain
+  historical. Applying plan caps does not remove existing items or members; check usage and advise
+  businesses above the cap that new additions or invitations are blocked until usage drops below it.
+  See [ADR 0015](../decisions/0015-starter-and-standard-plans.md) and
+  [ADR 0016](../decisions/0016-app-only-growth-scale-plans.md).
+- **Sign-up:** an owner signs up (for example with Google), names the business, selects Free or any
+  paid plan, and confirms the selected plan. Eligible paid plans start the same 14-day trial; Free has
+  no trial. Mid-trial paid-plan changes remain unavailable.
 - **Paying:** the owner opens **Subscribe** from the banner or prompt.
   1. They pick one of Drezivo's payment methods, which shows its QR code, account name and number.
-  2. They pay the selected plan's monthly price (₱149 for Starter or ₱299 for Standard), then send the
+  2. They pay the selected plan's monthly price (the selected plan price shown in the app), then send the
      reference number and a screenshot or PDF of the receipt.
   3. An operator checks it in the operator console and approves or rejects it. The owner is emailed
      either way.

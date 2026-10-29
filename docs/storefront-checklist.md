@@ -592,7 +592,9 @@ storefront itself (workflow, alignment, design). Calendars were left untouched, 
   - Tests: `app/tests/unit/storefront-assets.test.ts`.
   - Verified end to end: finalize returned 200.
 
-## Milestone 14 — Pilot without a paid worker: one plan, manual payments
+## Milestone 14 — Initial single-plan pilot with manual payments (historical)
+
+This completed milestone records the original Standard-only pilot. Current public pricing is three plans; Growth and Scale are app-only per ADR 0016.
 
 Runbook: `docs/runbooks/pilot-operation.md`.
 

@@ -4,11 +4,13 @@ import { DependencyUnavailableError } from '../../shared/errors.js';
 import { TRIAL_DURATION_DAYS } from './billing.constants.js';
 import { listActivePlanRows, PLAN_CAPABILITIES } from './plans.repository.js';
 
-const PUBLIC_PLAN_CODES: readonly PlanCode[] = ['free', 'starter', 'standard'];
-const PLAN_NAME: Record<PlanCode, 'Free' | 'Starter' | 'Standard'> = {
+const PLAN_CODES: readonly PlanCode[] = ['free', 'starter', 'standard', 'growth', 'scale'];
+const PLAN_NAME: Record<PlanCode, 'Free' | 'Starter' | 'Standard' | 'Growth' | 'Scale'> = {
   free: 'Free',
   starter: 'Starter',
   standard: 'Standard',
+  growth: 'Growth',
+  scale: 'Scale',
 };
 const BOOLEAN_FEATURES = [
   'fittings.enabled',
@@ -19,7 +21,7 @@ const STOREFRONT_THEMES = ['ivory', 'sage', 'blush', 'noir'] as const;
 
 export async function getPublicPlanCatalog(): Promise<PublicPlanCatalogResponse> {
   const rows = await listActivePlanRows();
-  const plans = PUBLIC_PLAN_CODES.map((code) => {
+  const plans = PLAN_CODES.map((code) => {
     const planRows = rows.filter((row) => row.code === code);
     const byCapability = new Map(planRows.map((row) => [row.capability, row]));
     const garmentLimit = byCapability.get('physical_assets.max');

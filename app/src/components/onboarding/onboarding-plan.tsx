@@ -72,7 +72,6 @@ export function OnboardingPlan() {
         router.replace("/onboarding");
         return;
       }
-      setSelectedPlanCode(onboarding.selected_plan_code);
       setStep(onboarding.selected_plan_code ? "launch" : "plan");
       setLaunchOpen(Boolean(onboarding.selected_plan_code));
       if (catalogResult.status === "rejected") {
@@ -83,6 +82,7 @@ export function OnboardingPlan() {
         });
         return;
       }
+      setSelectedPlanCode(onboarding.selected_plan_code ?? (catalogResult.value.data.plans.some((plan) => plan.code === "standard") ? "standard" : null));
       setState({ kind: "ready", context, catalog: catalogResult.value.data });
     } catch (caughtError) {
       setState({ kind: "error", error: toDrezivoApiError(caughtError) });
@@ -168,7 +168,7 @@ export function OnboardingPlan() {
 
   if (step === "plan") {
     return (
-      <PlanFrame getToken={getToken} onboarding={activeOnboarding}>
+      <PlanFrame getToken={getToken} onboarding={activeOnboarding} planSelectionLayout>
         <PlanSelection
           catalog={readyState.catalog}
           error={planError}
@@ -498,7 +498,7 @@ function PlanSummary({ plan }: { plan: PublicPlanCatalogItem }) {
       </p>
       <p className="mt-2 flex items-center gap-2">
         <Package aria-hidden="true" className="h-4 w-4 text-auth-text" /> Up to{" "}
-        {plan.limits.active_garments} active garments
+        {plan.limits.active_garments.toLocaleString("en-PH")} active garments
       </p>
       {seats ? (
         <p className="mt-1 flex items-center gap-2">
@@ -544,19 +544,21 @@ function PlanSelection({
       <div
         role="radiogroup"
         aria-label="Subscription plan"
-        className="mt-7 grid gap-4 md:grid-cols-2"
+        className="mt-7 grid grid-cols-1 gap-2 sm:grid-cols-2"
       >
-        {catalog.plans.map((plan) => {
+        {[...catalog.plans].sort((a, b) => ["free", "starter", "standard", "growth", "scale"].indexOf(a.code) - ["free", "starter", "standard", "growth", "scale"].indexOf(b.code)).map((plan) => {
           const chosen = plan.code === selectedCode;
-          const features = [`Up to ${plan.limits.active_garments} active garments`];
-          if (plan.limits.frontdesk_seats > 0)
-            features.push(`Up to ${plan.limits.frontdesk_seats} Front Desk staff`);
-          features.push(
-            plan.features.storefront_reservations ? "Online storefront reservations" : "Storefront availability and contact only",
-            plan.features.fittings ? "Fitting management" : "No fitting workflow",
-            plan.features.storefront_payments ? "Storefront payment methods" : "Staff payments only",
-            `${plan.features.storefront_themes.length} storefront designs`
-          );
+          const previousPlan = { free: null, starter: "Free", standard: "Starter", growth: "Standard", scale: "Growth" } as const;
+          const features = [`Up to ${plan.limits.active_garments.toLocaleString("en-PH")} active garments`];
+          if (plan.limits.frontdesk_seats > 0) features.push(`Up to ${plan.limits.frontdesk_seats} Front Desk staff`);
+          else if (plan.code === "free") features.push("Owner only");
+          if (plan.code === "starter") {
+            if (plan.features.storefront_reservations) features.push("Online storefront reservations");
+            if (plan.features.fittings) features.push("Fitting management");
+          }
+          if (plan.code === "free") {
+            features.push(`${plan.features.storefront_themes.length} storefront designs`);
+          }
           return (
             <button
               key={plan.code}
@@ -564,34 +566,34 @@ function PlanSelection({
               role="radio"
               aria-checked={chosen}
               onClick={() => onSelect(plan.code)}
-              className={`rounded-2xl border p-5 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-auth-focus ${chosen ? "border-auth-gold bg-auth-gold/10 ring-1 ring-auth-gold" : "border-auth-line bg-auth-panel hover:border-auth-gold/60"}`}
+              className={`flex w-full min-w-0 items-start rounded-xl border p-5 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-auth-focus ${plan.code === "standard" ? "sm:col-span-2" : ""} ${chosen ? "border-auth-gold bg-auth-gold/10 ring-1 ring-auth-gold" : "border-auth-line bg-auth-panel hover:border-auth-gold/60"}`}
             >
-              <span className="flex items-start justify-between gap-3">
-                <span>
-                  <span className="block font-display text-2xl text-auth-text">{plan.name}</span>
-                  <span className="mt-1 block text-sm text-auth-dark-muted">
-                    {plan.code === "free"
-                      ? "₱0 · Free forever"
-                      : `${formatPlanPrice(plan.monthly_price_minor)} / month after ${plan.trial_days}-day trial`}
-                  </span>
-                </span>
+              <span className="flex w-full min-w-0 items-start gap-3">
                 <span
                   aria-hidden="true"
-                  className={`mt-1 flex h-5 w-5 items-center justify-center rounded-full border ${chosen ? "border-auth-gold bg-auth-gold text-auth-panel" : "border-auth-line"}`}
+                  className={`mt-1 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border ${chosen ? "border-2 border-auth-gold" : "border-auth-dark-muted"}`}
                 >
-                  {chosen ? <CheckCircle2 className="h-4 w-4" /> : null}
+                  {chosen ? <span className="h-2.5 w-2.5 rounded-full bg-auth-gold" /> : null}
                 </span>
-              </span>
-              <span className="mt-5 block border-t border-auth-line pt-2">
-                {features.map((feature) => (
-                  <span key={feature} className="flex gap-2 py-2 text-sm text-auth-dark-muted">
-                    <CheckCircle2
-                      aria-hidden="true"
-                      className="mt-0.5 h-4 w-4 shrink-0 text-auth-gold"
-                    />
-                    {feature}
+                <span className="min-w-0 flex-1">
+                  <span className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                    <span className="font-display text-2xl text-auth-text">{plan.name}</span>
+                    <span className="text-sm text-auth-dark-muted">
+                      <span className="text-base font-bold text-auth-text">
+                        {formatPlanPrice(plan.monthly_price_minor)}
+                      </span>
+                      {plan.code === "free"
+                        ? " · Free forever"
+                        : ` / month after ${plan.trial_days}-day trial`}
+                    </span>
                   </span>
-                ))}
+                  <span className="mt-3 block border-t border-auth-line pt-3">
+                    {previousPlan[plan.code] ? (
+                      <span className="mb-1 block text-sm font-semibold text-auth-text">All in {previousPlan[plan.code]}, {plan.code === "starter" ? "plus" : "with"}:</span>
+                    ) : null}
+                    {features.map((feature) => <span key={feature} className="block text-sm leading-relaxed text-auth-dark-muted">{feature}</span>)}
+                  </span>
+                </span>
               </span>
             </button>
           );
@@ -605,7 +607,7 @@ function PlanSelection({
           onClick={onContinue}
           className={primaryButtonClass}
         >
-          {isSaving ? "Saving plan…" : "Continue"}{" "}
+          {isSaving ? "Saving plan…" : selectedCode ? `Continue with ${catalog.plans.find((plan) => plan.code === selectedCode)?.name ?? "selected plan"}` : "Continue"}{" "}
           <ArrowRight aria-hidden="true" className="ml-2 h-4 w-4" />
         </button>
       </div>
@@ -680,10 +682,12 @@ function PlanFrame({
   children,
   getToken,
   onboarding,
+  planSelectionLayout = false,
 }: {
   children: React.ReactNode;
   getToken?: () => Promise<string | null>;
   onboarding?: OrganizationOnboarding | null;
+  planSelectionLayout?: boolean;
 }) {
   return (
     <AuthSplitLayout
@@ -691,6 +695,7 @@ function PlanFrame({
       backAriaLabel="Back to onboarding"
       panelAriaLabel="Drezivo onboarding"
       lockViewport
+      planSelectionLayout={planSelectionLayout}
       backControl={
         getToken ? (
           <ExitOnboardingDialog getToken={getToken} onboarding={onboarding ?? null} />
