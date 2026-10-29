@@ -271,6 +271,7 @@ Always pass the production config below for production.
   deployments on `wrangler.production.jsonc`; deploying with the staging config can replace the
   production origins and routes.
 
+<!--  -->
 ## 11. Verify production and monitor usage
 
 - [ ] Load a published production storefront image. In browser DevTools → **Network** → image
