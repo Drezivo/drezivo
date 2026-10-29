@@ -184,9 +184,9 @@ signed URLs, or credentials in screenshots or logs.
 Do not start production setup until the full staging verification in step 7 passes. Production is a
 separate Worker with separate secrets and production-only routes.
 
-- [ ] Confirm the matching API, API worker, staff app, and web changes have been deployed to
+- [x] Confirm the matching API, API worker, staff app, and web changes have been deployed to
   production. Verify each service is healthy before routing image traffic through the Worker.
-- [ ] Copy the exact production origins from the live deployment settings. The expected values are
+- [x] Copy the exact production origins from the live deployment settings. The expected values are
   shown below; if a provider reports a different hostname, stop and correct the config before
   deployment. Origins have no path or trailing slash.
 
@@ -196,16 +196,16 @@ separate Worker with separate secrets and production-only routes.
   | `WEB_ORIGIN` | `https://drezivo.shop` |
   | `API_ORIGIN` | `https://api.drezivo.shop` |
 
-- [ ] In Cloudflare **drezivo.shop → DNS → Records**, confirm `partners.drezivo.shop` and
+- [x] In Cloudflare **drezivo.shop → DNS → Records**, confirm `partners.drezivo.shop` and
   `drezivo.shop` point to the correct production providers and are **Proxied**. Confirm the
   `drezivo.shop` zone is active and TLS works for both hosts.
-- [ ] In production Render settings, configure `MEDIA_READ_GRANT_SECRET` and
+- [x] In production Render settings, configure `MEDIA_READ_GRANT_SECRET` and
   `STOREFRONT_WEB_URL=https://drezivo.shop` for the API and its separate worker service, if one is
   used. Keep the grant secret identical across the production API, app, web, and media Worker.
-- [ ] In production Vercel settings, configure `MEDIA_READ_GRANT_SECRET` and
+- [x] In production Vercel settings, configure `MEDIA_READ_GRANT_SECRET` and
   `MEDIA_EDGE_AUTH_SECRET` for both the staff app and web. The edge secret must be the same random
   value on the app, web, and Worker, and at least 32 characters. Do not use `NEXT_PUBLIC_` names.
-- [ ] On the production web deployment, configure `CLOUDFLARE_MEDIA_PURGE_ENABLED=true`,
+- [x] On the production web deployment, configure `CLOUDFLARE_MEDIA_PURGE_ENABLED=true`,
   `CLOUDFLARE_MEDIA_ZONE_ID`, and a production `CLOUDFLARE_MEDIA_PURGE_TOKEN` restricted to the
   `drezivo.shop` zone with **Cache → Purge** permission. Store the token only as a Vercel secret.
 - [ ] Redeploy or restart the production API, API worker, app, and web after changing their
@@ -218,13 +218,13 @@ The production Wrangler config contains production origins and routes. Secrets a
 in Cloudflare. Create the Worker without routes first so requests cannot reach it before the
 production secrets and upstream services are ready.
 
-- [ ] In **Cloudflare → Workers & Pages**, create a Worker named `drezivo-media-prod` if it does not
+- [x] In **Cloudflare → Workers & Pages**, create a Worker named `drezivo-media-prod` if it does not
   already exist. A temporary Hello World deployment is sufficient. Do not add a custom domain or
   route during this step.
-- [ ] Open **drezivo-media-prod → Settings → Domains & Routes**. Confirm there are no custom routes
+- [x] Open **drezivo-media-prod → Settings → Domains & Routes**. Confirm there are no custom routes
   and disable the `workers.dev` and Preview URL endpoints. Do not send production traffic to the
   temporary deployment.
-- [ ] Open **Settings → Variables and Secrets**, select **Production** (not **Previews Base**),
+- [x] Open **Settings → Variables and Secrets**, select **Production** (not **Previews Base**),
   and add these as secrets:
 
   | Secret name | Production value |
@@ -232,7 +232,7 @@ production secrets and upstream services are ready.
   | `MEDIA_READ_GRANT_SECRET` | Same production value as the API, app, and web |
   | `MEDIA_EDGE_AUTH_SECRET` | Same independent random production value as the app and web; at least 32 characters |
 
-- [ ] Confirm both secret names appear in the **Production** environment. Do not put secret values
+- [x] Confirm both secret names appear in the **Production** environment. Do not put secret values
   in Wrangler config, Git, this runbook, screenshots, or chat.
 
 ## 10. Review and deploy the production Worker
@@ -248,25 +248,25 @@ Always pass the production config below for production.
   npx wrangler deploy --cwd D:/drezivo/api --config D:/drezivo/api/wrangler.production.jsonc --dry-run
   ```
 
-- [ ] Verify the dry-run shows only `https://api.drezivo.shop`,
+- [x] Verify the dry-run shows only `https://api.drezivo.shop`,
   `https://partners.drezivo.shop`, and `https://drezivo.shop`. Also inspect
   `api/wrangler.production.jsonc` and confirm its routes are exactly:
   `partners.drezivo.shop/api/media/staff/*`,
   `drezivo.shop/api/media/public/*`, and `drezivo.shop/s/*`. If any preview hostname appears,
   stop; do not deploy.
-- [ ] Confirm `preview_urls` and `workers_dev` are both `false`, the production secrets are already
+- [x] Confirm `preview_urls` and `workers_dev` are both `false`, the production secrets are already
   configured in the Worker's **Production** environment, and the app/API production settings from
   step 8 are live.
-- [ ] Deploy the production config:
+- [x] Deploy the production config:
 
   ```bash
   npx wrangler deploy --cwd D:/drezivo/api --config D:/drezivo/api/wrangler.production.jsonc
   ```
 
-- [ ] Review the deploy output. Confirm it names `drezivo-media-prod` and lists only the three
+- [x] Review the deploy output. Confirm it names `drezivo-media-prod` and lists only the three
   production routes. If the upload succeeds but no production triggers are deployed, stop and
   inspect the config and Cloudflare route settings before testing.
-- [ ] In the Cloudflare dashboard, confirm the production Worker has the three production routes,
+- [x] In the Cloudflare dashboard, confirm the production Worker has the three production routes,
   no preview or `workers.dev` URL, and both production secrets. Keep future production code
   deployments on `wrangler.production.jsonc`; deploying with the staging config can replace the
   production origins and routes.
