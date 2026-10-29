@@ -543,8 +543,8 @@ function PaymentMethodEditor({ method, storefrontLocked, onSaved }: { method: Pa
           {
             version: method.version,
             active,
-            // Uploading a QR or instructions file is the owner asking renters to pay with it.
-            storefront_enabled: staffOnly ? false : storefrontEnabled || Boolean(qrFile) || Boolean(materialFile),
+            // On eligible plans, a new payment file also enables storefront availability.
+            storefront_enabled: !staffOnly && !storefrontLocked && (storefrontEnabled || Boolean(qrFile) || Boolean(materialFile)),
             destination: {
               account_name: accountName.trim() || null,
               account_number: accountNumber.trim() || null,
@@ -626,7 +626,7 @@ function PaymentMethodEditor({ method, storefrontLocked, onSaved }: { method: Pa
             disabled={staffOnly}
             label="Available on storefront"
             description={staffOnly ? "Cash cannot secure an online storefront reservation." : storefrontLocked ? "Upgrade to enable renter-facing payment methods. This method remains available to staff." : "Shown to renters once the details or file are set."}
-            onLocked={() => requestUpgrade("storefront payment methods")}
+            onLocked={storefrontLocked ? () => requestUpgrade("storefront payment methods") : undefined}
             onChange={(checked) => {
               setStorefrontEnabled(checked);
               markDirty();

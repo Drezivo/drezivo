@@ -248,6 +248,14 @@ file-reference changes. Browser caching requires revalidation, so visitors do no
 page just because a signed grant expired. Preview and staff media use separate uncached, no-store
 routes.
 
+For the optional Cloudflare media Worker, set the server-only `MEDIA_EDGE_AUTH_SECRET` on both
+`app` and `web` and in the Worker secret store. Set `CLOUDFLARE_MEDIA_PURGE_ENABLED=true`,
+`CLOUDFLARE_MEDIA_ZONE_ID`, and a scoped `CLOUDFLARE_MEDIA_PURGE_TOKEN` on `web` before enabling
+the Worker routes. Configure the Worker's `STAFF_ORIGIN`, `WEB_ORIGIN`, `API_ORIGIN`, and
+`MEDIA_READ_GRANT_SECRET` as described in `api/edge/media-worker/README.md`. Never expose these
+secrets to the browser. The existing Vercel proxy remains the rollback path. Preview image URLs
+are scoped under `/s/{slug}/media/preview/` so the existing store-scoped preview cookie is sent.
+
 ## `contracts` (`@drezivo/contracts`)
 
 - `GITHUB_PACKAGES_TOKEN` (or equivalent) — used only in CI to publish the package to GitHub

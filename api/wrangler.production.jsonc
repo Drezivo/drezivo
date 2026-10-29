@@ -1,0 +1,26 @@
+{
+  "name": "drezivo-media-prod",
+  "main": "edge/media-worker/worker.mjs",
+  "compatibility_date": "2026-10-28",
+  "vars": {
+    "API_ORIGIN": "https://api.drezivo.shop",
+    "STAFF_ORIGIN": "https://partners.drezivo.shop",
+    "WEB_ORIGIN": "https://drezivo.shop"
+  },
+  "routes": [
+    {
+      "pattern": "partners.drezivo.shop/api/media/staff/*",
+      "zone_name": "drezivo.shop"
+    },
+    {
+      "pattern": "drezivo.shop/api/media/public/*",
+      "zone_name": "drezivo.shop"
+    },
+    {
+      "pattern": "drezivo.shop/s/*",
+      "zone_name": "drezivo.shop"
+    }
+  ],
+  "preview_urls": false,
+  "workers_dev": false
+}

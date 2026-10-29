@@ -4,7 +4,7 @@ import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
   {
-    ignores: ['dist/**', 'node_modules/**', 'coverage/**', '*.config.cjs', '*.config.js', '*.config.ts', 'scripts/**', '.claude/**', '.codex/**'],
+    ignores: ['dist/**', 'node_modules/**', 'coverage/**', '*.config.cjs', '*.config.js', '*.config.ts', 'scripts/**', 'edge/media-worker/**/*.mjs', '.claude/**', '.codex/**'],
   },
   js.configs.recommended,
   ...tseslint.configs.recommendedTypeChecked,

@@ -1,0 +1,26 @@
+{
+  "name": "drezivo-media-staging",
+  "main": "edge/media-worker/worker.mjs",
+  "compatibility_date": "2026-10-28",
+  "vars": {
+    "API_ORIGIN": "https://api-preview.drezivo.shop",
+    "STAFF_ORIGIN": "https://app-preview.drezivo.shop",
+    "WEB_ORIGIN": "https://preview.drezivo.shop"
+  },
+  "routes": [
+    {
+      "pattern": "app-preview.drezivo.shop/api/media/staff/*",
+      "zone_name": "drezivo.shop"
+    },
+    {
+      "pattern": "preview.drezivo.shop/api/media/public/*",
+      "zone_name": "drezivo.shop"
+    },
+    {
+      "pattern": "preview.drezivo.shop/s/*",
+      "zone_name": "drezivo.shop"
+    }
+  ],
+  "preview_urls": true,
+  "workers_dev": false
+}

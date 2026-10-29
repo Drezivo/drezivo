@@ -33,6 +33,7 @@ import {
   physicalAssetUpdateSuccessMessage,
 } from "@/components/inventory/manage-physical-asset-dialog";
 import { RestoreClothingDialog, restoreSuccessMessage } from "@/components/inventory/restore-clothing-dialog";
+import { RestoreClothingVariantDialog } from "@/components/inventory/restore-clothing-variant-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -136,6 +137,12 @@ export function ClothingDetailsPage({ productId }: { productId: string }) {
         setNotice(message);
         void loadDetail();
       }}
+      onVariantRestored={() => {
+        setNotice(
+          "Size restored as active. Piece readiness and allocations still determine rental availability."
+        );
+        void loadDetail();
+      }}
       onAssetUpdated={(result) => {
         setNotice(physicalAssetUpdateSuccessMessage(result));
         void loadDetail();
@@ -153,6 +160,7 @@ function DetailContent({
   onPublish,
   onArchived,
   onRestored,
+  onVariantRestored,
   onAssetUpdated,
   onDismissNotice,
 }: {
@@ -164,11 +172,13 @@ function DetailContent({
   onPublish: () => void;
   onArchived: (message: string) => void;
   onRestored: (message: string) => void;
+  onVariantRestored: () => void;
   onAssetUpdated: (result: UpdatePhysicalAssetStateResponse) => void;
   onDismissNotice: () => void;
 }) {
   const [archiveOpen, setArchiveOpen] = useState(false);
   const [restoreOpen, setRestoreOpen] = useState(false);
+  const [variantToRestore, setVariantToRestore] = useState<ClothingVariantDetail | null>(null);
   const [managedAsset, setManagedAsset] = useState<PhysicalAssetSummary | null>(null);
   const [managedAssetSize, setManagedAssetSize] = useState<string | null>(null);
   const imageUrls = useMemo(
@@ -182,8 +192,11 @@ function DetailContent({
   const displayedVariants = item.status === "archived"
     ? item.variants
     : item.variants.filter((variant) => variant.status !== "archived");
+  const archivedVariants = item.variants.filter((variant) => variant.status === "archived");
   const allAssets = useMemo(() => item.variants.flatMap((variant) => variant.assets), [item.variants]);
-  const activeAssets = allAssets.filter((asset) => asset.lifecycle_status === "active");
+  const operationalAssets =
+    item.status === "archived" ? allAssets : displayedVariants.flatMap((variant) => variant.assets);
+  const activeAssets = operationalAssets.filter((asset) => asset.lifecycle_status === "active");
   const readyAssets = activeAssets.filter((asset) => asset.readiness === "ready");
   const sizes = displayProductSizes({
     hasFreeSize: item.sizing_mode === "free_size",
@@ -511,8 +524,50 @@ function DetailContent({
           <SectionCard
             icon={Package}
             title="Serialized Pieces"
-            description="Readiness and custody describe each physical garment now; they do not replace future allocation checks."
+            description="Physical state stays visible for each garment. Pieces of archived sizes are unavailable until the size is restored; blocking allocations still decide future availability."
           >
+            {item.status === "active" && archivedVariants.length > 0 ? (
+              <div className="mb-4 rounded-xl border border-dashboard-border bg-dashboard-active/30 p-4">
+                <p className="text-sm leading-6 text-dashboard-muted">
+                  Archived sizes are unavailable for rentals. Restoring a size activates it without
+                  changing its pieces’ physical state.
+                </p>
+                <ul className="mt-3 space-y-2">
+                  {archivedVariants.map((variant) => {
+                    const variantLabel = variantDisplayName(variant);
+                    const hasActivePiece = variant.assets.some(
+                      (asset) => asset.lifecycle_status === "active"
+                    );
+                    return (
+                      <li
+                        key={variant.id}
+                        className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-dashboard-border bg-dashboard-surface px-3 py-2.5"
+                      >
+                        <div>
+                          <p className="text-sm font-medium text-dashboard-navy">{variantLabel}</p>
+                          <p className="text-xs text-dashboard-muted">Archived · unavailable</p>
+                          {!hasActivePiece ? (
+                            <p className="mt-1 text-xs text-dashboard-muted">
+                              At least one active physical piece is required to restore this size.
+                            </p>
+                          ) : null}
+                        </div>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="secondary"
+                          disabled={!hasActivePiece}
+                          aria-label={`Restore size ${variantLabel}`}
+                          onClick={() => setVariantToRestore(variant)}
+                        >
+                          Restore size
+                        </Button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            ) : null}
             {allAssets.length === 0 ? (
               <EmptySection message="No physical pieces are attached to this clothing style in the active branch." />
             ) : (
@@ -534,7 +589,16 @@ function DetailContent({
                       variant.assets.map((asset) => (
                         <TableRow key={asset.id}>
                           <TableCell className="font-medium text-dashboard-navy">{asset.asset_code}</TableCell>
-                          <TableCell className="text-dashboard-muted">{displaySizeLabel(variant.size_label)}</TableCell>
+                          <TableCell>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="text-dashboard-muted">
+                                {displaySizeLabel(variant.size_label)}
+                              </span>
+                              {variant.status === "archived" ? (
+                                <StatusBadge label="Archived · Unavailable" />
+                              ) : null}
+                            </div>
+                          </TableCell>
                           <TableCell><StatusBadge label={labelize(asset.lifecycle_status)} /></TableCell>
                           <TableCell><ReadinessBadge readiness={asset.readiness} /></TableCell>
                           <TableCell className="text-dashboard-muted">{labelize(asset.custody_kind)}</TableCell>
@@ -659,6 +723,19 @@ function DetailContent({
           setManagedAssetSize(null);
           onAssetUpdated(result);
         }}
+      />
+      <RestoreClothingVariantDialog
+        open={variantToRestore !== null}
+        onOpenChange={(open) => {
+          if (!open) setVariantToRestore(null);
+        }}
+        onRestored={() => {
+          setVariantToRestore(null);
+          onVariantRestored();
+        }}
+        productId={item.product_id}
+        variant={variantToRestore}
+        variantLabel={variantToRestore ? variantDisplayName(variantToRestore) : ""}
       />
       {item.status !== "archived" ? (
         <ArchiveClothingDialog
@@ -822,6 +899,11 @@ function ReadinessBadge({ readiness }: { readiness: PhysicalAssetSummary["readin
     readiness === "unready" && "bg-dashboard-neutral-soft text-dashboard-neutral-text"
   );
   return <span className={cn("inline-flex rounded-full px-2.5 py-1 text-xs font-medium", className)}>{labelize(readiness)}</span>;
+}
+
+function variantDisplayName(variant: ClothingVariantDetail): string {
+  const size = displaySizeLabel(variant.size_label);
+  return variant.color_label ? `${size} · ${variant.color_label}` : size;
 }
 
 function measurementLabel(variant: ClothingVariantDetail): string {

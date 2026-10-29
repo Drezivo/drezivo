@@ -10,6 +10,9 @@ export const mediaUrl = z.union([
   z
     .string()
     .regex(new RegExp(`^/api/media/(?:public|preview)/${storefrontSlug}/${uuid}(?:\\?w=(?:320|960|1600))?$`)),
+  z
+    .string()
+    .regex(new RegExp(`^/s/${storefrontSlug}/media/preview/${uuid}(?:\\?w=(?:320|960|1600))?$`)),
 ]);
 
 export type MediaUrl = z.infer<typeof mediaUrl>;

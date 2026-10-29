@@ -190,10 +190,10 @@ export function CatalogueBackupControls({
         {toolbarActions}
       </div>
 
-      {exportRunning ? <p role="status" className="text-xs text-dashboard-muted">Your private inventory backup is being prepared.</p> : null}
-      {nextExport ? <p className="text-xs text-dashboard-muted">Next export available {nextExport}. You can download an existing backup without using another export.</p> : null}
-      {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : null}
-      {message ? <p role="status" className="text-sm text-dashboard-muted">{message}</p> : null}
+      {exportRunning ? <p role="status" className="text-right text-xs text-dashboard-muted">Your private inventory backup is being prepared.</p> : null}
+      {nextExport ? <p className="text-right text-xs text-dashboard-muted">Next export available {nextExport}. You can download an existing backup without using another export.</p> : null}
+      {error ? <p role="alert" className="text-right text-sm text-destructive">{error}</p> : null}
+      {message ? <p role="status" className="text-right text-sm text-dashboard-muted">{message}</p> : null}
 
       {preview ? (
         <div className="rounded-lg border border-dashboard-border bg-dashboard-surface p-3 text-sm">
