@@ -2,7 +2,7 @@
 
 import { useAuth } from "@clerk/nextjs";
 import { ArchiveRestore, Download, Upload } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { MAX_CATALOGUE_BACKUP_BYTES, type CatalogueBackupExportStatus, type CatalogueBackupImportPreview } from "@drezivo/contracts";
 
@@ -22,7 +22,13 @@ function sha256Base64(bytes: ArrayBuffer): string {
   return btoa(String.fromCharCode(...new Uint8Array(bytes)));
 }
 
-export function CatalogueBackupControls({ onRestored }: { onRestored: () => void }) {
+export function CatalogueBackupControls({
+  onRestored,
+  toolbarActions,
+}: {
+  onRestored: () => void;
+  toolbarActions?: ReactNode;
+}) {
   const { getToken } = useAuth();
   const fileInput = useRef<HTMLInputElement>(null);
   const [exportJob, setExportJob] = useState<CatalogueBackupExportStatus | null>(null);
@@ -139,14 +145,26 @@ export function CatalogueBackupControls({ onRestored }: { onRestored: () => void
   const exportRunning = exportJob?.status === "pending" || exportJob?.status === "running";
 
   return (
-    <div className="space-y-2 sm:max-w-2xl">
-      <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
-        <Button type="button" variant="secondary" onClick={() => void startExport()} disabled={busy || exportRunning}>
+    <div className="min-w-0 w-full space-y-2 md:ml-auto md:max-w-3xl 2xl:flex-1 2xl:max-w-none">
+      <div className="grid grid-cols-2 gap-2 2xl:flex 2xl:flex-wrap 2xl:items-center 2xl:justify-end">
+        <Button
+          type="button"
+          variant="secondary"
+          className="w-full min-w-0 2xl:w-auto 2xl:shrink-0"
+          onClick={() => void startExport()}
+          disabled={busy || exportRunning}
+        >
           <Download className="h-4 w-4" aria-hidden="true" />
           {exportRunning ? "Preparing backup…" : "Export inventory"}
         </Button>
         {downloadReady ? (
-          <Button type="button" variant="secondary" onClick={() => void downloadExport()} disabled={busy}>
+          <Button
+            type="button"
+            variant="secondary"
+            className="w-full min-w-0 2xl:w-auto 2xl:shrink-0"
+            onClick={() => void downloadExport()}
+            disabled={busy}
+          >
             <Download className="h-4 w-4" aria-hidden="true" />
             Download backup
           </Button>
@@ -159,10 +177,17 @@ export function CatalogueBackupControls({ onRestored }: { onRestored: () => void
           className="sr-only"
           onChange={(event) => void previewFile(event.currentTarget.files?.[0])}
         />
-        <Button type="button" variant="secondary" onClick={() => fileInput.current?.click()} disabled={busy}>
+        <Button
+          type="button"
+          variant="secondary"
+          className="w-full min-w-0 2xl:w-auto 2xl:shrink-0"
+          onClick={() => fileInput.current?.click()}
+          disabled={busy}
+        >
           <Upload className="h-4 w-4" aria-hidden="true" />
           Restore backup
         </Button>
+        {toolbarActions}
       </div>
 
       {exportRunning ? <p role="status" className="text-xs text-dashboard-muted">Your private inventory backup is being prepared.</p> : null}
