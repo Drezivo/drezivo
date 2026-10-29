@@ -176,7 +176,7 @@ describe('entitlement service', () => {
     });
   });
 
-  it('rejects direct use of a disabled Free capability', async () => {
+  it.each(['storefront_reservations', 'storefront_payments'] as const)('rejects direct use of the disabled Free capability %s', async (feature) => {
     const client = {
       query: vi
         .fn()
@@ -208,7 +208,7 @@ describe('entitlement service', () => {
         }),
     } as unknown as PoolClient;
 
-    await expect(assertPlanFeatureEnabled(client, 'tenant-id', 'storefront_reservations')).rejects.toMatchObject({
+    await expect(assertPlanFeatureEnabled(client, 'tenant-id', feature)).rejects.toMatchObject({
       code: 'STATE_CONFLICT',
     });
   });

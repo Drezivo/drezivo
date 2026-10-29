@@ -103,6 +103,32 @@ describe('payment method settings', async () => {
     } as const;
   }
 
+  it('rejects enabling storefront payment methods on Free', async () => {
+    const context = await seed();
+    await withTenantTransaction(context.tenantId, context.principalId, async (client) => {
+      await client.query(
+        `UPDATE subscription SET plan_id = (SELECT id FROM plan WHERE code = 'free' AND version = 1 AND active),
+           current_period_end = NULL WHERE tenant_id = $1`,
+        [context.tenantId],
+      );
+    });
+    const result = await updatePaymentMethodSettings({
+      ...context,
+      permissionCodes: [...context.permissionCodes],
+      requestId: 'req-free-storefront-payment',
+      idempotencyKey: 'free-storefront-payment-001',
+      paymentMethodId: context.paymentMethodId,
+      request: request(),
+    });
+    expect(result.status).toBe(409);
+    expect(result.body).toMatchObject({ success: false, error: { code: 'STATE_CONFLICT' } });
+    const settings = await getPaymentMethodSettings({ ...context, permissionCodes: [...context.permissionCodes] });
+    expect(settings.items.find((item) => item.id === context.paymentMethodId)).toMatchObject({
+      active: true,
+      storefront_enabled: false,
+    });
+  });
+
   it('rejects a GCash number that is not exactly 11 digits', async () => {
     const context = await seed();
     const result = await updatePaymentMethodSettings({
