@@ -113,7 +113,6 @@ describe('public plans', () => {
       <PlanShowcase
         plans={PUBLIC_MARKETING_PLANS}
         signUpUrl="https://partners.example/sign-up"
-        customPlanContactHref="mailto:hello@example.com"
       />,
     );
 
@@ -124,20 +123,16 @@ describe('public plans', () => {
     expect(screen.getByText('₱149')).toBeTruthy();
     expect(screen.getByText('₱299')).toBeTruthy();
     expect(screen.getAllByRole('link', { name: /Start with/ })).toHaveLength(3);
-    expect(screen.getByRole('link', { name: 'Talk to us' }).getAttribute('href')).toBe(
-      'mailto:hello@example.com',
-    );
+    expect(screen.queryByRole('link', { name: 'Talk to us' })).toBeNull();
+    expect(text(container.querySelector('#pricing')!)).not.toContain('Custom');
     const pricingSection = container.querySelector('#pricing')!;
     expect(pricingSection.querySelector('[data-at-reveal="lines"]')?.className).toContain(
       'text-center',
     );
     expect(pricingSection.querySelector('ul[data-at-stagger]')?.className).toContain(
-      'md:grid-cols-2',
+      'lg:grid-cols-3',
     );
-    expect(pricingSection.querySelector('ul[data-at-stagger]')?.className).toContain(
-      'xl:grid-cols-4',
-    );
-    expect(pricingSection.querySelectorAll('a.at-button.w-full')).toHaveLength(4);
+    expect(pricingSection.querySelectorAll('a.at-button.w-full')).toHaveLength(3);
     const standardCard = screen.getByRole('link', { name: 'Start with Standard' }).closest('li');
     for (const [name, intro, featureCount] of [
       ['Free', undefined, 5],

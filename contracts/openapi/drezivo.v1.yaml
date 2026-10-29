@@ -710,6 +710,8 @@ components:
         - free
         - starter
         - standard
+        - growth
+        - scale
     SubscriptionStatus:
       type: string
       enum: &a9
@@ -880,6 +882,8 @@ components:
                   - Free
                   - Starter
                   - Standard
+                  - Growth
+                  - Scale
               monthly_price_minor:
                 type: integer
                 minimum: 0
@@ -33661,6 +33665,74 @@ paths:
                                 type: string
                                 enum:
                                   - Standard
+                              monthly_minor:
+                                type: string
+                                pattern: ^\d+$
+                              currency:
+                                type: string
+                                pattern: ^[A-Z]{3}$
+                              physical_assets_max:
+                                type: integer
+                                exclusiveMinimum: 0
+                              frontdesk_seats_max:
+                                type: integer
+                                minimum: 0
+                              trial_days:
+                                type: integer
+                                exclusiveMinimum: 0
+                            required:
+                              - code
+                              - name
+                              - monthly_minor
+                              - currency
+                              - physical_assets_max
+                              - frontdesk_seats_max
+                              - trial_days
+                            additionalProperties: false
+                          - type: object
+                            properties:
+                              code:
+                                type: string
+                                enum:
+                                  - growth
+                              name:
+                                type: string
+                                enum:
+                                  - Growth
+                              monthly_minor:
+                                type: string
+                                pattern: ^\d+$
+                              currency:
+                                type: string
+                                pattern: ^[A-Z]{3}$
+                              physical_assets_max:
+                                type: integer
+                                exclusiveMinimum: 0
+                              frontdesk_seats_max:
+                                type: integer
+                                minimum: 0
+                              trial_days:
+                                type: integer
+                                exclusiveMinimum: 0
+                            required:
+                              - code
+                              - name
+                              - monthly_minor
+                              - currency
+                              - physical_assets_max
+                              - frontdesk_seats_max
+                              - trial_days
+                            additionalProperties: false
+                          - type: object
+                            properties:
+                              code:
+                                type: string
+                                enum:
+                                  - scale
+                              name:
+                                type: string
+                                enum:
+                                  - Scale
                               monthly_minor:
                                 type: string
                                 pattern: ^\d+$

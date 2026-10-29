@@ -12,7 +12,7 @@ import { PlanUpgradeProvider, useRequestPlanUpgrade } from "@/components/billing
 import { Button } from "@/components/ui/button";
 
 /**
- * Billing status UI for perpetual Free and paid Starter/Standard plans. Every "Pay" action opens
+ * Billing status UI for perpetual Free and the paid plan catalog. Every "Pay" action opens
  * the Subscribe dialog. After a paid trial or month ends the workspace is view-only for 30 days
  * (the storefront stays up, taking no bookings, for the first 3), then it locks until the owner pays.
  */

@@ -40,13 +40,13 @@ export type TermsAcceptanceResponse = z.infer<typeof termsAcceptanceResponse>;
 export const onboardingStatus = z.enum(['incomplete', 'abandoned', 'payment_pending', 'provisioned']);
 export type OnboardingStatus = z.infer<typeof onboardingStatus>;
 
-export const planCode = z.enum(['free', 'starter', 'standard']);
+export const planCode = z.enum(['free', 'starter', 'standard', 'growth', 'scale']);
 export type PlanCode = z.infer<typeof planCode>;
 
 export const publicPlanCatalogItem = z
   .object({
     code: planCode,
-    name: z.enum(['Free', 'Starter', 'Standard']),
+    name: z.enum(['Free', 'Starter', 'Standard', 'Growth', 'Scale']),
     monthly_price_minor: z.number().int().nonnegative(),
     currency: z.literal('PHP'),
     trial_days: z.number().int().nonnegative(),

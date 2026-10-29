@@ -1,3 +1,4 @@
+import type { PlanCode } from '@drezivo/contracts';
 import type { PoolClient } from 'pg';
 import { z } from 'zod';
 
@@ -23,8 +24,8 @@ const payloadSchema = z.object({ payment_id: z.string().uuid(), outcome: z.enum(
 interface ReviewedPayment {
   subscription_id: string;
   target_plan_id: string | null;
-  target_plan_code: 'free' | 'starter' | 'standard' | null;
-  current_plan_code: 'free' | 'starter' | 'standard';
+  target_plan_code: PlanCode | null;
+  current_plan_code: PlanCode;
   status: 'pending' | 'verified' | 'failed';
   reference: string | null;
   amount_minor: number;

@@ -37,7 +37,7 @@ function planSummary(plan: CatalogPlan): string {
       ? `${plan.limits.frontdesk_seats} Front Desk staff`
       : "owner only";
   return [
-    `${plan.limits.active_garments} active garments`,
+    `${plan.limits.active_garments.toLocaleString("en-PH")} active garments`,
     staff,
     plan.features.fittings ? "fittings" : "no fittings",
     plan.features.storefront_reservations ? "online bookings" : "availability only",
@@ -134,7 +134,7 @@ export function PlanUpgradeProvider({
     ? "Every feature of the plan is open now."
     : feature
       ? `${feature} is not included in ${billing ? `the ${billing.plan.name} plan` : "your current plan"}.`
-      : "Starter and Standard add online bookings, fittings, and room for more garments.";
+      : "Paid plans add online bookings, fittings, and room for more garments.";
 
   return (
     <UpgradeContext.Provider value={openUpgrade}>
@@ -218,7 +218,7 @@ export function PlanUpgradeProvider({
                   />
                 ) : (
                   <p className="mt-5 border-t border-dashboard-border pt-4 text-sm text-dashboard-muted">
-                    Your workspace is on {billing.plan.name}. Moving between Starter and Standard is not
+                    Your workspace is on {billing.plan.name}. Moving between paid plans is not
                     available in the app yet; ask Drezivo through the{" "}
                     <Link href="/help" className="font-medium text-dashboard-accent underline underline-offset-4" onClick={() => setOpen(false)}>
                       Help Center

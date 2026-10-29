@@ -35,7 +35,7 @@ const capabilities = [
 ] as const;
 
 const planRows = (
-  code: 'free' | 'starter' | 'standard',
+  code: 'free' | 'starter' | 'standard' | 'growth' | 'scale',
   monthly_minor: number,
   limits: { assets: number; seats: number },
   features: { fittings: boolean; reservations: boolean; payments: boolean; themes: readonly string[] },
@@ -74,7 +74,19 @@ const rows = [
     payments: true,
     themes: ['ivory', 'sage', 'blush', 'noir'],
   }),
-  ...planRows('standard', 29900, { assets: 300, seats: 3 }, {
+  ...planRows('standard', 29900, { assets: 400, seats: 3 }, {
+    fittings: true,
+    reservations: true,
+    payments: true,
+    themes: ['ivory', 'sage', 'blush', 'noir'],
+  }),
+  ...planRows('growth', 49900, { assets: 500, seats: 5 }, {
+    fittings: true,
+    reservations: true,
+    payments: true,
+    themes: ['ivory', 'sage', 'blush', 'noir'],
+  }),
+  ...planRows('scale', 99900, { assets: 1000, seats: 8 }, {
     fittings: true,
     reservations: true,
     payments: true,
@@ -87,7 +99,7 @@ describe('public plan catalog service', () => {
     mocks.listActivePlanRows.mockReset();
   });
 
-  it('returns server-owned prices, limits, and trial duration for both plans', async () => {
+  it('returns server-owned prices, limits, features, and trial duration for all catalog plans', async () => {
     mocks.listActivePlanRows.mockResolvedValue(rows);
 
     await expect(getPublicPlanCatalog()).resolves.toEqual({
@@ -126,7 +138,35 @@ describe('public plan catalog service', () => {
           monthly_price_minor: 29900,
           currency: 'PHP',
           trial_days: 14,
-          limits: { active_garments: 300, frontdesk_seats: 3 },
+          limits: { active_garments: 400, frontdesk_seats: 3 },
+          features: {
+            fittings: true,
+            storefront_reservations: true,
+            storefront_payments: true,
+            storefront_themes: ['ivory', 'sage', 'blush', 'noir'],
+          },
+        },
+        {
+          code: 'growth',
+          name: 'Growth',
+          monthly_price_minor: 49900,
+          currency: 'PHP',
+          trial_days: 14,
+          limits: { active_garments: 500, frontdesk_seats: 5 },
+          features: {
+            fittings: true,
+            storefront_reservations: true,
+            storefront_payments: true,
+            storefront_themes: ['ivory', 'sage', 'blush', 'noir'],
+          },
+        },
+        {
+          code: 'scale',
+          name: 'Scale',
+          monthly_price_minor: 99900,
+          currency: 'PHP',
+          trial_days: 14,
+          limits: { active_garments: 1000, frontdesk_seats: 8 },
           features: {
             fittings: true,
             storefront_reservations: true,

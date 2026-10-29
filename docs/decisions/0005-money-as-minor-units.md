@@ -3,8 +3,10 @@
 **Status:** Accepted, dated 15 September 2026
 
 **Historical pricing note:** The three-plan amounts cited below were the commercial offer at the
-time this decision was accepted. The current single-plan pilot offer is recorded in
-[ADR 0011](0011-single-standard-pilot-plan.md); the integer minor-unit and decimal-string rules in
+time this decision was accepted. The later single-plan pilot is recorded in
+[ADR 0011](0011-single-standard-pilot-plan.md); current public plans and app-only Growth/Scale are
+defined by [ADR 0015](0015-starter-and-standard-plans.md) and
+[ADR 0016](0016-app-only-growth-scale-plans.md). The integer minor-unit and decimal-string rules in
 this ADR remain in force.
 
 ## Context

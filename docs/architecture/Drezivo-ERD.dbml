@@ -864,7 +864,7 @@ Table plan {
   indexes {
     (code, version) [unique]
   }
-  Note: 'V1. Free is 0 PHP minor units/month and perpetual; Starter is 14900 and Standard is 29900. Migration 0075 preserves the former Standard plan UUID while renaming its code; migration 0081 adds Free and capabilities without changing paid subscriptions. Free bootstrap does not consume lifetime trial eligibility. TBF-032 validates the active v1 row and runtime roles retain SELECT only. Prices are migration-managed.'
+  Note: 'V1. Free is 0 PHP minor units/month and perpetual; Starter is 14900, Standard is 29900, Growth is 49900, and Scale is 99900. Migrations 0075, 0081, and 0092 own plan codes and entitlements; the public marketing snapshot shows only Free, Starter, and Standard with Standard at 300 garments. Free bootstrap does not consume lifetime trial eligibility. TBF-032 validates the active v1 row and runtime roles retain SELECT only. Prices are migration-managed.'
 }
 
 Table plan_entitlement {
@@ -877,7 +877,7 @@ Table plan_entitlement {
   indexes {
     (plan_id, capability) [unique]
   }
-  Note: 'V1. Free has 20 active physical assets, zero Front Desk seats, fittings/reservations/storefront-payments disabled, and Ivory/Sage themes only. Starter is 125/0; Standard is 300/3. TBF-032 guards usage under a tenant row lock. Required limits and feature flags fail closed; numeric zero is valid for a disabled capability, while null never means unlimited.'
+  Note: 'V1. Free is 20 garments/0 Front Desk seats with fittings, reservations, and storefront payments disabled and Ivory/Sage themes only. Starter is 125/0; Standard is published 300/3; Growth is 500/5; Scale is 1000/8. Growth and Scale share Standard paid features. TBF-032 guards usage under a tenant row lock. Required limits and feature flags fail closed; numeric zero is valid for a disabled capability, while null never means unlimited.'
 }
 
 Table subscription {

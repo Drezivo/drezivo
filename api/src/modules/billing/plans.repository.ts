@@ -29,9 +29,15 @@ export async function listActivePlanRows(): Promise<PlanCatalogRow[]> {
        JOIN plan_entitlement e ON e.plan_id = p.id
       WHERE p.active IS TRUE
         AND p.version = 1
-        AND p.code IN ('free', 'starter', 'standard')
+        AND p.code IN ('free', 'starter', 'standard', 'growth', 'scale')
         AND e.capability = ANY($1::text[])
-      ORDER BY CASE p.code WHEN 'free' THEN 1 WHEN 'starter' THEN 2 WHEN 'standard' THEN 3 END,
+      ORDER BY CASE p.code
+                 WHEN 'free' THEN 1
+                 WHEN 'starter' THEN 2
+                 WHEN 'standard' THEN 3
+                 WHEN 'growth' THEN 4
+                 WHEN 'scale' THEN 5
+               END,
                e.capability`,
     [[...PLAN_CAPABILITIES]],
   );

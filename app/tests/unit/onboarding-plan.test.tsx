@@ -171,7 +171,35 @@ describe("OnboardingPlan", () => {
             monthly_price_minor: 29900,
             currency: "PHP",
             trial_days: 14,
-            limits: { active_garments: 300, frontdesk_seats: 3 },
+            limits: { active_garments: 400, frontdesk_seats: 3 },
+          },
+          {
+            code: "growth",
+            name: "Growth",
+            features: {
+              fittings: true,
+              storefront_reservations: true,
+              storefront_payments: true,
+              storefront_themes: ["ivory", "sage", "blush", "noir"],
+            },
+            monthly_price_minor: 49900,
+            currency: "PHP",
+            trial_days: 14,
+            limits: { active_garments: 500, frontdesk_seats: 5 },
+          },
+          {
+            code: "scale",
+            name: "Scale",
+            features: {
+              fittings: true,
+              storefront_reservations: true,
+              storefront_payments: true,
+              storefront_themes: ["ivory", "sage", "blush", "noir"],
+            },
+            monthly_price_minor: 99900,
+            currency: "PHP",
+            trial_days: 14,
+            limits: { active_garments: 1000, frontdesk_seats: 8 },
           },
         ],
       },
@@ -220,23 +248,53 @@ describe("OnboardingPlan", () => {
     });
   }
 
-  async function choosePlan(code: "starter" | "standard" = "standard") {
+  async function choosePlan(code: "starter" | "standard" | "growth" | "scale" = "standard") {
     await screen.findByRole("radiogroup", { name: "Subscription plan" });
     fireEvent.click(
-      screen.getByRole("radio", { name: new RegExp(code === "starter" ? "Starter" : "Standard") })
+      screen.getByRole("radio", { name: new RegExp(`^${code[0]!.toUpperCase() + code.slice(1)}`) })
     );
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fireEvent.click(screen.getByRole("button", { name: /Continue with/ }));
     return screen.findByRole("dialog", { name: "Start your 14-day trial?" });
   }
 
-  it("requires a plan choice, persists it, and shows the server-provided Standard details", async () => {
+  it("selects Standard by default and shows the server-provided plan details", async () => {
     renderPlan();
 
-    const continueButton = await screen.findByRole("button", { name: "Continue" });
-    expect(continueButton).toBeDisabled();
-    const dialog = await choosePlan("standard");
+    const continueButton = await screen.findByRole("button", { name: "Continue with Standard" });
+    expect(continueButton).toBeEnabled();
+    expect(screen.getByRole("radio", { name: /^Standard/ })).toHaveAttribute("aria-checked", "true");
+    const group = screen.getByRole("radiogroup", { name: "Subscription plan" });
+    expect(group).toHaveClass("sm:grid-cols-2");
+    expect(screen.getByRole("radio", { name: /^Standard/ })).toHaveClass("sm:col-span-2");
+    expect(Array.from(group.querySelectorAll('[role="radio"]')).map((card) => card.textContent?.split("₱")[0]?.trim())).toEqual([
+      "Free", "Starter", "Standard", "Growth", "Scale",
+    ]);
+    expect(screen.getByRole("radio", { name: /^Growth/ })).toHaveTextContent("₱499");
+    expect(screen.getByRole("radio", { name: /^Growth/ })).toHaveTextContent("500 active garments");
+    expect(screen.getByRole("radio", { name: /5 Front Desk staff/ })).toBeTruthy();
+    expect(screen.getByRole("radio", { name: /Scale/ })).toHaveTextContent("₱999");
+    expect(screen.getByRole("radio", { name: /Scale/ })).toHaveTextContent("1,000 active garments");
+    expect(screen.getByRole("radio", { name: /8 Front Desk staff/ })).toBeTruthy();
+    const previousPlans = { Starter: "Free", Standard: "Starter", Growth: "Standard", Scale: "Growth" };
+    for (const [name, previous] of Object.entries(previousPlans)) {
+      const plan = screen.getByRole("radio", { name: new RegExp(`^${name}`) });
+      expect(plan).toHaveTextContent(`All in ${previous}, ${name === "Starter" ? "plus" : "with"}:`);
+      expect(plan).not.toHaveTextContent("Storefront payment methods");
+      if (name === "Starter") {
+        expect(plan).toHaveTextContent("Online storefront reservations");
+        expect(plan).toHaveTextContent("Fitting management");
+        expect(plan).not.toHaveTextContent("storefront designs");
+      } else {
+        expect(plan).not.toHaveTextContent("Online storefront reservations");
+        expect(plan).not.toHaveTextContent("Fitting management");
+        expect(plan).not.toHaveTextContent("storefront designs");
+      }
+    }
+    expect(screen.getByRole("radio", { name: /^Starter/ })).not.toHaveTextContent("Owner only");
+    fireEvent.click(continueButton);
+    const dialog = await screen.findByRole("dialog", { name: "Start your 14-day trial?" });
     expect(dialog).toHaveTextContent("₱299 a month");
-    expect(dialog).toHaveTextContent("Up to 300 active garments");
+    expect(dialog).toHaveTextContent("Up to 400 active garments");
     expect(dialog).toHaveTextContent("Up to 3 Front Desk staff");
     expect(api.selectOnboardingPlan).toHaveBeenCalledWith(
       onboarding.id,
@@ -244,6 +302,30 @@ describe("OnboardingPlan", () => {
       expect.any(String)
     );
     expect(api.startOnboardingTrial).not.toHaveBeenCalled();
+  });
+
+  it("resumes a saved Growth selection instead of defaulting to Standard", async () => {
+    mockCurrent({ ...onboarding, selected_plan_code: "growth" });
+    renderPlan();
+    const dialog = await screen.findByRole("dialog", { name: "Start your 14-day trial?" });
+    expect(dialog).toHaveTextContent("Growth");
+    expect(dialog).toHaveTextContent("₱499 a month");
+    expect(api.selectOnboardingPlan).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["growth", "₱499", "500"],
+    ["scale", "₱999", "1,000"],
+  ] as const)("saves the %s selection before its trial", async (code, price, garments) => {
+    renderPlan();
+    const dialog = await choosePlan(code);
+    expect(dialog).toHaveTextContent(`${price} a month`);
+    expect(dialog).toHaveTextContent(`Up to ${garments} active garments`);
+    expect(api.selectOnboardingPlan).toHaveBeenCalledWith(
+      onboarding.id,
+      { plan_code: code },
+      expect.any(String)
+    );
   });
 
   it("lets owners create the ongoing Free workspace without starting a trial", async () => {
@@ -264,13 +346,14 @@ describe("OnboardingPlan", () => {
 
     renderPlan();
     await screen.findByRole("radiogroup", { name: "Subscription plan" });
-    const free = screen.getByRole("radio", { name: /Free/ });
+    const free = screen.getByRole("radio", { name: /^Free/ });
     expect(free).toHaveTextContent("₱0");
     expect(free).toHaveTextContent("Free forever");
     expect(free).toHaveTextContent("20 active garments");
-    expect(free).toHaveTextContent("Storefront availability and contact only");
+    expect(free).toHaveTextContent("Owner only");
+    expect(free).toHaveTextContent("2 storefront designs");
     fireEvent.click(free);
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fireEvent.click(screen.getByRole("button", { name: /Continue with/ }));
 
     const dialog = await screen.findByRole("dialog", { name: "Create your Free workspace?" });
     expect(dialog).toHaveTextContent("ongoing Free access with no expiry");
@@ -289,12 +372,12 @@ describe("OnboardingPlan", () => {
     renderPlan();
 
     await screen.findByRole("radiogroup", { name: "Subscription plan" });
-    const starter = screen.getByRole("radio", { name: /Starter/ });
+    const starter = screen.getByRole("radio", { name: /^Starter/ });
     expect(starter).toHaveTextContent("₱149");
     expect(starter).toHaveTextContent("125 active garments");
     expect(starter).not.toHaveTextContent("Front Desk");
     fireEvent.click(starter);
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fireEvent.click(screen.getByRole("button", { name: /Continue with/ }));
 
     const dialog = await screen.findByRole("dialog", { name: "Start your 14-day trial?" });
     expect(dialog).toHaveTextContent("₱149 a month");
