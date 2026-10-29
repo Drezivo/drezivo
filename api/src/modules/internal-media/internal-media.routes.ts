@@ -34,7 +34,9 @@ internalMediaRouter.post(
   async (req, res) => {
     const params = publicGrantParams.parse(req.params);
     const query = widthQuery.parse(req.query);
-    const preview = verifyPreviewToken(req.get('X-Storefront-Preview'));
+    const previewHeader = req.get('X-Storefront-Preview');
+    const preview = verifyPreviewToken(previewHeader);
+    if (previewHeader && !preview) throw new NotFoundError('This store image is not available.');
     const grant = await publicStorefrontService.authorizeMediaRead(
       params.slug,
       params.fileId,

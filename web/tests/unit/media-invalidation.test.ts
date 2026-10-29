@@ -60,4 +60,36 @@ describe('public media cache invalidation', () => {
 
     expect(response.status).toBe(503);
   });
+
+  it('purges Cloudflare by tenant tag and retries when Cloudflare rejects it', async () => {
+    vi.stubEnv('MEDIA_READ_GRANT_SECRET', secret);
+    vi.stubEnv('CLOUDFLARE_MEDIA_PURGE_ENABLED', 'true');
+    vi.stubEnv('CLOUDFLARE_MEDIA_ZONE_ID', 'a'.repeat(32));
+    vi.stubEnv('CLOUDFLARE_MEDIA_PURGE_TOKEN', 'cloudflare-token');
+    deleteByTag.mockResolvedValue(undefined);
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(Response.json({ success: false }, { status: 200 }));
+    const response = await POST(new Request('https://www.example.test/api/media/invalidate', {
+      method: 'POST', headers: { 'x-drezivo-media-grant': secret, 'content-type': 'application/json' },
+      body: JSON.stringify({ tenant_id: tenantId }),
+    }));
+    expect(response.status).toBe(503);
+    expect(fetchMock).toHaveBeenCalledWith(`https://api.cloudflare.com/client/v4/zones/${'a'.repeat(32)}/purge_cache`, expect.objectContaining({
+      method: 'POST', body: JSON.stringify({ tags: [`tenant-${tenantId}`] }), redirect: 'manual',
+    }));
+  });
+
+  it('purges both providers when Cloudflare media caching is enabled', async () => {
+    vi.stubEnv('MEDIA_READ_GRANT_SECRET', secret);
+    vi.stubEnv('CLOUDFLARE_MEDIA_PURGE_ENABLED', 'true');
+    vi.stubEnv('CLOUDFLARE_MEDIA_ZONE_ID', 'a'.repeat(32));
+    vi.stubEnv('CLOUDFLARE_MEDIA_PURGE_TOKEN', 'cloudflare-token');
+    deleteByTag.mockResolvedValue(undefined);
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(Response.json({ success: true }));
+    const response = await POST(new Request('https://www.example.test/api/media/invalidate', {
+      method: 'POST', headers: { 'x-drezivo-media-grant': secret, 'content-type': 'application/json' },
+      body: JSON.stringify({ tenant_id: tenantId }),
+    }));
+    expect(response.status).toBe(204);
+    expect(deleteByTag).toHaveBeenCalledWith(`tenant-${tenantId}`);
+  });
 });

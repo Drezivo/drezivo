@@ -18,6 +18,7 @@ describe('mediaUrl', () => {
     expect(mediaUrl.safeParse(`/api/media/staff/${fileId}?branch_id=${branchId}`).success).toBe(true);
     expect(mediaUrl.safeParse(`/api/media/public/drezivo/${fileId}`).success).toBe(true);
     expect(mediaUrl.safeParse(`/api/media/preview/drezivo/${fileId}`).success).toBe(true);
+    expect(mediaUrl.safeParse(`/s/drezivo/media/preview/${fileId}?w=960`).success).toBe(true);
   });
 
   it('accepts public and preview image routes with supported widths', () => {

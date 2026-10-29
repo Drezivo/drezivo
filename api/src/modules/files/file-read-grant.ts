@@ -12,6 +12,7 @@ export const MEDIA_READ_GRANT_TTL_SECONDS = 60;
 
 export interface MediaReadGrant {
   tenant_id: string;
+  purpose: string;
   read_url: string;
   content_type: FileStreamResponse['mimeType'];
   byte_size: number;
@@ -72,6 +73,7 @@ export async function createMediaReadGrant(
   });
   return {
     tenant_id: input.tenantId,
+    purpose: input.purpose,
     read_url: authorization.readUrl,
     content_type: contentType,
     byte_size: byteSize,

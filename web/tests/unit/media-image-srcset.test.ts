@@ -15,4 +15,11 @@ describe('public media image srcset', () => {
     expect(mediaImageSrcSet('/api/v1/files/photo')).toBeUndefined();
     expect(mediaImageSrcSet(null)).toBeUndefined();
   });
+
+  it('retains responsive widths on the store-scoped preview route', () => {
+    const fileId = '0194f6a2-9dd6-7a4c-8e9f-142f1d310001';
+    expect(mediaImageSrcSet(`/s/shop/media/preview/${fileId}?w=960`)).toBe(
+      `/s/shop/media/preview/${fileId}?w=320 320w, /s/shop/media/preview/${fileId}?w=960 960w, /s/shop/media/preview/${fileId}?w=1600 1600w`,
+    );
+  });
 });
