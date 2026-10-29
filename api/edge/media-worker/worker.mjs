@@ -63,7 +63,11 @@ export async function handleMedia(request, env, ctx, dependencies = {}) {
     cacheKey = new Request(`${webOrigin}/api/media/public/${slug}/${fileId}?w=${width}`);
     try {
       const hit = await cache.match(cacheKey);
-      if (hit) return browserResponse(hit, true);
+      if (hit) {
+        const response = browserResponse(hit, true);
+        response.headers.set('X-Media-Cache', 'HIT');
+        return response;
+      }
     } catch { /* A cache outage must not prevent an authorized origin read. */ }
   }
   let grantUrl;
@@ -109,7 +113,9 @@ export async function handleMedia(request, env, ctx, dependencies = {}) {
     cached.headers.set('Cache-Tag', `tenant-${grant.tenant_id},media-${fileId}`);
     ctx.waitUntil(cache.put(cacheKey, cached).catch(() => undefined));
   }
-  return browserResponse(result, Boolean(published));
+  const response = browserResponse(result, Boolean(published));
+  if (published) response.headers.set('X-Media-Cache', 'MISS');
+  return response;
 }
 
 function browserResponse(source, published) {
