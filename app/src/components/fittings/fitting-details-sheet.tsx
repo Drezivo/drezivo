@@ -1,4 +1,5 @@
 "use client";
+import { StaffMediaImage } from "@/components/ui/staff-media-image";
 
 import { CalendarClock, CheckCircle2, CircleAlert, Mail, Phone, Shirt, XCircle } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -217,8 +218,7 @@ export function FittingDetailsSheet({
                       <div className="flex items-start gap-3">
                         <div className="flex h-16 w-14 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-dashboard-active text-dashboard-accent">
                           {garment.variant.primary_image_url ? (
-                            // eslint-disable-next-line @next/next/no-img-element -- fitting garment media uses an authenticated same-origin API route.
-                            <img
+                            <StaffMediaImage
                               src={garment.variant.primary_image_url}
                               srcSet={mediaImageSrcSet(garment.variant.primary_image_url)}
                               sizes="64px"

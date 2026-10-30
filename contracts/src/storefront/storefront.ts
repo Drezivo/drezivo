@@ -55,6 +55,8 @@ export type PublicPaymentMethod = z.infer<typeof publicPaymentMethod>;
 export const publicStorefront = z
   .object({
     slug: z.string().min(1),
+    /** Present only for an owner preview; used to mint five-minute file-scoped media grants. */
+    preview_media_session: z.string().min(1).max(256).optional(),
     name: z.string().min(1),
     tagline: z.string().nullable(),
     description: z.string().nullable(),

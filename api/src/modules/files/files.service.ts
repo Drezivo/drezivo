@@ -32,7 +32,7 @@ import {
   isAppError,
 } from '../../shared/errors.js';
 import { canonicalRequestHash } from '../../shared/idempotency.js';
-import { createMediaReadGrant, type MediaReadGrant } from './file-read-grant.js';
+import { selectMediaObject } from './file-read-grant.js';
 import { enqueueAcceptedFileImageVariants } from './file-image-variants.js';
 import type { FailureEnvelope, SuccessEnvelope } from '../../shared/response.js';
 import {
@@ -282,7 +282,7 @@ export async function finalizeUpload(
 
 /** Rechecks the active tenant permission and exact file relationship before streaming bytes. */
 export async function readStaffFile(
-  input: FileContext & { branchId: string; requestId: string; fileId: string },
+  input: FileContext & { branchId: string; requestId: string; fileId: string; width?: ImageVariantWidth | null },
   storage: ObjectStorage = objectStorage,
 ): Promise<FileStreamResponse> {
   const file = await withTenantTransaction(input.tenantId, input.principalId, (client) =>
@@ -296,11 +296,18 @@ export async function readStaffFile(
   if (!file) throw new NotFoundError('The requested file could not be found.');
 
   const mimeType = safeFileContentType(file.purpose, file.mime_type);
-  const stored = await storage.readObject({
+  const selected = await selectMediaObject({
+    tenantId: file.tenant_id,
+    fileId: file.id,
+    purpose: file.purpose,
     storageKey: file.storage_key,
     versionId: file.version_id,
-  });
-  if (!stored || (stored.contentLength !== null && stored.contentLength !== file.byte_size)) {
+    mimeType,
+    byteSize: file.byte_size,
+    width: input.width ?? null,
+  }, storage);
+  const stored = await storage.readObject({ storageKey: selected.storageKey, versionId: selected.versionId });
+  if (!stored || (stored.contentLength !== null && stored.contentLength !== selected.byteSize)) {
     throw new DependencyUnavailableError('The requested file is temporarily unavailable.');
   }
 
@@ -310,60 +317,15 @@ export async function readStaffFile(
       actorKey: input.principalId,
       action: 'file.read.opened',
       fileId: file.id,
-      redactedSummary: { purpose: file.purpose, content_type: mimeType, byte_size: file.byte_size },
+      redactedSummary: { purpose: file.purpose, content_type: selected.contentType, byte_size: selected.byteSize },
       requestId: input.requestId,
     }),
   );
   return {
-    body: boundStoredObjectBody(stored.body, file.byte_size),
-    mimeType,
-    byteSize: file.byte_size,
+    body: boundStoredObjectBody(stored.body, selected.byteSize),
+    mimeType: selected.contentType,
+    byteSize: selected.byteSize,
   };
-}
-
-/** Issues a short server-to-server R2 grant after rechecking the same staff file policy. */
-export async function authorizeStaffFileRead(
-  input: FileContext & { branchId: string; requestId: string; fileId: string; width: ImageVariantWidth | null },
-  storage: ObjectStorage = objectStorage,
-): Promise<MediaReadGrant> {
-  const file = await withTenantTransaction(input.tenantId, input.principalId, (client) =>
-    readStaffFileObject(client, {
-      tenantId: input.tenantId,
-      branchId: input.branchId,
-      fileId: input.fileId,
-      permissionCodes: input.permissionCodes,
-    }),
-  );
-  if (!file) throw new NotFoundError('The requested file could not be found.');
-
-  const mimeType = safeFileContentType(file.purpose, file.mime_type);
-  const grant = await createMediaReadGrant({
-    tenantId: file.tenant_id,
-    fileId: file.id,
-    purpose: file.purpose,
-    storageKey: file.storage_key,
-    versionId: file.version_id,
-    mimeType,
-    byteSize: file.byte_size,
-    width: input.width,
-  }, storage);
-
-  await withTenantTransaction(input.tenantId, input.principalId, (client) =>
-    appendFileAuditEvent(client, {
-      tenantId: input.tenantId,
-      actorKey: input.principalId,
-      action: 'file.read.granted',
-      fileId: file.id,
-      redactedSummary: {
-        purpose: file.purpose,
-        content_type: grant.content_type,
-        byte_size: grant.byte_size,
-        expires_at: grant.expires_at,
-      },
-      requestId: input.requestId,
-    }),
-  );
-  return grant;
 }
 
 function assertFileWriteContext(input: FileContext, purpose: FileObjectRow['purpose']): void {

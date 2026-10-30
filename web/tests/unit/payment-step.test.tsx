@@ -1,11 +1,12 @@
-import { render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { render, screen, waitFor } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { GuestReservationView } from '@drezivo/contracts';
 
 import { PaymentStep } from '@/components/store/booking/payment-step';
 
 vi.mock('@/lib/receipt-upload', () => ({ receiptProblem: vi.fn(() => null), uploadReceipt: vi.fn() }));
+const originalCreateObjectUrl = URL.createObjectURL;
 
 const reservation = {
   id: '11111111-1111-4111-8111-111111111111',
@@ -28,6 +29,31 @@ const reservation = {
 } as GuestReservationView;
 
 describe('storefront payment renter steps', () => {
+  beforeEach(() => {
+    vi.stubEnv('NEXT_PUBLIC_API_ORIGIN', 'https://api.example.test');
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith('/grant')) {
+        return new Response(JSON.stringify({ success: true, data: { media_grant: 'scoped-grant' } }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      return new Response(new Blob(['image']), { status: 200, headers: { 'Content-Type': 'image/png' } });
+    }));
+    Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: vi.fn(() => 'blob:https://api.example.test/steps') });
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+    if (originalCreateObjectUrl) {
+      Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: originalCreateObjectUrl });
+    } else {
+      Reflect.deleteProperty(URL, 'createObjectURL');
+    }
+  });
+
   it('shows the shared reservation steps once alongside the selected payment method', () => {
     render(<PaymentStep reservation={reservation} onSubmitted={vi.fn()} />);
 
@@ -37,19 +63,20 @@ describe('storefront payment renter steps', () => {
     expect(screen.getAllByRole('heading', { name: 'Steps for renters' })).toHaveLength(1);
   });
 
-  it('shows the shared image when the tenant chose image steps', () => {
+  it('shows the shared image when the tenant chose image steps', async () => {
     render(<PaymentStep
       reservation={{
         ...reservation,
         payment_instructions: {
           ...reservation.payment_instructions,
-          renter_steps: { text: null, image_url: 'https://files.example.test/shared-steps.png', image_content_type: 'image/png' },
+          renter_steps: { text: null, image_url: 'https://api.example.test/api/v1/guest/reservations/11111111-1111-4111-8111-111111111111/media/22222222-2222-4222-8222-222222222222', image_content_type: 'image/png' },
         },
       } as GuestReservationView}
       onSubmitted={vi.fn()}
     />);
 
-    expect(screen.getByRole('img', { name: 'Steps for renters' })).toHaveAttribute('src', 'https://files.example.test/shared-steps.png');
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
+    expect(await screen.findByRole('img', { name: 'Steps for renters' })).toHaveAttribute('src', 'blob:https://api.example.test/steps');
     expect(screen.getAllByRole('heading', { name: 'Steps for renters' })).toHaveLength(1);
   });
 });

@@ -6,15 +6,12 @@ import { getPublicPlanCatalog } from './plans.service.js';
 
 export const planCatalogRouter = Router();
 
-planCatalogRouter.use(
+planCatalogRouter.get(
+  '/plans',
   rateLimit({ windowMs: 60_000, max: 120, keyOf: (req) => req.ip ?? 'unknown' }),
   (_req, res, next) => {
     res.setHeader('Cache-Control', 'public, max-age=60, stale-while-revalidate=300');
     next();
   },
-);
-
-planCatalogRouter.get(
-  '/plans',
   readHandler(() => getPublicPlanCatalog()),
 );

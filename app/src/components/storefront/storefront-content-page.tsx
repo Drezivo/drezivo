@@ -1,4 +1,5 @@
 "use client";
+import { StaffMediaImage } from "@/components/ui/staff-media-image";
 
 import { useAuth } from "@clerk/nextjs";
 import { Check, ImageIcon, LayoutTemplate, Megaphone, Search, Sparkles, Star } from "lucide-react";
@@ -173,8 +174,7 @@ function FeaturedPicker({ selected, onChange, error }: { selected: ProductId[]; 
               >
                 <span className="block aspect-[3/4] bg-dashboard-neutral-soft">
                   {item.primary_image_url ? (
-                    // eslint-disable-next-line @next/next/no-img-element -- app-owned storefront media route
-                    <img src={item.primary_image_url} srcSet={mediaImageSrcSet(item.primary_image_url)} sizes="(min-width: 768px) 25vw, 50vw" alt="" className="h-full w-full object-cover" loading="lazy" />
+                    <StaffMediaImage src={item.primary_image_url} srcSet={mediaImageSrcSet(item.primary_image_url)} sizes="(min-width: 768px) 25vw, 50vw" alt="" className="h-full w-full object-cover" loading="lazy" />
                   ) : null}
                 </span>
                 <span className="block truncate px-2 py-1.5 text-xs font-medium text-dashboard-navy">{item.name}</span>

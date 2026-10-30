@@ -3,10 +3,8 @@ import { describe, expect, it } from "vitest";
 import { mediaImageSrcSet } from "@/lib/media-image-srcset";
 
 describe("staff media image srcset", () => {
-  it("requests bounded private variants for app-owned media routes", () => {
-    expect(mediaImageSrcSet("/api/media/staff/file-id?branch_id=branch-id&w=960")).toBe(
-      "/api/media/staff/file-id?branch_id=branch-id&w=320 320w, /api/media/staff/file-id?branch_id=branch-id&w=960 960w, /api/media/staff/file-id?branch_id=branch-id&w=1600 1600w",
-    );
+  it("does not generate unauthenticated browser URLs for staff images", () => {
+    expect(mediaImageSrcSet("https://api.example.test/api/v1/files/media/staff/file-id?branch_id=branch-id&w=960")).toBeUndefined();
   });
 
   it("leaves upload previews and non-media URLs unchanged", () => {

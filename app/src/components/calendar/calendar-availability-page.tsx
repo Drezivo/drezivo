@@ -1,4 +1,5 @@
 "use client";
+import { StaffMediaImage } from "@/components/ui/staff-media-image";
 
 import { useAuth } from "@clerk/nextjs";
 import type {
@@ -1318,8 +1319,7 @@ function ClothingThumbnail({
       )}
     >
       {item.product.primary_image_url ? (
-        // eslint-disable-next-line @next/next/no-img-element -- catalogue media uses an authenticated same-origin API route.
-        <img
+        <StaffMediaImage
           src={item.product.primary_image_url}
           srcSet={mediaImageSrcSet(item.product.primary_image_url)}
           sizes="64px"

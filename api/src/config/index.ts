@@ -21,7 +21,7 @@ export const envSchema = z
     CLERK_PUBLISHABLE_KEY: z.string().min(1, 'CLERK_PUBLISHABLE_KEY is required'),
     CLERK_WEBHOOK_SIGNING_SECRET: z.string().min(1, 'CLERK_WEBHOOK_SIGNING_SECRET is required'),
     STAFF_APP_URL: z.string().url('STAFF_APP_URL must be an absolute URL').optional(),
-    STOREFRONT_WEB_URL: z.string().url('STOREFRONT_WEB_URL must be an absolute URL').optional(),
+    MEDIA_PUBLIC_ORIGIN: z.string().url('MEDIA_PUBLIC_ORIGIN must be an absolute URL').optional(),
 
     CORS_ALLOWED_ORIGINS: z
       .string()
@@ -116,6 +116,8 @@ export const envSchema = z
       .min(32, 'MEDIA_READ_GRANT_SECRET must be at least 32 characters')
       .max(200)
       .optional(),
+    CLOUDFLARE_MEDIA_ZONE_ID: z.string().regex(/^[0-9a-f]{32}$/i).optional(),
+    CLOUDFLARE_MEDIA_PURGE_TOKEN: z.string().min(20).max(500).optional(),
   })
   .superRefine((env, ctx) => {
     const deployed = env.NODE_ENV === 'staging' || env.NODE_ENV === 'production';
@@ -126,31 +128,39 @@ export const envSchema = z
         message: 'Staging and production require MEDIA_READ_GRANT_SECRET for private media delivery.',
       });
     }
-    if (deployed && !env.STOREFRONT_WEB_URL) {
+    if (deployed && !env.MEDIA_PUBLIC_ORIGIN) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        path: ['STOREFRONT_WEB_URL'],
-        message: 'Staging and production require STOREFRONT_WEB_URL for media cache invalidation.',
+        path: ['MEDIA_PUBLIC_ORIGIN'],
+        message: 'Staging and production require MEDIA_PUBLIC_ORIGIN for API-host media URLs.',
       });
     }
-    if (env.STOREFRONT_WEB_URL) {
-      const storefrontUrl = new URL(env.STOREFRONT_WEB_URL);
-      const loopback = ['localhost', '127.0.0.1', '[::1]'].includes(storefrontUrl.hostname);
+    if (env.MEDIA_PUBLIC_ORIGIN) {
+      const mediaUrl = new URL(env.MEDIA_PUBLIC_ORIGIN);
+      const loopback = ['localhost', '127.0.0.1', '[::1]'].includes(mediaUrl.hostname);
       if (
-        (deployed ? storefrontUrl.protocol !== 'https:' :
-          storefrontUrl.protocol !== 'https:' && !(storefrontUrl.protocol === 'http:' && loopback)) ||
-        storefrontUrl.pathname !== '/' ||
-        storefrontUrl.search ||
-        storefrontUrl.hash ||
-        storefrontUrl.username ||
-        storefrontUrl.password
+        (deployed ? mediaUrl.protocol !== 'https:' :
+          mediaUrl.protocol !== 'https:' && !(mediaUrl.protocol === 'http:' && loopback)) ||
+        mediaUrl.pathname !== '/' ||
+        mediaUrl.search ||
+        mediaUrl.hash ||
+        mediaUrl.username ||
+        mediaUrl.password
       ) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
-          path: ['STOREFRONT_WEB_URL'],
-          message: 'STOREFRONT_WEB_URL must be an HTTPS origin, or a loopback HTTP origin in development.',
+          path: ['MEDIA_PUBLIC_ORIGIN'],
+          message: 'MEDIA_PUBLIC_ORIGIN must be an HTTPS origin, or a loopback HTTP origin in development.',
         });
       }
+    }
+
+    if (deployed && (!env.CLOUDFLARE_MEDIA_ZONE_ID || !env.CLOUDFLARE_MEDIA_PURGE_TOKEN)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['CLOUDFLARE_MEDIA_ZONE_ID'],
+        message: 'Staging and production require Cloudflare media cache purge credentials.',
+      });
     }
 
     if (env.NODE_ENV === 'staging' || env.NODE_ENV === 'production') {
@@ -283,7 +293,7 @@ export const envSchema = z
   .transform((env) => ({
     ...env,
     STAFF_APP_URL: env.STAFF_APP_URL ?? 'http://localhost:3000',
-    STOREFRONT_WEB_URL: env.STOREFRONT_WEB_URL,
+    MEDIA_PUBLIC_ORIGIN: env.MEDIA_PUBLIC_ORIGIN ?? `http://localhost:${env.PORT}`,
     FILE_OBJECT_CLEANUP_ENABLED:
       env.FILE_OBJECT_CLEANUP_ENABLED ?? !['staging', 'production'].includes(env.NODE_ENV),
     OBJECT_STORAGE_UPLOADS_ENABLED:

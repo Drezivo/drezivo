@@ -40,7 +40,7 @@ describe('public storefront read API', async () => {
   const { createStorefrontAsset, createStorefrontWorkspace } = await import('./helpers/storefront-fixture.js');
   const { defaultStorefrontDocument, fileObjectId, productId } = await import('@drezivo/contracts');
   const { objectStorage } = await import('../../src/integrations/storage/s3-compatible-object-storage.js');
-  const { issuePreviewToken } = await import('../../src/modules/storefront/storefront-preview.js');
+  const { issuePreviewMediaSession, verifyFileMediaGrant, verifyPreviewMediaSession } = await import('../../src/modules/files/media-access-grants.js');
   const admin = new pg.Pool({ connectionString: adminUrl, max: 2 });
 
   const rules = {
@@ -121,7 +121,7 @@ describe('public storefront read API', async () => {
     });
     expect(store.featured.map((card) => card.product_id)).toEqual([ws.productId]);
     expect(store.featured[0]?.image_url).toBe(
-      `/api/media/public/${ws.slug}/${ws.imageFileId}?w=960`,
+      `http://localhost:3000/api/media/public/stores/${ws.slug}/files/${ws.imageFileId}?w=960`,
     );
     expect(store.categories).toEqual([{ id: expect.any(String) as string, name: 'Gowns', item_count: 1 }]);
     expect(store.payment_methods).toEqual([{ id: ws.paymentMethodId, name: 'Bank transfer', rail: 'manual_transfer' }]);
@@ -194,8 +194,8 @@ describe('public storefront read API', async () => {
     expect(store.policy).toMatchObject({ format: 'images', rental: '', deposit: '', cancellation: '', damage: null, privacy_notice: rules.privacy_notice });
     expect(store.policy.image_urls).toHaveLength(2);
     expect(store.policy.image_urls).toEqual([
-      `/api/media/public/${ws.slug}/${pageTwo}?w=960`,
-      `/api/media/public/${ws.slug}/${pageOne}?w=960`,
+      `http://localhost:3000/api/media/public/stores/${ws.slug}/files/${pageTwo}?w=960`,
+      `http://localhost:3000/api/media/public/stores/${ws.slug}/files/${pageOne}?w=960`,
     ]);
   });
 
@@ -206,22 +206,35 @@ describe('public storefront read API', async () => {
     const read = vi.spyOn(objectStorage, 'readObject').mockImplementation(() =>
       Promise.resolve({ body: Readable.from([png]), contentLength: png.byteLength }),
     );
-    const previewToken = issuePreviewToken({ tenantId: draft.tenantId, storefrontId: draft.storefrontId }).token;
+    const previewSession = issuePreviewMediaSession({ tenantId: draft.tenantId, storefrontId: draft.storefrontId });
     const app = createApp();
 
     expect((await request(app).get(`/api/v1/public/stores/${draft.slug}/media/${draft.imageFileId}`)).status).toBe(404);
+    const grantResponse = await request(app)
+      .post(`/api/v1/public/stores/${draft.slug}/media/${draft.imageFileId}/grant`)
+      .set('X-Storefront-Media-Session', previewSession.session);
+    expect(grantResponse.status).toBe(200);
+    expect(grantResponse.headers['cache-control']).toBe('private, no-store');
+    const previewGrant = dataOf<{ media_grant: string; expires_at: string }>(grantResponse);
+    expect(Date.parse(previewGrant.expires_at)).toBeLessThanOrEqual(Date.parse(previewSession.expiresAt));
+    expect(verifyPreviewMediaSession(previewSession.session)).toMatchObject({ tenantId: draft.tenantId, storefrontId: draft.storefrontId });
+    expect(verifyFileMediaGrant(previewGrant.media_grant, {
+      purpose: 'preview',
+      resourceId: draft.storefrontId,
+      fileId: draft.imageFileId,
+    })).toMatchObject({ tenantId: draft.tenantId, resourceId: draft.storefrontId, fileId: draft.imageFileId });
     const preview = await request(app)
       .get(`/api/v1/public/stores/${draft.slug}/media/${draft.imageFileId}`)
-      .set('X-Storefront-Preview', previewToken);
+      .set('X-Drezivo-Media-Access', previewGrant.media_grant);
     expect(preview.status).toBe(200);
     expect(preview.headers['cache-control']).toBe('private, no-store');
     expect(preview.headers['x-content-type-options']).toBe('nosniff');
     expect(preview.body).toEqual(png);
 
     const ws = await publishedWorkspace('media-live');
-    const publicMedia = await request(app).get(`/api/v1/public/stores/${ws.slug}/media/${ws.imageFileId}`);
+    const publicMedia = await request(app).get(`/api/media/public/stores/${ws.slug}/files/${ws.imageFileId}?w=960`);
     expect(publicMedia.status).toBe(200);
-    expect(publicMedia.headers['cache-control']).toMatch(/^public/);
+    expect(publicMedia.headers['cache-control']).toBe('public, max-age=0, s-maxage=45');
     expect(publicMedia.headers['x-content-type-options']).toBe('nosniff');
     expect(publicMedia.body).toEqual(png);
     expect(publicMedia.headers.location).toBeUndefined();

@@ -281,7 +281,7 @@ describe('CLT Phase 1 catalogue read model', async () => {
     );
     expect(withCover.items).toHaveLength(1);
     expect(withCover.items[0]?.primary_image_url).toBe(
-      `/api/media/staff/${coverFileId}?branch_id=${context.branchId}&w=960`,
+      `http://localhost:3000/api/v1/files/media/staff/${coverFileId}?branch_id=${context.branchId}&w=960`,
     );
     expect(storage.authorizedReads).toEqual([]);
     expect(JSON.stringify(withCover)).not.toContain('reads.example.test');
@@ -335,12 +335,12 @@ describe('CLT Phase 1 catalogue read model', async () => {
     expect(typeof detail.images[0]?.file_id).toBe('string');
     expect(detail.images[0]).toMatchObject({
       display_order: 0,
-      image_url: `/api/media/staff/${seededImages.coverId}?branch_id=${context.branchId}&w=960`,
+      image_url: `http://localhost:3000/api/v1/files/media/staff/${seededImages.coverId}?branch_id=${context.branchId}&w=960`,
     });
     expect(typeof detail.images[1]?.file_id).toBe('string');
     expect(detail.images[1]).toMatchObject({
       display_order: 1,
-      image_url: `/api/media/staff/${seededImages.secondaryId}?branch_id=${context.branchId}&w=960`,
+      image_url: `http://localhost:3000/api/v1/files/media/staff/${seededImages.secondaryId}?branch_id=${context.branchId}&w=960`,
     });
     expect(storage.authorizedReads).toEqual([]);
     expect(JSON.stringify(detail)).not.toContain('reads.example.test');

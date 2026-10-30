@@ -51,6 +51,7 @@ import { SizingTransitionDialog } from "@/components/inventory/sizing-transition
 import { useRequestPlanUpgrade } from "@/components/billing/plan-upgrade-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { StaffMediaImage } from "@/components/ui/staff-media-image";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -686,8 +687,7 @@ export function EditClothingPage({ productId }: { productId: string }) {
                     >
                       <div className="aspect-[4/5]">
                         {photo.previewUrl ? (
-                          // eslint-disable-next-line @next/next/no-img-element -- signed API URL or local object URL.
-                          <img
+                          <StaffMediaImage
                             src={photo.previewUrl}
                             alt={index === 0 ? "Current cover photo" : `Clothing photo ${index + 1}`}
                             className="h-full w-full object-cover"

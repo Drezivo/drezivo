@@ -664,6 +664,41 @@ registry.registerPath({
 // ---- storefront ---------------------------------------------------------
 registry.registerPath({
   method: 'get',
+  path: '/api/media/public/stores/{slug}/files/{fileId}',
+  servers: [{ url: '/' }],
+  tags: ['storefront'],
+  summary: 'Stream a published storefront image through the API host for Cloudflare caching.',
+  description:
+    'This unversioned media path is a direct-origin fallback for the Cloudflare Worker. Successful images are cacheable at the edge for 45 seconds; access and publication are checked on every origin read.',
+  request: {
+    params: z.object({
+      slug: z.string().min(1).max(80).regex(/^[a-z0-9-]+$/),
+      fileId: z.string().uuid(),
+    }),
+    query: z.object({ w: z.enum(['320', '960', '1600']).optional() }),
+  },
+  responses: {
+    200: {
+      description: 'Published image bytes. Cloudflare may cache the response for 45 seconds.',
+      headers: {
+        'Cache-Control': {
+          description: 'public, max-age=0, s-maxage=45',
+          schema: { type: 'string' },
+        },
+      },
+      content: {
+        'image/jpeg': { schema: z.string() },
+        'image/png': { schema: z.string() },
+        'image/webp': { schema: z.string() },
+      },
+    },
+    404: jsonError('No published image exists at this store and file id.'),
+    429: jsonError('Public media request rate limit exceeded.'),
+  },
+});
+
+registry.registerPath({
+  method: 'get',
   path: '/public/stores/{slug}',
   tags: ['storefront'],
   summary: 'Published storefront projection (TRD §4).',

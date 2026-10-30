@@ -36,6 +36,7 @@ import { logger } from './shared/logger.js';
 import { sendError } from './shared/response.js';
 import { ValidationError } from './shared/errors.js';
 import { internalMediaRouter } from './modules/internal-media/internal-media.routes.js';
+import { publicMediaEdgeRouter } from './modules/storefront/public-media-edge.routes.js';
 
 const pinoHttp = pinoHttpExport as unknown as (
   options: Record<string, unknown>,
@@ -145,6 +146,7 @@ export function createApp(options: AppOptions = {}): Express {
   // service authentication, server-side authorization, and tenant-safe command handlers.
   app.use('/internal/operator/v1', createInternalOperatorRouter(options.internalOperator));
   app.use(internalMediaRouter);
+  app.use(publicMediaEdgeRouter);
 
   // Both routers declare their OWN full paths (e.g. `/public/stores/:slug/holds` lives in
   // reservations.routes.ts, not storefront.routes.ts, even though it is nested under

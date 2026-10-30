@@ -24,8 +24,8 @@ export class StorefrontMediaUrlMapper {
     const urls = new Map<string, string>();
     if (ids.length === 0) return urls;
 
-    const rows = await client.query<{ id: string }>(
-      `SELECT id
+    const rows = await client.query<{ id: string; mime_type: string }>(
+      `SELECT id, mime_type
          FROM file_object
         WHERE tenant_id = $1
           AND id = ANY($2::uuid[])
@@ -39,8 +39,8 @@ export class StorefrontMediaUrlMapper {
       urls.set(
         row.id,
         audience.kind === 'public'
-          ? publicStorefrontMediaUrl(audience.slug, row.id, audience.preview ?? false)
-          : staffFileMediaUrl(row.id, audience.branchId),
+          ? publicStorefrontMediaUrl(audience.slug, row.id, audience.preview ?? false, row.mime_type)
+          : staffFileMediaUrl(row.id, audience.branchId, row.mime_type),
       );
     }
     return urls;

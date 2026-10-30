@@ -1,4 +1,5 @@
 "use client";
+import { StaffMediaImage } from "@/components/ui/staff-media-image";
 
 import { useAuth } from "@clerk/nextjs";
 import {
@@ -278,8 +279,7 @@ function DetailContent({
                       aria-label={`Open ${item.name} image preview`}
                       className="group relative h-full min-h-60 w-full cursor-zoom-in overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-dashboard-accent/50"
                     >
-                      {/* eslint-disable-next-line @next/next/no-img-element -- API-provided catalogue URLs use the authenticated media proxy. */}
-                      <img
+                      <StaffMediaImage
                         src={primaryImage}
                         srcSet={mediaImageSrcSet(primaryImage)}
                         sizes="(min-width: 1024px) 50vw, 100vw"
@@ -317,8 +317,7 @@ function DetailContent({
                           primaryImage === url ? "border-dashboard-accent" : "border-dashboard-border"
                         )}
                       >
-                        {/* eslint-disable-next-line @next/next/no-img-element -- API-provided catalogue URLs use the authenticated media proxy. */}
-                        <img
+                        <StaffMediaImage
                           src={url}
                           srcSet={mediaImageSrcSet(url)}
                           sizes="64px"

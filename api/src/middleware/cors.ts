@@ -4,7 +4,15 @@ import { config } from '../config/index.js';
 import { ForbiddenError } from '../shared/errors.js';
 
 const allowedMethods = ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'] as const;
-const allowedHeaders = ['authorization', 'content-type', 'idempotency-key', 'x-drezivo-branch-id', 'x-request-id'] as const;
+const allowedHeaders = [
+  'authorization',
+  'content-type',
+  'idempotency-key',
+  'x-drezivo-branch-id',
+  'x-drezivo-media-access',
+  'x-request-id',
+  'x-storefront-media-session',
+] as const;
 const allowedHeaderSet = new Set<string>(allowedHeaders);
 const allowedMethodsHeader = allowedMethods.join(', ');
 const allowedHeadersHeader = allowedHeaders.map((header) => header.replace(/(^|-)([a-z])/g, (_, separator: string, character: string) => `${separator}${character.toUpperCase()}`)).join(', ');

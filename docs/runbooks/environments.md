@@ -152,14 +152,18 @@ naming convention) once TRD §12's "remaining selection" of hosting plans/region
 - `OBJECT_STORAGE_FORCE_PATH_STYLE` — `false` for R2; `true` for loopback MinIO.
 - `OBJECT_STORAGE_UPLOADS_ENABLED` — production cutover gate for issuing new upload URLs. If omitted
   in production it defaults to `false`; outside production it defaults to `true`.
-- `MEDIA_READ_GRANT_SECRET` — random server-only secret of at least 32 characters, shared by the
-  API/worker and matching `app` and `web` deployments. Use a different value for development,
-  staging/preview, and production. It authenticates server-to-server media grants and cache-purge
-  requests; never use a `NEXT_PUBLIC_` name or send it to a browser. Staging and production API
-  startup requires it.
-- `STOREFRONT_WEB_URL` — exact HTTPS origin of the matching `web` deployment, set on the API and
-  worker. The worker posts tenant cache-purge requests to this origin. Staging and production API
-  startup requires it. Local development may use the loopback web origin.
+- `MEDIA_PUBLIC_ORIGIN` — exact API origin used for absolute media URLs: for example, the matching
+  `https://api-preview.drezivo.shop` or `https://api.drezivo.shop`. Required in staging/production;
+  local development may use an API loopback origin.
+- `MEDIA_READ_GRANT_SECRET` — random server-only secret of at least 32 characters, matching between
+  the API/API worker and the Cloudflare media Worker within one environment. It authorizes public
+  Worker-to-API R2 grants and signs short-lived preview/guest media grants. Use different values in
+  development, staging, and production. It is not needed by app/web and must never use a
+  `NEXT_PUBLIC_` name or reach a browser.
+- `CLOUDFLARE_MEDIA_ZONE_ID` and `CLOUDFLARE_MEDIA_PURGE_TOKEN` — zone ID and a deployment-managed
+  Cloudflare API token with Cache Purge permission for that zone. The API outbox worker uses them
+  to purge tenant cache tags directly from Cloudflare. Required in staging/production; keep them
+  only on API/worker deployments.
 - `FILE_OBJECT_CLEANUP_ENABLED` — producer gate for enqueueing cleanup when a replacement displaces
   an accepted file. Local development/test defaults to `true`; staging and production default to
   `false`. When disabled, a replacement that would enqueue cleanup returns a retryable 503 before
@@ -205,9 +209,6 @@ naming convention) once TRD §12's "remaining selection" of hosting plans/region
   verify a session before calling the API; TRD §1 is explicit that Next.js "does not become a
   second source of financial or availability logic," so this key authenticates, it does not
   authorize business writes.
-- `MEDIA_READ_GRANT_SECRET` — same environment-specific server-only value configured on the API.
-  The staff media route uses it to request an authorized read grant; it must never be prefixed with
-  `NEXT_PUBLIC_`.
 - `API_BASE_URL` — the `api` server's base URL for this environment. Next.js server rendering
   calls the API through scoped service/request adapters (TRD §1); it never holds a database
   connection string directly.
@@ -226,9 +227,6 @@ naming convention) once TRD §12's "remaining selection" of hosting plans/region
 
 - `API_ORIGIN` — server-side API origin for server-rendered storefront pages (may be an internal
   address). Falls back to `NEXT_PUBLIC_API_ORIGIN`.
-- `MEDIA_READ_GRANT_SECRET` — same environment-specific server-only value configured on the API.
-  Public and preview media routes use it for server-to-server grants and cache invalidation; it
-  must never be prefixed with `NEXT_PUBLIC_`.
 - `NEXT_PUBLIC_API_ORIGIN` — browser-reachable API origin for availability, holds, guest reservation
   proof/receipts, and fitting requests. Guest reservation calls use credentialed requests so the
   API-host-only cookie can be set/read. Must be listed in the API's `CORS_ALLOWED_ORIGINS` origin
@@ -241,20 +239,14 @@ naming convention) once TRD §12's "remaining selection" of hosting plans/region
   analytics, referrer, or log. The storefront uses credentialed requests and API CORS must allow
   the exact storefront origin.
 
-Public media URLs point to `web` and remain stable. The API issues a 60-second R2 GET grant only to
-the web/app server; browsers never receive that grant, the R2 host, or an object key. Public image
-bytes are cached by Vercel for at most 45 seconds and purged by tenant after visibility or
-file-reference changes. Browser caching requires revalidation, so visitors do not need to reload a
-page just because a signed grant expired. Preview and staff media use separate uncached, no-store
-routes.
-
-For the optional Cloudflare media Worker, set the server-only `MEDIA_EDGE_AUTH_SECRET` on both
-`app` and `web` and in the Worker secret store. Set `CLOUDFLARE_MEDIA_PURGE_ENABLED=true`,
-`CLOUDFLARE_MEDIA_ZONE_ID`, and a scoped `CLOUDFLARE_MEDIA_PURGE_TOKEN` on `web` before enabling
-the Worker routes. Configure the Worker's `STAFF_ORIGIN`, `WEB_ORIGIN`, `API_ORIGIN`, and
-`MEDIA_READ_GRANT_SECRET` as described in `api/edge/media-worker/README.md`. Never expose these
-secrets to the browser. The existing Vercel proxy remains the rollback path. Preview image URLs
-are scoped under `/s/{slug}/media/preview/` so the existing store-scoped preview cookie is sent.
+R2-backed image URLs point to the matching API host. Public storefront images use Cloudflare's
+API-host Worker cache for 45 seconds, with a direct API stream and Cloudflare Cache Rule as the
+fail-open path. The API outbox worker purges Cloudflare tenant cache tags. Staff, preview, and guest
+images call the API with the relevant Clerk, preview-session, or reservation-scoped grant headers
+and use `private, no-store`; web/app do not proxy image bytes or hold the media grant secret. Vercel
+continues to host the web/app pages and bundled assets. Staff PDF documents retain their app route.
+See [`private-media-delivery.md`](private-media-delivery.md) and
+[`cloudflare-media-worker-setup.md`](cloudflare-media-worker-setup.md).
 
 ## `contracts` (`@drezivo/contracts`)
 
