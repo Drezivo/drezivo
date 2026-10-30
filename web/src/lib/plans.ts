@@ -20,7 +20,7 @@ export const PUBLIC_MARKETING_PLANS: readonly PublicPlan[] = [
   {
     code: 'free',
     name: 'Free',
-    tagline: 'The essential tools to organize your shop and help renters check availability.',
+    tagline: 'Organize your shop and let renters check availability.',
     price: '0.00',
     interval: 'month',
     trialDays: 0,

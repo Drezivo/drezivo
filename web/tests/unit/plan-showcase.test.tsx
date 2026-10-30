@@ -68,6 +68,7 @@ describe('public plans', () => {
       expect.objectContaining({
         code: 'free',
         name: 'Free',
+        tagline: 'Organize your shop and let renters check availability.',
         price: '0.00',
         trialDays: 0,
         highlighted: false,

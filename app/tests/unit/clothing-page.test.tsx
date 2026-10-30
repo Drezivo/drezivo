@@ -267,6 +267,18 @@ describe("ClothingPage", () => {
     expect(await screen.findByRole("link", { name: "Batch Add" })).toHaveAttribute("href", "/inventory/import");
   });
 
+  it("hides backup controls while keeping clothing actions available", async () => {
+    render(<ClothingPage />);
+
+    await screen.findByRole("listitem", { name: "Real Black Satin Gown" });
+
+    expect(screen.queryByRole("button", { name: "Export inventory" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Download backup" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Restore backup" })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Manage Categories" })).toBeVisible();
+    expect(screen.getByRole("link", { name: "Add Clothing" })).toBeVisible();
+  });
+
   it("renders clothing returned by GET catalogue/clothing instead of mock inventory data", async () => {
     render(<ClothingPage />);
 

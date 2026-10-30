@@ -25,9 +25,11 @@ function sha256Base64(bytes: ArrayBuffer): string {
 export function CatalogueBackupControls({
   onRestored,
   toolbarActions,
+  showBackupControls = true,
 }: {
-  onRestored: () => void;
+  onRestored?: () => void;
   toolbarActions?: ReactNode;
+  showBackupControls?: boolean;
 }) {
   const { getToken } = useAuth();
   const fileInput = useRef<HTMLInputElement>(null);
@@ -131,7 +133,7 @@ export function CatalogueBackupControls({
       const total = Object.values(result.data.created).reduce<number>((sum, count) => sum + count, 0);
       setMessage(`Restore complete. ${total} catalogue records and links were added; existing records were left unchanged.`);
       setPreview(null);
-      onRestored();
+      onRestored?.();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "The inventory restore could not be completed.");
     } finally {
@@ -147,90 +149,98 @@ export function CatalogueBackupControls({
   return (
     <div className="min-w-0 w-full space-y-2 md:ml-auto md:max-w-3xl 2xl:flex-1 2xl:max-w-none">
       <div className="grid grid-cols-2 gap-2 2xl:flex 2xl:flex-wrap 2xl:items-center 2xl:justify-end">
-        <Button
-          type="button"
-          variant="secondary"
-          className="w-full min-w-0 2xl:w-auto 2xl:shrink-0"
-          onClick={() => void startExport()}
-          disabled={busy || exportRunning}
-        >
-          <Download className="h-4 w-4" aria-hidden="true" />
-          {exportRunning ? "Preparing backup…" : "Export inventory"}
-        </Button>
-        {downloadReady ? (
-          <Button
-            type="button"
-            variant="secondary"
-            className="w-full min-w-0 2xl:w-auto 2xl:shrink-0"
-            onClick={() => void downloadExport()}
-            disabled={busy}
-          >
-            <Download className="h-4 w-4" aria-hidden="true" />
-            Download backup
-          </Button>
-        ) : null}
-        <input
-          ref={fileInput}
-          type="file"
-          accept=".zip,application/zip"
-          aria-label="Choose inventory backup ZIP"
-          className="sr-only"
-          onChange={(event) => void previewFile(event.currentTarget.files?.[0])}
-        />
-        <Button
-          type="button"
-          variant="secondary"
-          className="w-full min-w-0 2xl:w-auto 2xl:shrink-0"
-          onClick={() => fileInput.current?.click()}
-          disabled={busy}
-        >
-          <Upload className="h-4 w-4" aria-hidden="true" />
-          Restore backup
-        </Button>
-        {toolbarActions}
-      </div>
-
-      {exportRunning ? <p role="status" className="text-right text-xs text-dashboard-muted">Your private inventory backup is being prepared.</p> : null}
-      {nextExport ? <p className="text-right text-xs text-dashboard-muted">Next export available {nextExport}. You can download an existing backup without using another export.</p> : null}
-      {error ? <p role="alert" className="text-right text-sm text-destructive">{error}</p> : null}
-      {message ? <p role="status" className="text-right text-sm text-dashboard-muted">{message}</p> : null}
-
-      {preview ? (
-        <div className="rounded-lg border border-dashboard-border bg-dashboard-surface p-3 text-sm">
-          <div className="flex items-start gap-2">
-            <ArchiveRestore className="mt-0.5 h-4 w-4 shrink-0 text-dashboard-accent" aria-hidden="true" />
-            <div className="min-w-0 flex-1">
-              <p className="font-medium text-dashboard-navy">Restore preview</p>
-              <p className="mt-1 text-xs text-dashboard-muted">Adds {restoreCount} missing records, links, and images. Existing catalogue records are unchanged; nothing is deleted.</p>
-              <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-dashboard-muted sm:grid-cols-3">
-                <div><dt>Categories</dt><dd className="font-semibold text-dashboard-navy">{preview.counts.categories_to_create}</dd></div>
-                <div><dt>Styles</dt><dd className="font-semibold text-dashboard-navy">{preview.counts.products_to_create}</dd></div>
-                <div><dt>Variants</dt><dd className="font-semibold text-dashboard-navy">{preview.counts.variants_to_create}</dd></div>
-                <div><dt>Pieces</dt><dd className="font-semibold text-dashboard-navy">{preview.counts.pieces_to_create}</dd></div>
-                <div><dt>Guides</dt><dd className="font-semibold text-dashboard-navy">{preview.counts.guides_to_create}</dd></div>
-                <div><dt>Images</dt><dd className="font-semibold text-dashboard-navy">{preview.counts.images_to_restore}</dd></div>
-              </dl>
-              {preview.conflicts.length > 0 || preview.conflicts_truncated ? (
-                <div className="mt-2 rounded-md border border-warning-500/30 bg-warning-500/10 p-2 text-xs text-dashboard-navy">
-                  <p className="font-medium">Resolve the reported conflicts before restoring.</p>
-                  <ul className="mt-1 list-disc space-y-1 pl-4">
-                    {preview.conflicts.map((conflict) => <li key={`${conflict.entity}:${conflict.id}`}>{conflict.entity}: {conflict.reason}</li>)}
-                  </ul>
-                  {preview.conflicts_truncated ? <p className="mt-1">Additional conflicts were found.</p> : null}
-                </div>
+          {showBackupControls ? (
+            <>
+              <Button
+                type="button"
+                variant="secondary"
+                className="w-full min-w-0 2xl:w-auto 2xl:shrink-0"
+                onClick={() => void startExport()}
+                disabled={busy || exportRunning}
+              >
+                <Download className="h-4 w-4" aria-hidden="true" />
+                {exportRunning ? "Preparing backup…" : "Export inventory"}
+              </Button>
+              {downloadReady ? (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="w-full min-w-0 2xl:w-auto 2xl:shrink-0"
+                  onClick={() => void downloadExport()}
+                  disabled={busy}
+                >
+                  <Download className="h-4 w-4" aria-hidden="true" />
+                  Download backup
+                </Button>
               ) : null}
-              <div className="mt-3 flex flex-wrap gap-2">
-                {restoreCount > 0 ? (
-                  <Button type="button" size="sm" onClick={() => void commitRestore()} disabled={busy || preview.conflicts.length > 0 || preview.conflicts_truncated}>
-                    Restore missing inventory
-                  </Button>
-                ) : <p className="text-xs font-medium text-dashboard-muted">Everything in this backup is already present.</p>}
-                <Button type="button" size="sm" variant="ghost" onClick={() => setPreview(null)} disabled={busy}>Cancel</Button>
-              </div>
-            </div>
-          </div>
+              <input
+                ref={fileInput}
+                type="file"
+                accept=".zip,application/zip"
+                aria-label="Choose inventory backup ZIP"
+                className="sr-only"
+                onChange={(event) => void previewFile(event.currentTarget.files?.[0])}
+              />
+              <Button
+                type="button"
+                variant="secondary"
+                className="w-full min-w-0 2xl:w-auto 2xl:shrink-0"
+                onClick={() => fileInput.current?.click()}
+                disabled={busy}
+              >
+                <Upload className="h-4 w-4" aria-hidden="true" />
+                Restore backup
+              </Button>
+            </>
+          ) : null}
+          {toolbarActions}
         </div>
-      ) : null}
+
+        {showBackupControls ? (
+          <>
+            {exportRunning ? <p role="status" className="text-right text-xs text-dashboard-muted">Your private inventory backup is being prepared.</p> : null}
+            {nextExport ? <p className="text-right text-xs text-dashboard-muted">Next export available {nextExport}. You can download an existing backup without using another export.</p> : null}
+            {error ? <p role="alert" className="text-right text-sm text-destructive">{error}</p> : null}
+            {message ? <p role="status" className="text-right text-sm text-dashboard-muted">{message}</p> : null}
+
+            {preview ? (
+              <div className="rounded-lg border border-dashboard-border bg-dashboard-surface p-3 text-sm">
+                <div className="flex items-start gap-2">
+                  <ArchiveRestore className="mt-0.5 h-4 w-4 shrink-0 text-dashboard-accent" aria-hidden="true" />
+                  <div className="min-w-0 flex-1">
+                    <p className="font-medium text-dashboard-navy">Restore preview</p>
+                    <p className="mt-1 text-xs text-dashboard-muted">Adds {restoreCount} missing records, links, and images. Existing catalogue records are unchanged; nothing is deleted.</p>
+                    <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-dashboard-muted sm:grid-cols-3">
+                      <div><dt>Categories</dt><dd className="font-semibold text-dashboard-navy">{preview.counts.categories_to_create}</dd></div>
+                      <div><dt>Styles</dt><dd className="font-semibold text-dashboard-navy">{preview.counts.products_to_create}</dd></div>
+                      <div><dt>Variants</dt><dd className="font-semibold text-dashboard-navy">{preview.counts.variants_to_create}</dd></div>
+                      <div><dt>Pieces</dt><dd className="font-semibold text-dashboard-navy">{preview.counts.pieces_to_create}</dd></div>
+                      <div><dt>Guides</dt><dd className="font-semibold text-dashboard-navy">{preview.counts.guides_to_create}</dd></div>
+                      <div><dt>Images</dt><dd className="font-semibold text-dashboard-navy">{preview.counts.images_to_restore}</dd></div>
+                    </dl>
+                    {preview.conflicts.length > 0 || preview.conflicts_truncated ? (
+                      <div className="mt-2 rounded-md border border-warning-500/30 bg-warning-500/10 p-2 text-xs text-dashboard-navy">
+                        <p className="font-medium">Resolve the reported conflicts before restoring.</p>
+                        <ul className="mt-1 list-disc space-y-1 pl-4">
+                          {preview.conflicts.map((conflict) => <li key={`${conflict.entity}:${conflict.id}`}>{conflict.entity}: {conflict.reason}</li>)}
+                        </ul>
+                        {preview.conflicts_truncated ? <p className="mt-1">Additional conflicts were found.</p> : null}
+                      </div>
+                    ) : null}
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {restoreCount > 0 ? (
+                        <Button type="button" size="sm" onClick={() => void commitRestore()} disabled={busy || preview.conflicts.length > 0 || preview.conflicts_truncated}>
+                          Restore missing inventory
+                        </Button>
+                      ) : <p className="text-xs font-medium text-dashboard-muted">Everything in this backup is already present.</p>}
+                      <Button type="button" size="sm" variant="ghost" onClick={() => setPreview(null)} disabled={busy}>Cancel</Button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+          </>
+        ) : null}
     </div>
   );
 }
