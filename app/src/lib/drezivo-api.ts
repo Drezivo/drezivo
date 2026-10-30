@@ -347,16 +347,23 @@ export class DrezivoApiError extends Error {
   readonly code: string;
   readonly requestId: string | null;
   readonly status: number;
+  readonly validationIssues: readonly { code: string; path: string }[] | null;
 
   constructor(
     message: string,
-    options: { code?: string; requestId?: string | null; status: number }
+    options: {
+      code?: string;
+      requestId?: string | null;
+      status: number;
+      validationIssues?: readonly { code: string; path: string }[];
+    }
   ) {
     super(message);
     this.name = "DrezivoApiError";
     this.code = options.code ?? "INTERNAL_ERROR";
     this.requestId = options.requestId ?? null;
     this.status = options.status;
+    this.validationIssues = options.validationIssues ?? null;
   }
 }
 
@@ -1661,8 +1668,31 @@ async function request<T>({
   const payload: unknown = await response.json().catch(() => null);
   const parsed = responseSchema.safeParse(payload);
   if (!parsed.success) {
+    const requestId =
+      typeof payload === "object" &&
+      payload !== null &&
+      "request_id" in payload &&
+      typeof payload.request_id === "string" &&
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(payload.request_id)
+        ? payload.request_id
+        : null;
+    const validationIssues = parsed.error.issues.map(({ code, path }) => ({
+      code,
+      path: path
+        .map((segment) =>
+          typeof segment === "number"
+            ? `[${segment}]`
+            : /^[a-zA-Z0-9_-]{1,64}$/.test(segment)
+              ? segment
+              : "[field]"
+        )
+        .join("."),
+    }));
     throw new DrezivoApiError("Drezivo returned an invalid response. Please try again.", {
+      code: "INVALID_RESPONSE",
+      requestId,
       status: response.status,
+      validationIssues,
     });
   }
 
