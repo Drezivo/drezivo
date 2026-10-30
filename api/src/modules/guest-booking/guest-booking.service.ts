@@ -17,6 +17,7 @@ import {
 } from '@drezivo/contracts';
 
 import { config } from '../../config/index.js';
+import { boundStoredObjectBody } from '../../integrations/storage/object-storage.js';
 import { pool, withTenantTransaction } from '../../db/client.js';
 import type { ObjectStorage } from '../../integrations/storage/object-storage.js';
 import { objectStorage } from '../../integrations/storage/s3-compatible-object-storage.js';
@@ -61,8 +62,9 @@ import {
   submitReservationForReview,
 } from '../reservations/reservations.review.repository.js';
 import { toDocument } from '../storefront-cms/storefront-cms.service.js';
-import { signPaymentRenterStepsImages } from '../files/payment-renter-steps-media.js';
 import { storefrontMediaUrlMapper } from '../storefront/storefront-media.js';
+import { guestRenterStepsMediaUrl } from '../files/file-media-url.js';
+import { issueFileMediaGrant, type FileMediaGrant } from '../files/media-access-grants.js';
 import {
   isVisibleVariant,
   readVisibleVariantIds,
@@ -81,6 +83,7 @@ import {
   readGuestReservation,
   readGuestTokenScopes,
   readReceiptFile,
+  readGuestPaymentStepsImage,
   type GuestReservationRow,
 } from './guest-booking.repository.js';
 import { isPaymentMaterialContentType } from '../payment-methods/payment-method-readiness.js';
@@ -208,6 +211,43 @@ export class GuestBookingService {
     return withTenantTransaction(tenantId, 'guest', async (client) => {
       await this.requireScope(client, tenantId, reservationId, capability, 'view_status');
       return this.view(client, tenantId, reservationId);
+    });
+  }
+
+  async authorizeRenterStepsMedia(
+    reservationId: string,
+    fileId: string,
+    capability: string,
+  ): Promise<{ media_grant: string; expires_at: string }> {
+    const tenantId = await this.resolveGuestTenant(reservationId, capability);
+    return withTenantTransaction(tenantId, 'guest', async (client) => {
+      await this.requireScope(client, tenantId, reservationId, capability, 'view_status');
+      const reservation = await readGuestReservation(client, tenantId, reservationId);
+      if (!reservation || !isPayableRenterStepsImage(reservation, fileId)) throw new NotFoundError(GUEST_NOT_FOUND);
+      const file = await readGuestPaymentStepsImage(client, tenantId, fileId);
+      if (!file) throw new NotFoundError(GUEST_NOT_FOUND);
+      const grant = issueFileMediaGrant({ purpose: 'guest', tenantId, resourceId: reservationId, fileId });
+      return { media_grant: grant.grant, expires_at: grant.expiresAt };
+    });
+  }
+
+  async readRenterStepsMedia(
+    scope: FileMediaGrant,
+  ): Promise<{ body: AsyncIterable<Uint8Array>; mimeType: 'image/jpeg' | 'image/png' | 'image/webp'; byteSize: number }> {
+    return withTenantTransaction(scope.tenantId, 'guest:media', async (client) => {
+      const reservation = await readGuestReservation(client, scope.tenantId, scope.resourceId);
+      if (!reservation || !isPayableRenterStepsImage(reservation, scope.fileId)) throw new NotFoundError(GUEST_NOT_FOUND);
+      const file = await readGuestPaymentStepsImage(client, scope.tenantId, scope.fileId);
+      if (!file) throw new NotFoundError(GUEST_NOT_FOUND);
+      const stored = await this.storage.readObject({ storageKey: file.storage_key, versionId: file.version_id });
+      if (!stored || (stored.contentLength !== null && stored.contentLength !== file.byte_size)) {
+        throw new DependencyUnavailableError('This payment instruction image is temporarily unavailable.');
+      }
+      return {
+        body: boundStoredObjectBody(stored.body, file.byte_size),
+        mimeType: file.mime_type as 'image/jpeg' | 'image/png' | 'image/webp',
+        byteSize: file.byte_size,
+      };
     });
   }
 
@@ -448,13 +488,10 @@ export class GuestBookingService {
           { kind: 'public', slug: row.storefront_slug },
         )
       : new Map<string, string>();
-    const stepMedia = showRenterStepsImage
-      ? await signPaymentRenterStepsImages(client, tenantId, [row.renter_steps_file_id_snapshot], this.storage)
-      : new Map<string, string>();
     const qrUrl = row.qr_file_id ? (methodMedia.get(row.qr_file_id) ?? null) : null;
     const materialUrl = showMaterial && row.material_file_id ? (methodMedia.get(row.material_file_id) ?? null) : null;
     const renterStepsImageUrl = showRenterStepsImage && row.renter_steps_file_id_snapshot
-      ? (stepMedia.get(row.renter_steps_file_id_snapshot) ?? null)
+      ? guestRenterStepsMediaUrl(row.id, row.renter_steps_file_id_snapshot)
       : null;
     const hasRenterSteps = Boolean(row.renter_steps_text_snapshot || renterStepsImageUrl);
     const money = (key: string): string => {
@@ -529,6 +566,14 @@ function assertAwaitingReceipt(reservation: GuestReservationRow): void {
   if (!reservation.hold_expires_at || reservation.hold_expires_at.getTime() <= Date.now()) {
     throw new HoldExpiredError('Your 15-minute hold ended. Please book again.');
   }
+}
+
+function isPayableRenterStepsImage(reservation: GuestReservationRow, fileId: string): boolean {
+  return (
+    (reservation.status === 'held' || reservation.status === 'pending_confirmation') &&
+    reservation.renter_steps_file_id_snapshot === fileId &&
+    reservation.renter_steps_image_mime !== null
+  );
 }
 
 function paymentNote(destination: Record<string, unknown>): string | undefined {

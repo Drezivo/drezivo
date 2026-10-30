@@ -126,22 +126,12 @@ describe('storefront owner preview', async () => {
       .set('X-Drezivo-Media-Grant', 'g'.repeat(48)).set(HEADER, valid.token)).status).toBe(404);
   });
 
-  it('rejects staff image grants for another tenant or an unassigned branch', async () => {
-    const ws = await createStorefrontWorkspace('staff-media-a');
-    const other = await createStorefrontWorkspace('staff-media-b');
-    const inserted = await admin.query<{ id: string }>(
-      `INSERT INTO branch (tenant_id, name, code, is_default, timezone, status)
-       VALUES ($1, 'Other', 'OTHER', false, 'Asia/Manila', 'active') RETURNING id`,
-      [ws.tenantId],
-    );
-    const unassignedBranch = inserted.rows[0]?.id ?? '';
-    clerk.getAuth.mockReturnValue({ userId: ws.frontDesk.principalId, orgId: ws.clerkOrgId });
+  it('does not expose the removed internal staff media grant bridge', async () => {
     const app = createApp();
-    const route = (id: string) => `/internal/media/v1/staff/files/${id}/grant?w=960`;
-    expect((await request(app).post(route(other.imageFileId))
-      .set('X-Drezivo-Media-Grant', 'g'.repeat(48)).set('X-Drezivo-Branch-Id', ws.branchId)).status).toBe(404);
-    expect((await request(app).post(route(ws.imageFileId))
-      .set('X-Drezivo-Media-Grant', 'g'.repeat(48)).set('X-Drezivo-Branch-Id', unassignedBranch)).status).toBe(404);
+    const response = await request(app)
+      .post('/internal/media/v1/staff/files/0194f6a2-9dd6-7a4c-8e9f-142f1d310001/grant?w=960')
+      .set('X-Drezivo-Media-Grant', 'g'.repeat(48));
+    expect(response.status).toBe(404);
   });
 
   it('keeps ordinary public reads cacheable and marked to vary on the preview header', async () => {

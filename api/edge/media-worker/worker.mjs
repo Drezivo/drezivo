@@ -1,128 +1,178 @@
-// Cloudflare routes must target only the three media patterns documented in README.md.
 const UUID = /^[0-9a-f-]{36}$/i;
 const SLUG = /^[a-z0-9-]{1,80}$/;
 const WIDTHS = new Set(['320', '960', '1600']);
 const IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
-const STAFF_IMAGE_PURPOSES = new Set(['catalogue_image', 'measurement_guide', 'storefront_asset']);
 const MAX_BYTES = 10 * 1024 * 1024;
 const MAX_PUBLIC_CACHE_BYTES = 8 * 1024 * 1024;
+const PUBLIC_PATH = /^\/api\/media\/public\/stores\/([^/]+)\/files\/([^/]+)$/;
+const AUTH_FAILURES = new Set([401, 403, 404, 409, 429]);
 
 function failure(status) {
-  return new Response(null, { status, headers: { 'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer' } });
+  return new Response(null, {
+    status,
+    headers: {
+      'Cache-Control': 'private, no-store',
+      'X-Content-Type-Options': 'nosniff',
+      'Referrer-Policy': 'no-referrer',
+    },
+  });
 }
 
 function safeOrigin(value) {
   try {
-    const u = new URL(value);
-    return u.protocol === 'https:' && u.pathname === '/' && !u.search && !u.hash && !u.username && !u.password ? u.origin : null;
-  } catch { return null; }
+    const url = new URL(value);
+    return url.protocol === 'https:' && url.pathname === '/' && !url.search && !url.hash &&
+      !url.username && !url.password ? url.origin : null;
+  } catch {
+    return null;
+  }
 }
 
-function validGrant(value) {
-  const g = value?.success === true ? value.data : null;
-  if (!g || !UUID.test(g.tenant_id) || typeof g.purpose !== 'string' || !IMAGE_TYPES.has(g.content_type) ||
-      !Number.isInteger(g.byte_size) || g.byte_size < 1 || g.byte_size > MAX_BYTES ||
-      typeof g.expires_at !== 'string' || !Number.isFinite(Date.parse(g.expires_at)) || Date.parse(g.expires_at) <= Date.now()) return null;
+function publicGrant(value) {
+  const grant = value?.success === true ? value.data : null;
+  if (
+    !grant || !UUID.test(grant.tenant_id) || !IMAGE_TYPES.has(grant.content_type) ||
+    !Number.isInteger(grant.byte_size) || grant.byte_size < 1 || grant.byte_size > MAX_BYTES ||
+    typeof grant.expires_at !== 'string' || !Number.isFinite(Date.parse(grant.expires_at)) ||
+    Date.parse(grant.expires_at) <= Date.now()
+  ) return null;
   try {
-    const u = new URL(g.read_url);
-    if (u.protocol !== 'https:' || !u.hostname.endsWith('.r2.cloudflarestorage.com') || u.port || u.username || u.password || u.hash) return null;
-    return { ...g, objectUrl: u };
-  } catch { return null; }
+    const objectUrl = new URL(grant.read_url);
+    if (objectUrl.protocol !== 'https:' || !objectUrl.hostname.endsWith('.r2.cloudflarestorage.com') ||
+      objectUrl.port || objectUrl.username || objectUrl.password || objectUrl.hash) return null;
+    return { ...grant, objectUrl };
+  } catch {
+    return null;
+  }
 }
 
-function passthroughStatus(status) {
-  return [401, 403, 404, 409, 429].includes(status) ? status : 503;
+function safeUpstreamStatus(status) {
+  if (AUTH_FAILURES.has(status)) return status;
+  return status >= 500 ? 503 : 502;
+}
+
+function cacheKeyFor(apiOrigin, slug, fileId, width) {
+  return new Request(`${apiOrigin}/api/media/public/stores/${slug}/files/${fileId}?w=${width}`);
+}
+
+function directApiRequest(apiOrigin, slug, fileId, width, request) {
+  const url = new URL(`/api/media/public/stores/${slug}/files/${fileId}?w=${width}`, apiOrigin);
+  const headers = new Headers({ Accept: request.headers.get('accept') ?? 'image/*' });
+  const requestId = request.headers.get('x-request-id');
+  if (requestId && /^[A-Za-z0-9._-]{1,100}$/.test(requestId)) headers.set('X-Request-Id', requestId);
+  return new Request(url, {
+    method: 'GET',
+    headers,
+    redirect: 'manual',
+    signal: AbortSignal.timeout(15_000),
+  });
+}
+
+async function fallbackToApi(network, apiOrigin, slug, fileId, width, request, cacheStatus = 'API-FALLBACK') {
+  try {
+    const response = await network(directApiRequest(apiOrigin, slug, fileId, width, request));
+    const headers = new Headers(response.headers);
+    headers.set('X-Media-Cache', cacheStatus);
+    return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+  } catch {
+    return failure(503);
+  }
 }
 
 export async function handleMedia(request, env, ctx, dependencies = {}) {
   const url = new URL(request.url);
-  const network = dependencies.fetch ?? fetch;
-  // Cloudflare path wildcards are trailing only, so the preview route covers /s/*.
-  // Forward every unrelated storefront request to the normal origin unchanged.
-  if (url.pathname.startsWith('/s/') && !/^\/s\/[^/]+\/media\/preview\/[^/]+$/.test(url.pathname)) return network(request);
+  const match = PUBLIC_PATH.exec(url.pathname);
+  if (!match) return (dependencies.fetch ?? fetch)(request);
   if (request.method !== 'GET') return failure(405);
-  const staffOrigin = safeOrigin(env.STAFF_ORIGIN);
-  const webOrigin = safeOrigin(env.WEB_ORIGIN);
+
   const apiOrigin = safeOrigin(env.API_ORIGIN);
-  if (!staffOrigin || !webOrigin || !apiOrigin || !env.MEDIA_READ_GRANT_SECRET || env.MEDIA_READ_GRANT_SECRET.length < 32 ||
-      !env.MEDIA_EDGE_AUTH_SECRET || env.MEDIA_EDGE_AUTH_SECRET.length < 32) return failure(503);
-  const staff = url.origin === staffOrigin && /^\/api\/media\/staff\/([^/]+)$/.exec(url.pathname);
-  const published = url.origin === webOrigin && /^\/api\/media\/public\/([^/]+)\/([^/]+)$/.exec(url.pathname);
-  const preview = url.origin === webOrigin && /^\/s\/([^/]+)\/media\/preview\/([^/]+)$/.exec(url.pathname);
-  if (!staff && !published && !preview) return failure(404);
-  const fileId = staff ? staff[1] : published ? published[2] : preview[2];
-  const slug = published ? published[1] : preview ? preview[1] : null;
+  const [slug, fileId] = match.slice(1);
   const width = url.searchParams.get('w') ?? '960';
-  const branch = url.searchParams.get('branch_id');
-  if (!UUID.test(fileId) || (slug && !SLUG.test(slug)) || !WIDTHS.has(width) || (branch !== null && (!staff || !UUID.test(branch))) ||
-      [...url.searchParams.keys()].some((key) => !['w', ...(staff ? ['branch_id'] : [])].includes(key)) ||
-      url.searchParams.getAll('w').length > 1 || url.searchParams.getAll('branch_id').length > 1) return failure(400);
+  if (
+    !apiOrigin || url.origin !== apiOrigin || !env.MEDIA_READ_GRANT_SECRET ||
+    env.MEDIA_READ_GRANT_SECRET.length < 32 || !SLUG.test(slug ?? '') || !UUID.test(fileId ?? '') ||
+    !WIDTHS.has(width) || [...url.searchParams.keys()].some((key) => key !== 'w') ||
+    url.searchParams.getAll('w').length > 1
+  ) return failure(400);
+
+  const network = dependencies.fetch ?? fetch;
   const cache = dependencies.cache ?? caches.default;
-  let cacheKey;
-  if (published) {
-    cacheKey = new Request(`${webOrigin}/api/media/public/${slug}/${fileId}?w=${width}`);
-    try {
-      const hit = await cache.match(cacheKey);
-      if (hit) {
-        const response = browserResponse(hit, true);
-        response.headers.set('X-Media-Cache', 'HIT');
-        return response;
-      }
-    } catch { /* A cache outage must not prevent an authorized origin read. */ }
+  const cacheKey = cacheKeyFor(apiOrigin, slug, fileId, width);
+  try {
+    const hit = await cache.match(cacheKey);
+    if (hit) return browserResponse(hit, 'HIT');
+  } catch {
+    // A cache outage should still allow the API/R2 origin read.
   }
-  let grantUrl;
-  const headers = new Headers();
-  if (published) {
-    grantUrl = new URL(`/internal/media/v1/public/stores/${slug}/files/${fileId}/grant`, apiOrigin);
-    headers.set('X-Drezivo-Media-Grant', env.MEDIA_READ_GRANT_SECRET);
-  } else {
-    grantUrl = new URL(staff ? `/api/media-edge/staff/${fileId}` : `/s/${slug}/media/grant/${fileId}`, staff ? staffOrigin : webOrigin);
-    headers.set('X-Media-Edge-Secret', env.MEDIA_EDGE_AUTH_SECRET);
-    const cookie = request.headers.get('cookie');
-    if (cookie) headers.set('Cookie', cookie);
-    if (branch) grantUrl.searchParams.set('branch_id', branch);
-  }
+
+  const grantUrl = new URL(`/internal/media/v1/public/stores/${slug}/files/${fileId}/grant`, apiOrigin);
   grantUrl.searchParams.set('w', width);
   let grantResponse;
   try {
-    grantResponse = await network(grantUrl, { method: published ? 'POST' : 'GET', headers, redirect: 'manual', signal: AbortSignal.timeout(10000) });
-  } catch { return failure(503); }
-  if (!grantResponse.ok) return failure(passthroughStatus(grantResponse.status));
-  let payload;
-  try { payload = await grantResponse.json(); } catch { return failure(502); }
-  const data = payload?.success === true ? payload.data : null;
-  // Other private documents keep using the existing authorized Vercel route.
-  if (staff && data && typeof data.purpose === 'string' && !STAFF_IMAGE_PURPOSES.has(data.purpose)) return network(request);
-  if (data?.content_type === 'application/pdf') return network(request);
-  const grant = validGrant(payload);
-  if (!grant) return failure(502);
-  let object;
-  try { object = await network(grant.objectUrl, { method: 'GET', redirect: 'manual', signal: AbortSignal.timeout(15000) }); }
-  catch { return failure(503); }
-  if (object.status !== 200 || !object.body || object.headers.get('content-type')?.split(';')[0].trim().toLowerCase() !== grant.content_type ||
-      object.headers.get('content-length') !== String(grant.byte_size)) return failure(502);
-  const result = new Response(object.body, { status: 200, headers: {
-    'Content-Type': grant.content_type, 'Content-Length': String(grant.byte_size),
-    'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer',
-  } });
-  const etag = object.headers.get('etag');
-  if (etag && /^[\x21-\x7e]{1,200}$/.test(etag)) result.headers.set('ETag', etag);
-  if (published && grant.byte_size <= MAX_PUBLIC_CACHE_BYTES && cacheKey) {
-    const cached = result.clone();
-    cached.headers.set('Cache-Control', 'public, max-age=45');
-    cached.headers.set('Cache-Tag', `tenant-${grant.tenant_id},media-${fileId}`);
-    ctx.waitUntil(cache.put(cacheKey, cached).catch(() => undefined));
+    grantResponse = await network(grantUrl, {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'X-Drezivo-Media-Grant': env.MEDIA_READ_GRANT_SECRET,
+      },
+      redirect: 'manual',
+      signal: AbortSignal.timeout(10_000),
+    });
+  } catch {
+    return fallbackToApi(network, apiOrigin, slug, fileId, width, request);
   }
-  const response = browserResponse(result, Boolean(published));
-  if (published) response.headers.set('X-Media-Cache', 'MISS');
+  if (!grantResponse.ok) {
+    if (AUTH_FAILURES.has(grantResponse.status)) return failure(grantResponse.status);
+    return fallbackToApi(network, apiOrigin, slug, fileId, width, request);
+  }
+
+  let grantPayload;
+  try {
+    grantPayload = await grantResponse.json();
+  } catch {
+    return fallbackToApi(network, apiOrigin, slug, fileId, width, request);
+  }
+  const grant = publicGrant(grantPayload);
+  if (!grant) return fallbackToApi(network, apiOrigin, slug, fileId, width, request);
+
+  let object;
+  try {
+    object = await network(grant.objectUrl, {
+      method: 'GET',
+      redirect: 'manual',
+      signal: AbortSignal.timeout(15_000),
+    });
+  } catch {
+    return fallbackToApi(network, apiOrigin, slug, fileId, width, request);
+  }
+  const contentType = object.headers.get('content-type')?.split(';')[0]?.trim().toLowerCase();
+  if (
+    object.status !== 200 || !object.body || contentType !== grant.content_type ||
+    object.headers.get('content-length') !== String(grant.byte_size)
+  ) return fallbackToApi(network, apiOrigin, slug, fileId, width, request);
+
+  const cachedResponse = new Response(object.body, { status: 200, headers: {
+    'Content-Type': grant.content_type,
+    'Content-Length': String(grant.byte_size),
+    'Cache-Control': 'public, max-age=45',
+    'Cache-Tag': `tenant-${grant.tenant_id},media-${fileId}`,
+    'X-Content-Type-Options': 'nosniff',
+    'Referrer-Policy': 'no-referrer',
+  } });
+  const cacheable = grant.byte_size <= MAX_PUBLIC_CACHE_BYTES ? cachedResponse.clone() : null;
+  const response = browserResponse(cachedResponse, 'MISS');
+  if (cacheable) {
+    ctx.waitUntil(cache.put(cacheKey, cacheable).catch(() => undefined));
+  }
   return response;
 }
 
-function browserResponse(source, published) {
+function browserResponse(source, cacheStatus) {
   const headers = new Headers(source.headers);
   headers.delete('Cache-Tag');
-  headers.set('Cache-Control', published ? 'public, max-age=0, must-revalidate' : 'private, no-store');
-  return new Response(source.body, { status: source.status, headers });
+  headers.set('Cache-Control', 'public, max-age=0, must-revalidate');
+  headers.set('X-Media-Cache', cacheStatus);
+  return new Response(source.body, { status: source.status, statusText: source.statusText, headers });
 }
 
 export default { fetch: (request, env, ctx) => handleMedia(request, env, ctx) };

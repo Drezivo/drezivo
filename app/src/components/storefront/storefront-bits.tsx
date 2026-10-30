@@ -1,4 +1,5 @@
 "use client";
+import { StaffMediaImage } from "@/components/ui/staff-media-image";
 
 import { Facebook, Instagram } from "lucide-react";
 
@@ -83,8 +84,7 @@ export function StorefrontMiniPreview({ settings, theme }: { settings: Storefron
       </div>
       <div className="relative aspect-[16/8]" style={{ background: palette.line }}>
         {heroImage ? (
-          // eslint-disable-next-line @next/next/no-img-element -- app-owned media route, not a static asset
-          <img src={heroImage} srcSet={mediaImageSrcSet(heroImage)} sizes="100vw" alt="" className="absolute inset-0 h-full w-full object-cover" />
+          <StaffMediaImage src={heroImage} srcSet={mediaImageSrcSet(heroImage)} sizes="100vw" alt="" className="absolute inset-0 h-full w-full object-cover" />
         ) : null}
         <div className="absolute inset-0 flex flex-col justify-end bg-gradient-to-t from-black/55 via-black/10 to-transparent p-3 text-white">
           <p className="font-display text-lg leading-tight">{content.hero.heading}</p>

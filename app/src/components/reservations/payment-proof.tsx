@@ -6,6 +6,7 @@ import { ExternalLink, FileText, Loader2, Maximize2 } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { ImageLightbox } from "@/components/ui/image-lightbox";
+import { StaffMediaImage } from "@/components/ui/staff-media-image";
 import { createDrezivoApiClient } from "@/lib/drezivo-api";
 
 export type PaymentProofState =
@@ -13,7 +14,7 @@ export type PaymentProofState =
   | { kind: "ready"; receipts: ReservationPaymentReceipt[] }
   | { kind: "error"; message: string };
 
-/** Loads uploaded receipts for one reservation. Links expire after five minutes. */
+/** Loads uploaded receipts for one reservation through the authorized private media API. */
 export function usePaymentProof(reservationId: string, enabled: boolean): PaymentProofState {
   const { getToken } = useAuth();
   const [state, setState] = useState<PaymentProofState>({ kind: "loading" });
@@ -95,8 +96,7 @@ export function PaymentProof({
             className="group relative h-40 w-32 overflow-hidden rounded-md border border-dashboard-border bg-dashboard-canvas focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dashboard-accent/40"
             aria-label={`View proof of payment ${index + 1} full size`}
           >
-            {/* eslint-disable-next-line @next/next/no-img-element -- five-minute signed URL */}
-            <img src={receipt.url} alt="" className="h-full w-full object-cover" />
+            <StaffMediaImage src={receipt.url} alt="" className="h-full w-full object-cover" />
             <span className="absolute inset-x-0 bottom-0 flex items-center justify-center gap-1 bg-black/55 py-1 text-[11px] text-white opacity-90 group-hover:opacity-100">
               <Maximize2 className="h-3 w-3" aria-hidden="true" />
               View full size

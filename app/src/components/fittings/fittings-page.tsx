@@ -1,4 +1,5 @@
 "use client";
+import { StaffMediaImage } from "@/components/ui/staff-media-image";
 
 import { useAuth } from "@clerk/nextjs";
 import { useSearchParams } from "next/navigation";
@@ -629,8 +630,7 @@ function AppointmentList({
                     <div className="flex min-w-0 items-start gap-2">
                       <span className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-dashboard-active text-dashboard-accent">
                         {firstGarment.variant.primary_image_url ? (
-                          // eslint-disable-next-line @next/next/no-img-element -- fitting garment media uses an authenticated same-origin API route.
-                          <img
+                          <StaffMediaImage
                             src={firstGarment.variant.primary_image_url}
                             srcSet={mediaImageSrcSet(firstGarment.variant.primary_image_url)}
                             sizes="64px"

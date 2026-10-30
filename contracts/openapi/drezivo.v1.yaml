@@ -211,16 +211,10 @@ components:
                     minLength: 1
                     maxLength: 80
                   primary_image_url:
-                    anyOf:
-                      - type: string
-                        format: uri
-                      - type: string
-                        pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                      - type: string
-                        pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                      - type: string
-                        pattern: ^\/s\/[a-z0-9-]{1,80}\/media\/preview\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                      - type: "null"
+                    type:
+                      - string
+                      - "null"
+                    format: uri
                 required:
                   - variant_id
                   - product_name
@@ -443,16 +437,10 @@ components:
                           minLength: 1
                           maxLength: 80
                         primary_image_url:
-                          anyOf:
-                            - type: string
-                              format: uri
-                            - type: string
-                              pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                            - type: string
-                              pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                            - type: string
-                              pattern: ^\/s\/[a-z0-9-]{1,80}\/media\/preview\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                            - type: "null"
+                          type:
+                            - string
+                            - "null"
+                          format: uri
                       required:
                         - variant_id
                         - product_name
@@ -1806,27 +1794,15 @@ components:
             - content_type
           additionalProperties: false
         qr_image_url:
-          anyOf:
-            - type: string
-              format: uri
-            - type: string
-              pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-            - type: string
-              pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-            - type: string
-              pattern: ^\/s\/[a-z0-9-]{1,80}\/media\/preview\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-            - type: "null"
+          type:
+            - string
+            - "null"
+          format: uri
         material_url:
-          anyOf:
-            - type: string
-              format: uri
-            - type: string
-              pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-            - type: string
-              pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-            - type: string
-              pattern: ^\/s\/[a-z0-9-]{1,80}\/media\/preview\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-            - type: "null"
+          type:
+            - string
+            - "null"
+          format: uri
       required:
         - id
         - name
@@ -1914,27 +1890,15 @@ components:
                   - content_type
                 additionalProperties: false
               qr_image_url:
-                anyOf:
-                  - type: string
-                    format: uri
-                  - type: string
-                    pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                  - type: string
-                    pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                  - type: string
-                    pattern: ^\/s\/[a-z0-9-]{1,80}\/media\/preview\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                  - type: "null"
+                type:
+                  - string
+                  - "null"
+                format: uri
               material_url:
-                anyOf:
-                  - type: string
-                    format: uri
-                  - type: string
-                    pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                  - type: string
-                    pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                  - type: string
-                    pattern: ^\/s\/[a-z0-9-]{1,80}\/media\/preview\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                  - type: "null"
+                type:
+                  - string
+                  - "null"
+                format: uri
             required:
               - id
               - name
@@ -2765,16 +2729,10 @@ components:
                 type: integer
                 minimum: 0
               image_url:
-                anyOf:
-                  - type: string
-                    format: uri
-                  - type: string
-                    pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                  - type: string
-                    pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                  - type: string
-                    pattern: ^\/s\/[a-z0-9-]{1,80}\/media\/preview\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                  - type: "null"
+                type:
+                  - string
+                  - "null"
+                format: uri
             required:
               - file_id
               - display_order
@@ -2848,16 +2806,10 @@ components:
                 type: integer
                 minimum: 0
               image_url:
-                anyOf:
-                  - type: string
-                    format: uri
-                  - type: string
-                    pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                  - type: string
-                    pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                  - type: string
-                    pattern: ^\/s\/[a-z0-9-]{1,80}\/media\/preview\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                  - type: "null"
+                type:
+                  - string
+                  - "null"
+                format: uri
             required:
               - file_id
               - display_order
@@ -7853,27 +7805,15 @@ paths:
                                 - content_type
                               additionalProperties: false
                             qr_image_url:
-                              anyOf:
-                                - type: string
-                                  format: uri
-                                - type: string
-                                  pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                                - type: string
-                                  pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                                - type: string
-                                  pattern: ^\/s\/[a-z0-9-]{1,80}\/media\/preview\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                                - type: "null"
+                              type:
+                                - string
+                                - "null"
+                              format: uri
                             material_url:
-                              anyOf:
-                                - type: string
-                                  format: uri
-                                - type: string
-                                  pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                                - type: string
-                                  pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                                - type: string
-                                  pattern: ^\/s\/[a-z0-9-]{1,80}\/media\/preview\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                                - type: "null"
+                              type:
+                                - string
+                                - "null"
+                              format: uri
                           required:
                             - id
                             - name
@@ -8179,27 +8119,15 @@ paths:
                           - content_type
                         additionalProperties: false
                       qr_image_url:
-                        anyOf:
-                          - type: string
-                            format: uri
-                          - type: string
-                            pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                          - type: string
-                            pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                          - type: string
-                            pattern: ^\/s\/[a-z0-9-]{1,80}\/media\/preview\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                          - type: "null"
+                        type:
+                          - string
+                          - "null"
+                        format: uri
                       material_url:
-                        anyOf:
-                          - type: string
-                            format: uri
-                          - type: string
-                            pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                          - type: string
-                            pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                          - type: string
-                            pattern: ^\/s\/[a-z0-9-]{1,80}\/media\/preview\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                          - type: "null"
+                        type:
+                          - string
+                          - "null"
+                        format: uri
                     required:
                       - id
                       - name
@@ -8777,27 +8705,15 @@ paths:
                           - content_type
                         additionalProperties: false
                       qr_image_url:
-                        anyOf:
-                          - type: string
-                            format: uri
-                          - type: string
-                            pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                          - type: string
-                            pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                          - type: string
-                            pattern: ^\/s\/[a-z0-9-]{1,80}\/media\/preview\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                          - type: "null"
+                        type:
+                          - string
+                          - "null"
+                        format: uri
                       material_url:
-                        anyOf:
-                          - type: string
-                            format: uri
-                          - type: string
-                            pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                          - type: string
-                            pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                          - type: string
-                            pattern: ^\/s\/[a-z0-9-]{1,80}\/media\/preview\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                          - type: "null"
+                        type:
+                          - string
+                          - "null"
+                        format: uri
                     required:
                       - id
                       - name
@@ -8994,6 +8910,148 @@ paths:
                   - success
                   - error
                   - request_id
+  /api/media/public/stores/{slug}/files/{fileId}:
+    get:
+      servers:
+        - url: /
+      tags:
+        - storefront
+      summary: Stream a published storefront image through the API host for Cloudflare
+        caching.
+      description: This unversioned media path is a direct-origin fallback for the
+        Cloudflare Worker. Successful images are cacheable at the edge for 45
+        seconds; access and publication are checked on every origin read.
+      parameters:
+        - schema:
+            type: string
+            minLength: 1
+            maxLength: 80
+            pattern: ^[a-z0-9-]+$
+          required: true
+          name: slug
+          in: path
+        - schema:
+            type: string
+            format: uuid
+          required: true
+          name: fileId
+          in: path
+        - schema:
+            type: string
+            enum:
+              - "320"
+              - "960"
+              - "1600"
+          required: false
+          name: w
+          in: query
+      responses:
+        "200":
+          description: Published image bytes. Cloudflare may cache the response for 45
+            seconds.
+          headers:
+            Cache-Control:
+              description: public, max-age=0, s-maxage=45
+              schema:
+                type: string
+          content:
+            image/jpeg:
+              schema:
+                type: string
+            image/png:
+              schema:
+                type: string
+            image/webp:
+              schema:
+                type: string
+        "404":
+          description: No published image exists at this store and file id.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        enum: *a28
+                      message:
+                        type: string
+                        minLength: 1
+                      fields:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            field:
+                              type: string
+                              minLength: 1
+                            message:
+                              type: string
+                              minLength: 1
+                          required:
+                            - field
+                            - message
+                    required:
+                      - code
+                      - message
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - error
+                  - request_id
+        "429":
+          description: Public media request rate limit exceeded.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        enum: *a28
+                      message:
+                        type: string
+                        minLength: 1
+                      fields:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            field:
+                              type: string
+                              minLength: 1
+                            message:
+                              type: string
+                              minLength: 1
+                          required:
+                            - field
+                            - message
+                    required:
+                      - code
+                      - message
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - error
+                  - request_id
   /public/stores/{slug}:
     get:
       tags:
@@ -9024,6 +9082,10 @@ paths:
                       slug:
                         type: string
                         minLength: 1
+                      preview_media_session:
+                        type: string
+                        minLength: 1
+                        maxLength: 256
                       name:
                         type: string
                         minLength: 1
@@ -9043,27 +9105,15 @@ paths:
                           - blush
                           - noir
                       logo_url:
-                        anyOf:
-                          - type: string
-                            format: uri
-                          - type: string
-                            pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                          - type: string
-                            pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                          - type: string
-                            pattern: ^\/s\/[a-z0-9-]{1,80}\/media\/preview\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                          - type: "null"
+                        type:
+                          - string
+                          - "null"
+                        format: uri
                       cover_url:
-                        anyOf:
-                          - type: string
-                            format: uri
-                          - type: string
-                            pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                          - type: string
-                            pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                          - type: string
-                            pattern: ^\/s\/[a-z0-9-]{1,80}\/media\/preview\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                          - type: "null"
+                        type:
+                          - string
+                          - "null"
+                        format: uri
                       currency:
                         type: string
                         pattern: ^[A-Z]{3}$
@@ -9126,16 +9176,10 @@ paths:
                                   - string
                                   - "null"
                               image_url:
-                                anyOf:
-                                  - type: string
-                                    format: uri
-                                  - type: string
-                                    pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                                  - type: string
-                                    pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                                  - type: string
-                                    pattern: ^\/s\/[a-z0-9-]{1,80}\/media\/preview\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                                  - type: "null"
+                                type:
+                                  - string
+                                  - "null"
+                                format: uri
                             required:
                               - heading
                               - body
@@ -9153,16 +9197,10 @@ paths:
                                   - string
                                   - "null"
                               image_url:
-                                anyOf:
-                                  - type: string
-                                    format: uri
-                                  - type: string
-                                    pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                                  - type: string
-                                    pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                                  - type: string
-                                    pattern: ^\/s\/[a-z0-9-]{1,80}\/media\/preview\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                                  - type: "null"
+                                type:
+                                  - string
+                                  - "null"
+                                format: uri
                             required:
                               - heading
                               - body
@@ -9242,16 +9280,10 @@ paths:
                               minLength: 1
                               maxLength: 120
                             image_url:
-                              anyOf:
-                                - type: string
-                                  format: uri
-                                - type: string
-                                  pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                                - type: string
-                                  pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                                - type: string
-                                  pattern: ^\/s\/[a-z0-9-]{1,80}\/media\/preview\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                                - type: "null"
+                              type:
+                                - string
+                                - "null"
+                              format: uri
                             price_from_minor:
                               type: string
                               pattern: ^-?(0|[1-9]\d*)$
@@ -9301,16 +9333,10 @@ paths:
                               minLength: 1
                               maxLength: 120
                             image_url:
-                              anyOf:
-                                - type: string
-                                  format: uri
-                                - type: string
-                                  pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                                - type: string
-                                  pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                                - type: string
-                                  pattern: ^\/s\/[a-z0-9-]{1,80}\/media\/preview\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                                - type: "null"
+                              type:
+                                - string
+                                - "null"
+                              format: uri
                             price_from_minor:
                               type: string
                               pattern: ^-?(0|[1-9]\d*)$
@@ -9351,15 +9377,8 @@ paths:
                           image_urls:
                             type: array
                             items:
-                              anyOf:
-                                - type: string
-                                  format: uri
-                                - type: string
-                                  pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                                - type: string
-                                  pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                                - type: string
-                                  pattern: ^\/s\/[a-z0-9-]{1,80}\/media\/preview\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
+                              type: string
+                              format: uri
                             default: []
                           rental:
                             type: string
@@ -9682,16 +9701,10 @@ paths:
                               minLength: 1
                               maxLength: 120
                             image_url:
-                              anyOf:
-                                - type: string
-                                  format: uri
-                                - type: string
-                                  pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                                - type: string
-                                  pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                                - type: string
-                                  pattern: ^\/s\/[a-z0-9-]{1,80}\/media\/preview\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                                - type: "null"
+                              type:
+                                - string
+                                - "null"
+                              format: uri
                             price_from_minor:
                               type: string
                               pattern: ^-?(0|[1-9]\d*)$
@@ -9808,15 +9821,8 @@ paths:
                       image_urls:
                         type: array
                         items:
-                          anyOf:
-                            - type: string
-                              format: uri
-                            - type: string
-                              pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                            - type: string
-                              pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                            - type: string
-                              pattern: ^\/s\/[a-z0-9-]{1,80}\/media\/preview\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
+                          type: string
+                          format: uri
                         maxItems: 5
                       variants:
                         type: array
@@ -9903,16 +9909,10 @@ paths:
                                       enum:
                                         - default_guide
                                     guide_image_url:
-                                      anyOf:
-                                        - type: string
-                                          format: uri
-                                        - type: string
-                                          pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                                        - type: string
-                                          pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                                        - type: string
-                                          pattern: ^\/s\/[a-z0-9-]{1,80}\/media\/preview\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                                        - type: "null"
+                                      type:
+                                        - string
+                                        - "null"
+                                      format: uri
                                   required:
                                     - mode
                                     - guide_image_url
@@ -10260,28 +10260,14 @@ paths:
                                   - manual_qr
                                   - manual_transfer
                               qr_image_url:
-                                anyOf:
-                                  - type: string
-                                    format: uri
-                                  - type: string
-                                    pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                                  - type: string
-                                    pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                                  - type: string
-                                    pattern: ^\/s\/[a-z0-9-]{1,80}\/media\/preview\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
+                                type: string
+                                format: uri
                               destination_note:
                                 type: string
                                 maxLength: 2000
                               material_url:
-                                anyOf:
-                                  - type: string
-                                    format: uri
-                                  - type: string
-                                    pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                                  - type: string
-                                    pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                                  - type: string
-                                    pattern: ^\/s\/[a-z0-9-]{1,80}\/media\/preview\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
+                                type: string
+                                format: uri
                               material_content_type:
                                 type: string
                                 enum: &a40
@@ -11400,28 +11386,14 @@ paths:
                             type: string
                             enum: *a39
                           qr_image_url:
-                            anyOf:
-                              - type: string
-                                format: uri
-                              - type: string
-                                pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                              - type: string
-                                pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                              - type: string
-                                pattern: ^\/s\/[a-z0-9-]{1,80}\/media\/preview\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
+                            type: string
+                            format: uri
                           destination_note:
                             type: string
                             maxLength: 2000
                           material_url:
-                            anyOf:
-                              - type: string
-                                format: uri
-                              - type: string
-                                pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                              - type: string
-                                pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                              - type: string
-                                pattern: ^\/s\/[a-z0-9-]{1,80}\/media\/preview\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
+                            type: string
+                            format: uri
                           material_content_type:
                             type: string
                             enum: *a40
@@ -17618,16 +17590,10 @@ paths:
                                   minLength: 1
                                   maxLength: 200
                                 primary_image_url:
-                                  anyOf:
-                                    - type: string
-                                      format: uri
-                                    - type: string
-                                      pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                                    - type: string
-                                      pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                                    - type: string
-                                      pattern: ^\/s\/[a-z0-9-]{1,80}\/media\/preview\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                                    - type: "null"
+                                  type:
+                                    - string
+                                    - "null"
+                                  format: uri
                               required:
                                 - id
                                 - name
@@ -19096,16 +19062,10 @@ paths:
                                         minLength: 1
                                         maxLength: 80
                                       primary_image_url:
-                                        anyOf:
-                                          - type: string
-                                            format: uri
-                                          - type: string
-                                            pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                                          - type: string
-                                            pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                                          - type: string
-                                            pattern: ^\/s\/[a-z0-9-]{1,80}\/media\/preview\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                                          - type: "null"
+                                        type:
+                                          - string
+                                          - "null"
+                                        format: uri
                                     required:
                                       - variant_id
                                       - product_name
@@ -19518,16 +19478,10 @@ paths:
                                       minLength: 1
                                       maxLength: 80
                                     primary_image_url:
-                                      anyOf:
-                                        - type: string
-                                          format: uri
-                                        - type: string
-                                          pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                                        - type: string
-                                          pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                                        - type: string
-                                          pattern: ^\/s\/[a-z0-9-]{1,80}\/media\/preview\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                                        - type: "null"
+                                      type:
+                                        - string
+                                        - "null"
+                                      format: uri
                                   required:
                                     - variant_id
                                     - product_name
@@ -19926,16 +19880,10 @@ paths:
                                   minLength: 1
                                   maxLength: 80
                                 primary_image_url:
-                                  anyOf:
-                                    - type: string
-                                      format: uri
-                                    - type: string
-                                      pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                                    - type: string
-                                      pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                                    - type: string
-                                      pattern: ^\/s\/[a-z0-9-]{1,80}\/media\/preview\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                                    - type: "null"
+                                  type:
+                                    - string
+                                    - "null"
+                                  format: uri
                               required:
                                 - variant_id
                                 - product_name
@@ -20472,16 +20420,10 @@ paths:
                                       minLength: 1
                                       maxLength: 80
                                     primary_image_url:
-                                      anyOf:
-                                        - type: string
-                                          format: uri
-                                        - type: string
-                                          pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                                        - type: string
-                                          pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                                        - type: string
-                                          pattern: ^\/s\/[a-z0-9-]{1,80}\/media\/preview\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                                        - type: "null"
+                                      type:
+                                        - string
+                                        - "null"
+                                      format: uri
                                   required:
                                     - variant_id
                                     - product_name
@@ -20919,16 +20861,10 @@ paths:
                                       minLength: 1
                                       maxLength: 80
                                     primary_image_url:
-                                      anyOf:
-                                        - type: string
-                                          format: uri
-                                        - type: string
-                                          pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                                        - type: string
-                                          pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                                        - type: string
-                                          pattern: ^\/s\/[a-z0-9-]{1,80}\/media\/preview\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                                        - type: "null"
+                                      type:
+                                        - string
+                                        - "null"
+                                      format: uri
                                   required:
                                     - variant_id
                                     - product_name
@@ -21397,16 +21333,10 @@ paths:
                                       minLength: 1
                                       maxLength: 80
                                     primary_image_url:
-                                      anyOf:
-                                        - type: string
-                                          format: uri
-                                        - type: string
-                                          pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                                        - type: string
-                                          pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                                        - type: string
-                                          pattern: ^\/s\/[a-z0-9-]{1,80}\/media\/preview\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                                        - type: "null"
+                                      type:
+                                        - string
+                                        - "null"
+                                      format: uri
                                   required:
                                     - variant_id
                                     - product_name
@@ -21870,16 +21800,10 @@ paths:
                                       minLength: 1
                                       maxLength: 80
                                     primary_image_url:
-                                      anyOf:
-                                        - type: string
-                                          format: uri
-                                        - type: string
-                                          pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                                        - type: string
-                                          pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                                        - type: string
-                                          pattern: ^\/s\/[a-z0-9-]{1,80}\/media\/preview\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                                        - type: "null"
+                                      type:
+                                        - string
+                                        - "null"
+                                      format: uri
                                   required:
                                     - variant_id
                                     - product_name
@@ -22347,16 +22271,10 @@ paths:
                                       minLength: 1
                                       maxLength: 80
                                     primary_image_url:
-                                      anyOf:
-                                        - type: string
-                                          format: uri
-                                        - type: string
-                                          pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                                        - type: string
-                                          pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                                        - type: string
-                                          pattern: ^\/s\/[a-z0-9-]{1,80}\/media\/preview\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                                        - type: "null"
+                                      type:
+                                        - string
+                                        - "null"
+                                      format: uri
                                   required:
                                     - variant_id
                                     - product_name
@@ -22824,16 +22742,10 @@ paths:
                                       minLength: 1
                                       maxLength: 80
                                     primary_image_url:
-                                      anyOf:
-                                        - type: string
-                                          format: uri
-                                        - type: string
-                                          pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                                        - type: string
-                                          pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                                        - type: string
-                                          pattern: ^\/s\/[a-z0-9-]{1,80}\/media\/preview\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                                        - type: "null"
+                                      type:
+                                        - string
+                                        - "null"
+                                      format: uri
                                   required:
                                     - variant_id
                                     - product_name
@@ -23296,16 +23208,10 @@ paths:
                                       minLength: 1
                                       maxLength: 80
                                     primary_image_url:
-                                      anyOf:
-                                        - type: string
-                                          format: uri
-                                        - type: string
-                                          pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                                        - type: string
-                                          pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                                        - type: string
-                                          pattern: ^\/s\/[a-z0-9-]{1,80}\/media\/preview\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                                        - type: "null"
+                                      type:
+                                        - string
+                                        - "null"
+                                      format: uri
                                   required:
                                     - variant_id
                                     - product_name
@@ -23768,16 +23674,10 @@ paths:
                                       minLength: 1
                                       maxLength: 80
                                     primary_image_url:
-                                      anyOf:
-                                        - type: string
-                                          format: uri
-                                        - type: string
-                                          pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                                        - type: string
-                                          pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                                        - type: string
-                                          pattern: ^\/s\/[a-z0-9-]{1,80}\/media\/preview\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                                        - type: "null"
+                                      type:
+                                        - string
+                                        - "null"
+                                      format: uri
                                   required:
                                     - variant_id
                                     - product_name
@@ -24243,16 +24143,10 @@ paths:
                                       minLength: 1
                                       maxLength: 80
                                     primary_image_url:
-                                      anyOf:
-                                        - type: string
-                                          format: uri
-                                        - type: string
-                                          pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                                        - type: string
-                                          pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                                        - type: string
-                                          pattern: ^\/s\/[a-z0-9-]{1,80}\/media\/preview\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                                        - type: "null"
+                                      type:
+                                        - string
+                                        - "null"
+                                      format: uri
                                   required:
                                     - variant_id
                                     - product_name
@@ -24718,16 +24612,10 @@ paths:
                                       minLength: 1
                                       maxLength: 80
                                     primary_image_url:
-                                      anyOf:
-                                        - type: string
-                                          format: uri
-                                        - type: string
-                                          pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                                        - type: string
-                                          pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                                        - type: string
-                                          pattern: ^\/s\/[a-z0-9-]{1,80}\/media\/preview\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                                        - type: "null"
+                                      type:
+                                        - string
+                                        - "null"
+                                      format: uri
                                   required:
                                     - variant_id
                                     - product_name
@@ -25213,16 +25101,10 @@ paths:
                                       minLength: 1
                                       maxLength: 80
                                     primary_image_url:
-                                      anyOf:
-                                        - type: string
-                                          format: uri
-                                        - type: string
-                                          pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                                        - type: string
-                                          pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                                        - type: string
-                                          pattern: ^\/s\/[a-z0-9-]{1,80}\/media\/preview\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                                        - type: "null"
+                                      type:
+                                        - string
+                                        - "null"
+                                      format: uri
                                   required:
                                     - variant_id
                                     - product_name
@@ -26005,28 +25887,14 @@ paths:
                             type: string
                             enum: *a39
                           qr_image_url:
-                            anyOf:
-                              - type: string
-                                format: uri
-                              - type: string
-                                pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                              - type: string
-                                pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                              - type: string
-                                pattern: ^\/s\/[a-z0-9-]{1,80}\/media\/preview\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
+                            type: string
+                            format: uri
                           destination_note:
                             type: string
                             maxLength: 2000
                           material_url:
-                            anyOf:
-                              - type: string
-                                format: uri
-                              - type: string
-                                pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                              - type: string
-                                pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                              - type: string
-                                pattern: ^\/s\/[a-z0-9-]{1,80}\/media\/preview\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
+                            type: string
+                            format: uri
                           material_content_type:
                             type: string
                             enum: *a40
@@ -26490,28 +26358,14 @@ paths:
                             type: string
                             enum: *a39
                           qr_image_url:
-                            anyOf:
-                              - type: string
-                                format: uri
-                              - type: string
-                                pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                              - type: string
-                                pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                              - type: string
-                                pattern: ^\/s\/[a-z0-9-]{1,80}\/media\/preview\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
+                            type: string
+                            format: uri
                           destination_note:
                             type: string
                             maxLength: 2000
                           material_url:
-                            anyOf:
-                              - type: string
-                                format: uri
-                              - type: string
-                                pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                              - type: string
-                                pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                              - type: string
-                                pattern: ^\/s\/[a-z0-9-]{1,80}\/media\/preview\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
+                            type: string
+                            format: uri
                           material_content_type:
                             type: string
                             enum: *a40
@@ -28413,49 +28267,25 @@ paths:
                         type: object
                         properties:
                           logo_url:
-                            anyOf:
-                              - type: string
-                                format: uri
-                              - type: string
-                                pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                              - type: string
-                                pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                              - type: string
-                                pattern: ^\/s\/[a-z0-9-]{1,80}\/media\/preview\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                              - type: "null"
+                            type:
+                              - string
+                              - "null"
+                            format: uri
                           cover_url:
-                            anyOf:
-                              - type: string
-                                format: uri
-                              - type: string
-                                pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                              - type: string
-                                pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                              - type: string
-                                pattern: ^\/s\/[a-z0-9-]{1,80}\/media\/preview\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                              - type: "null"
+                            type:
+                              - string
+                              - "null"
+                            format: uri
                           hero_image_url:
-                            anyOf:
-                              - type: string
-                                format: uri
-                              - type: string
-                                pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                              - type: string
-                                pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                              - type: string
-                                pattern: ^\/s\/[a-z0-9-]{1,80}\/media\/preview\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                              - type: "null"
+                            type:
+                              - string
+                              - "null"
+                            format: uri
                           about_image_url:
-                            anyOf:
-                              - type: string
-                                format: uri
-                              - type: string
-                                pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                              - type: string
-                                pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                              - type: string
-                                pattern: ^\/s\/[a-z0-9-]{1,80}\/media\/preview\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                              - type: "null"
+                            type:
+                              - string
+                              - "null"
+                            format: uri
                         required:
                           - logo_url
                           - cover_url
@@ -28541,15 +28371,8 @@ paths:
                           image_urls:
                             type: object
                             additionalProperties:
-                              anyOf:
-                                - type: string
-                                  format: uri
-                                - type: string
-                                  pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                                - type: string
-                                  pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                                - type: string
-                                  pattern: ^\/s\/[a-z0-9-]{1,80}\/media\/preview\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
+                              type: string
+                              format: uri
                             default: &a56 {}
                         required:
                           - version
@@ -29200,49 +29023,25 @@ paths:
                         type: object
                         properties:
                           logo_url:
-                            anyOf:
-                              - type: string
-                                format: uri
-                              - type: string
-                                pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                              - type: string
-                                pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                              - type: string
-                                pattern: ^\/s\/[a-z0-9-]{1,80}\/media\/preview\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                              - type: "null"
+                            type:
+                              - string
+                              - "null"
+                            format: uri
                           cover_url:
-                            anyOf:
-                              - type: string
-                                format: uri
-                              - type: string
-                                pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                              - type: string
-                                pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                              - type: string
-                                pattern: ^\/s\/[a-z0-9-]{1,80}\/media\/preview\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                              - type: "null"
+                            type:
+                              - string
+                              - "null"
+                            format: uri
                           hero_image_url:
-                            anyOf:
-                              - type: string
-                                format: uri
-                              - type: string
-                                pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                              - type: string
-                                pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                              - type: string
-                                pattern: ^\/s\/[a-z0-9-]{1,80}\/media\/preview\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                              - type: "null"
+                            type:
+                              - string
+                              - "null"
+                            format: uri
                           about_image_url:
-                            anyOf:
-                              - type: string
-                                format: uri
-                              - type: string
-                                pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                              - type: string
-                                pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                              - type: string
-                                pattern: ^\/s\/[a-z0-9-]{1,80}\/media\/preview\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                              - type: "null"
+                            type:
+                              - string
+                              - "null"
+                            format: uri
                         required:
                           - logo_url
                           - cover_url
@@ -29326,15 +29125,8 @@ paths:
                           image_urls:
                             type: object
                             additionalProperties:
-                              anyOf:
-                                - type: string
-                                  format: uri
-                                - type: string
-                                  pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                                - type: string
-                                  pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                                - type: string
-                                  pattern: ^\/s\/[a-z0-9-]{1,80}\/media\/preview\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
+                              type: string
+                              format: uri
                             default: *a56
                         required:
                           - version
@@ -29893,49 +29685,25 @@ paths:
                         type: object
                         properties:
                           logo_url:
-                            anyOf:
-                              - type: string
-                                format: uri
-                              - type: string
-                                pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                              - type: string
-                                pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                              - type: string
-                                pattern: ^\/s\/[a-z0-9-]{1,80}\/media\/preview\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                              - type: "null"
+                            type:
+                              - string
+                              - "null"
+                            format: uri
                           cover_url:
-                            anyOf:
-                              - type: string
-                                format: uri
-                              - type: string
-                                pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                              - type: string
-                                pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                              - type: string
-                                pattern: ^\/s\/[a-z0-9-]{1,80}\/media\/preview\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                              - type: "null"
+                            type:
+                              - string
+                              - "null"
+                            format: uri
                           hero_image_url:
-                            anyOf:
-                              - type: string
-                                format: uri
-                              - type: string
-                                pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                              - type: string
-                                pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                              - type: string
-                                pattern: ^\/s\/[a-z0-9-]{1,80}\/media\/preview\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                              - type: "null"
+                            type:
+                              - string
+                              - "null"
+                            format: uri
                           about_image_url:
-                            anyOf:
-                              - type: string
-                                format: uri
-                              - type: string
-                                pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                              - type: string
-                                pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                              - type: string
-                                pattern: ^\/s\/[a-z0-9-]{1,80}\/media\/preview\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                              - type: "null"
+                            type:
+                              - string
+                              - "null"
+                            format: uri
                         required:
                           - logo_url
                           - cover_url
@@ -30019,15 +29787,8 @@ paths:
                           image_urls:
                             type: object
                             additionalProperties:
-                              anyOf:
-                                - type: string
-                                  format: uri
-                                - type: string
-                                  pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                                - type: string
-                                  pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                                - type: string
-                                  pattern: ^\/s\/[a-z0-9-]{1,80}\/media\/preview\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
+                              type: string
+                              format: uri
                             default: *a56
                         required:
                           - version
@@ -30451,49 +30212,25 @@ paths:
                         type: object
                         properties:
                           logo_url:
-                            anyOf:
-                              - type: string
-                                format: uri
-                              - type: string
-                                pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                              - type: string
-                                pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                              - type: string
-                                pattern: ^\/s\/[a-z0-9-]{1,80}\/media\/preview\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                              - type: "null"
+                            type:
+                              - string
+                              - "null"
+                            format: uri
                           cover_url:
-                            anyOf:
-                              - type: string
-                                format: uri
-                              - type: string
-                                pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                              - type: string
-                                pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                              - type: string
-                                pattern: ^\/s\/[a-z0-9-]{1,80}\/media\/preview\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                              - type: "null"
+                            type:
+                              - string
+                              - "null"
+                            format: uri
                           hero_image_url:
-                            anyOf:
-                              - type: string
-                                format: uri
-                              - type: string
-                                pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                              - type: string
-                                pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                              - type: string
-                                pattern: ^\/s\/[a-z0-9-]{1,80}\/media\/preview\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                              - type: "null"
+                            type:
+                              - string
+                              - "null"
+                            format: uri
                           about_image_url:
-                            anyOf:
-                              - type: string
-                                format: uri
-                              - type: string
-                                pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                              - type: string
-                                pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                              - type: string
-                                pattern: ^\/s\/[a-z0-9-]{1,80}\/media\/preview\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                              - type: "null"
+                            type:
+                              - string
+                              - "null"
+                            format: uri
                         required:
                           - logo_url
                           - cover_url
@@ -30577,15 +30314,8 @@ paths:
                           image_urls:
                             type: object
                             additionalProperties:
-                              anyOf:
-                                - type: string
-                                  format: uri
-                                - type: string
-                                  pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                                - type: string
-                                  pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                                - type: string
-                                  pattern: ^\/s\/[a-z0-9-]{1,80}\/media\/preview\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
+                              type: string
+                              format: uri
                             default: *a56
                         required:
                           - version
@@ -31009,49 +30739,25 @@ paths:
                         type: object
                         properties:
                           logo_url:
-                            anyOf:
-                              - type: string
-                                format: uri
-                              - type: string
-                                pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                              - type: string
-                                pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                              - type: string
-                                pattern: ^\/s\/[a-z0-9-]{1,80}\/media\/preview\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                              - type: "null"
+                            type:
+                              - string
+                              - "null"
+                            format: uri
                           cover_url:
-                            anyOf:
-                              - type: string
-                                format: uri
-                              - type: string
-                                pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                              - type: string
-                                pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                              - type: string
-                                pattern: ^\/s\/[a-z0-9-]{1,80}\/media\/preview\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                              - type: "null"
+                            type:
+                              - string
+                              - "null"
+                            format: uri
                           hero_image_url:
-                            anyOf:
-                              - type: string
-                                format: uri
-                              - type: string
-                                pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                              - type: string
-                                pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                              - type: string
-                                pattern: ^\/s\/[a-z0-9-]{1,80}\/media\/preview\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                              - type: "null"
+                            type:
+                              - string
+                              - "null"
+                            format: uri
                           about_image_url:
-                            anyOf:
-                              - type: string
-                                format: uri
-                              - type: string
-                                pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                              - type: string
-                                pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                              - type: string
-                                pattern: ^\/s\/[a-z0-9-]{1,80}\/media\/preview\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                              - type: "null"
+                            type:
+                              - string
+                              - "null"
+                            format: uri
                         required:
                           - logo_url
                           - cover_url
@@ -31135,15 +30841,8 @@ paths:
                           image_urls:
                             type: object
                             additionalProperties:
-                              anyOf:
-                                - type: string
-                                  format: uri
-                                - type: string
-                                  pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                                - type: string
-                                  pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                                - type: string
-                                  pattern: ^\/s\/[a-z0-9-]{1,80}\/media\/preview\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
+                              type: string
+                              format: uri
                             default: *a56
                         required:
                           - version
@@ -31631,49 +31330,25 @@ paths:
                         type: object
                         properties:
                           logo_url:
-                            anyOf:
-                              - type: string
-                                format: uri
-                              - type: string
-                                pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                              - type: string
-                                pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                              - type: string
-                                pattern: ^\/s\/[a-z0-9-]{1,80}\/media\/preview\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                              - type: "null"
+                            type:
+                              - string
+                              - "null"
+                            format: uri
                           cover_url:
-                            anyOf:
-                              - type: string
-                                format: uri
-                              - type: string
-                                pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                              - type: string
-                                pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                              - type: string
-                                pattern: ^\/s\/[a-z0-9-]{1,80}\/media\/preview\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                              - type: "null"
+                            type:
+                              - string
+                              - "null"
+                            format: uri
                           hero_image_url:
-                            anyOf:
-                              - type: string
-                                format: uri
-                              - type: string
-                                pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                              - type: string
-                                pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                              - type: string
-                                pattern: ^\/s\/[a-z0-9-]{1,80}\/media\/preview\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                              - type: "null"
+                            type:
+                              - string
+                              - "null"
+                            format: uri
                           about_image_url:
-                            anyOf:
-                              - type: string
-                                format: uri
-                              - type: string
-                                pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                              - type: string
-                                pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                              - type: string
-                                pattern: ^\/s\/[a-z0-9-]{1,80}\/media\/preview\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                              - type: "null"
+                            type:
+                              - string
+                              - "null"
+                            format: uri
                         required:
                           - logo_url
                           - cover_url
@@ -31757,15 +31432,8 @@ paths:
                           image_urls:
                             type: object
                             additionalProperties:
-                              anyOf:
-                                - type: string
-                                  format: uri
-                                - type: string
-                                  pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                                - type: string
-                                  pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                                - type: string
-                                  pattern: ^\/s\/[a-z0-9-]{1,80}\/media\/preview\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
+                              type: string
+                              format: uri
                             default: *a56
                         required:
                           - version
@@ -34428,27 +34096,15 @@ paths:
                           - content_type
                         additionalProperties: false
                       qr_image_url:
-                        anyOf:
-                          - type: string
-                            format: uri
-                          - type: string
-                            pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                          - type: string
-                            pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                          - type: string
-                            pattern: ^\/s\/[a-z0-9-]{1,80}\/media\/preview\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                          - type: "null"
+                        type:
+                          - string
+                          - "null"
+                        format: uri
                       material_url:
-                        anyOf:
-                          - type: string
-                            format: uri
-                          - type: string
-                            pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                          - type: string
-                            pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                          - type: string
-                            pattern: ^\/s\/[a-z0-9-]{1,80}\/media\/preview\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                          - type: "null"
+                        type:
+                          - string
+                          - "null"
+                        format: uri
                     required:
                       - id
                       - name
@@ -34684,28 +34340,14 @@ paths:
                             type: string
                             enum: *a39
                           qr_image_url:
-                            anyOf:
-                              - type: string
-                                format: uri
-                              - type: string
-                                pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                              - type: string
-                                pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                              - type: string
-                                pattern: ^\/s\/[a-z0-9-]{1,80}\/media\/preview\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
+                            type: string
+                            format: uri
                           destination_note:
                             type: string
                             maxLength: 2000
                           material_url:
-                            anyOf:
-                              - type: string
-                                format: uri
-                              - type: string
-                                pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                              - type: string
-                                pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                              - type: string
-                                pattern: ^\/s\/[a-z0-9-]{1,80}\/media\/preview\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
+                            type: string
+                            format: uri
                           material_content_type:
                             type: string
                             enum: *a40

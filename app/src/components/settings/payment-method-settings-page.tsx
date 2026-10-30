@@ -1,4 +1,5 @@
 "use client";
+import { StaffMediaImage } from "@/components/ui/staff-media-image";
 
 import { useAuth } from "@clerk/nextjs";
 import {
@@ -272,8 +273,7 @@ function SharedRenterStepsCard({ setting, onSaved }: { setting: PaymentRenterSte
                   {legacy.text ? <pre className="mt-2 whitespace-pre-wrap break-words font-sans text-sm text-dashboard-muted select-text">{legacy.text}</pre> : null}
                   {legacy.image?.image_url ? (
                     <div className="mt-2">
-                      {/* eslint-disable-next-line @next/next/no-img-element -- short-lived signed legacy guide preview */}
-                      <img src={legacy.image.image_url} alt={`${legacy.payment_method_name} renter steps`} className="mb-2 max-h-48 w-auto rounded-lg border border-dashboard-border bg-dashboard-surface object-contain" />
+                      <StaffMediaImage src={legacy.image.image_url} alt={`${legacy.payment_method_name} renter steps`} className="mb-2 max-h-48 w-auto rounded-lg border border-dashboard-border bg-dashboard-surface object-contain" />
                       <a className="text-xs text-dashboard-accent underline" href={legacy.image.image_url} target="_blank" rel="noreferrer">Open existing image</a>
                     </div>
                   ) : legacy.image ? <p className="mt-2 text-xs text-dashboard-muted">Existing image could not be previewed.</p> : null}
@@ -309,8 +309,7 @@ function SharedRenterStepsCard({ setting, onSaved }: { setting: PaymentRenterSte
           <div className="mt-4">
             <label className="text-sm font-medium text-dashboard-navy" htmlFor={inputId}>Steps image</label>
             {imageUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element -- short-lived signed or local object URL
-              <img src={imageUrl} alt="Renter steps image" className="mb-2 max-h-48 w-auto rounded-lg border border-dashboard-border bg-dashboard-surface object-contain" />
+              <StaffMediaImage src={imageUrl} alt="Renter steps image" className="mb-2 max-h-48 w-auto rounded-lg border border-dashboard-border bg-dashboard-surface object-contain" />
             ) : null}
             <input
               id={inputId}
@@ -847,8 +846,7 @@ function FilePreview({
       aria-label={`Open ${label} preview`}
       className="group relative mb-2 block w-fit max-w-full cursor-zoom-in overflow-hidden rounded-lg border border-dashboard-border bg-dashboard-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-dashboard-accent/50"
     >
-      {/* eslint-disable-next-line @next/next/no-img-element -- API-proxied media route or local upload preview */}
-      <img src={url} srcSet={mediaImageSrcSet(url)} sizes="(min-width: 640px) 48rem, 100vw" alt={label} className="block max-h-48 max-w-full w-auto object-contain" />
+      <StaffMediaImage src={url} srcSet={mediaImageSrcSet(url)} sizes="(min-width: 640px) 48rem, 100vw" alt={label} className="block max-h-48 max-w-full w-auto object-contain" />
       <span className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/55 to-transparent px-1 pb-1.5 pt-5 text-center text-[10px] font-medium text-white opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
         Click to enlarge
       </span>

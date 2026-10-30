@@ -5,20 +5,15 @@ import { Router, type NextFunction, type Request, type Response } from 'express'
 import { z } from 'zod';
 
 import { config } from '../../config/index.js';
-import { requireStaffAuth } from '../../middleware/auth.js';
-import { requireTenantContext } from '../../middleware/tenant-context.js';
 import { validate } from '../../middleware/validate.js';
 import { DependencyUnavailableError, ForbiddenError, NotFoundError } from '../../shared/errors.js';
 import { sendSuccess } from '../../shared/response.js';
-import { authorizeStaffFileRead } from '../files/files.service.js';
-import { requireTenantAction } from '../tenancy/tenancy.service.js';
 import { publicStorefrontService } from '../storefront/storefront.service.js';
 import { verifyPreviewToken } from '../storefront/storefront-preview.js';
 
 const slug = z.string().regex(/^[a-z0-9-]{1,80}$/);
 const widthQuery = z.object({ w: z.enum(['320', '960', '1600']).optional() }).strict();
 const publicGrantParams = z.object({ slug, fileId: fileObjectId }).strict();
-const fileGrantParams = z.object({ fileId: fileObjectId }).strict();
 
 export const internalMediaRouter = Router();
 
@@ -44,34 +39,6 @@ internalMediaRouter.post(
       preview,
     );
     if (!grant) throw new NotFoundError('This store image is not available.');
-    sendSuccess(req, res, grant);
-  },
-);
-
-internalMediaRouter.post(
-  '/internal/media/v1/staff/files/:fileId/grant',
-  requireMediaGrantSecret,
-  requireStaffAuth,
-  requireTenantContext,
-  requireTenantAction('context_read'),
-  validate({ params: fileGrantParams, query: widthQuery }),
-  async (req, res) => {
-    const params = fileGrantParams.parse(req.params);
-    const query = widthQuery.parse(req.query);
-    const context = req.tenantContext;
-    const principalId = req.clerkPrincipal?.clerkUserId;
-    if (!context || !principalId) throw new ForbiddenError('Workspace context is required.');
-    const grant = await authorizeStaffFileRead({
-      tenantId: context.tenantId,
-      membershipId: context.membershipId,
-      principalId,
-      permissionCodes: context.permissionCodes,
-      effectiveTenantStatus: context.effectiveTenantStatus,
-      branchId: context.activeBranchId,
-      requestId: req.requestId,
-      fileId: params.fileId,
-      width: parseWidth(query.w),
-    });
     sendSuccess(req, res, grant);
   },
 );

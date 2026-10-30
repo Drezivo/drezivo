@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 
+vi.mock('../../../config/index.js', () => ({
+  config: { TURNSTILE_SECRET_KEY: undefined, LOG_LEVEL: 'silent' },
+}));
+
 import { createTurnstileVerifier } from '../turnstile.js';
 
 const answer = (body: unknown, ok = true) => vi.fn().mockResolvedValue({ ok, json: () => Promise.resolve(body) });

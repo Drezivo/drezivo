@@ -18,6 +18,7 @@ export function streamFileResponse(
   file: FileStreamResponse,
   cacheControl: string,
   downloadFileName?: string,
+  dispositionOverride?: 'inline' | 'attachment',
 ): void {
   res.status(200);
   res.setHeader('Content-Type', file.mimeType);
@@ -26,7 +27,9 @@ export function streamFileResponse(
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader(
     'Content-Disposition',
-    downloadFileName
+    dispositionOverride
+      ? dispositionOverride
+      : downloadFileName
       ? `attachment; filename="${downloadFileName.replace(/["\\\r\n]/g, '_')}"`
       : file.mimeType === 'application/pdf' || file.mimeType === 'application/zip' ? 'attachment' : 'inline',
   );

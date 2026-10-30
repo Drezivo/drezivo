@@ -1,4 +1,5 @@
 "use client";
+import { StaffMediaImage } from "@/components/ui/staff-media-image";
 
 import {
   CalendarDays,
@@ -283,8 +284,7 @@ function ReservationDetails({
                 <div className="grid grid-cols-[5rem_minmax(0,1fr)] gap-x-3">
                   <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-dashboard-active text-dashboard-accent sm:row-span-2">
                     {line.variant.image_url && !failedImageLines.has(line.id) ? (
-                      // eslint-disable-next-line @next/next/no-img-element -- API-provided signed URLs are short-lived and dynamic.
-                      <img
+                      <StaffMediaImage
                         src={line.variant.image_url}
                         srcSet={mediaImageSrcSet(line.variant.image_url)}
                         sizes="64px"

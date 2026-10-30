@@ -43,6 +43,8 @@ describe('storefront guest booking', async () => {
   const { settingsService } = await import('../../src/modules/settings/settings.service.js');
   const { GuestBookingService } = await import('../../src/modules/guest-booking/guest-booking.service.js');
   const { guestTokenFor } = await import('../../src/shared/guest-token.js');
+  const { verifyFileMediaGrant } = await import('../../src/modules/files/media-access-grants.js');
+  const { serializeGuestAccessCookie } = await import('../../src/modules/guest-booking/guest-access-cookie.js');
   const { openSealedEmail } = await import('../../src/modules/notifications/email-notifications.js');
   const { addDays, localDate } = await import('../../src/modules/storefront/storefront.service.js');
   const { weekdayOf } = await import('../../src/modules/storefront/shop-closures.js');
@@ -232,7 +234,7 @@ describe('storefront guest booking', async () => {
     });
   });
 
-  it('signs the shared image only while payable and retains its file snapshot for cleanup', async () => {
+  it('returns a reservation-scoped API image URL and retains its file snapshot for cleanup', async () => {
     const ws = await liveStore('gv-shared-renter-image');
     const inserted = await admin.query<{ id: string }>(
       `INSERT INTO file_object
@@ -261,12 +263,39 @@ describe('storefront guest booking', async () => {
       holdRequest(ws, 'ana@example.test'),
     );
     if (!created.body.success) throw new Error('hold failed');
+    const accessExpiresAt = (created.body as { data: { access_expires_at: string } }).data.access_expires_at;
     const reservation = created.body.data.reservation;
     expect(reservation.payment_instructions?.renter_steps).toMatchObject({
       text: null,
       image_content_type: 'image/png',
     });
-    expect(reservation.payment_instructions?.renter_steps?.image_url).toMatch(/^https:\/\/files\.test\//);
+    expect(reservation.payment_instructions?.renter_steps?.image_url).toBe(
+      `https://files.test/api/v1/guest/reservations/${reservation.id}/media/${fileId}`,
+    );
+
+    const cookie = serializeGuestAccessCookie(
+      reservation.id,
+      guestTokenFor(reservation.id),
+      new Date(accessExpiresAt),
+    ).split(';', 1)[0];
+    if (!cookie) throw new Error('expected the scoped guest access cookie');
+    const app = createApp();
+    const grantResponse = await request(app)
+      .post(`/api/v1/guest/reservations/${reservation.id}/media/${fileId}/grant`)
+      .set('Cookie', cookie);
+    expect(grantResponse.status).toBe(200);
+    expect(grantResponse.headers['cache-control']).toBe('no-store');
+    const grantResponseBody = grantResponse.body as { data: { media_grant: string; expires_at: string } };
+    const grant = grantResponseBody.data;
+    expect(verifyFileMediaGrant(grant.media_grant, {
+      purpose: 'guest',
+      resourceId: reservation.id,
+      fileId,
+    })).toMatchObject({ tenantId: ws.tenantId, resourceId: reservation.id, fileId, purpose: 'guest' });
+    expect(Date.parse(grant.expires_at)).toBeLessThanOrEqual(Date.now() + 5 * 60_000);
+    expect((await request(app)
+      .post(`/api/v1/guest/reservations/${reservation.id}/media/00000000-0000-4000-8000-000000000001/grant`)
+      .set('Cookie', cookie)).status).toBe(404);
 
     await admin.query(
       `UPDATE tenant_settings
@@ -537,7 +566,7 @@ describe('storefront guest booking', async () => {
       expect.objectContaining({
         file_id: upload.file_id,
         content_type: 'image/png',
-        url: `/api/media/staff/${upload.file_id}?branch_id=${ws.branchId}&w=960`,
+        url: `http://localhost:3000/api/v1/files/media/staff/${upload.file_id}?branch_id=${ws.branchId}&w=960`,
         evidence_status: 'under_review',
       }),
     ]);

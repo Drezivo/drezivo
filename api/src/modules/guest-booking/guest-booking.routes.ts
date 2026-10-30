@@ -5,6 +5,7 @@ import {
   guestFittingRequest,
   guestReceiptSubmitRequest,
   guestReceiptUploadRequest,
+  fileObjectId,
   guestReservationRequest,
   reservationId,
   type GuestFittingRequest,
@@ -21,6 +22,8 @@ import { ForbiddenError, NotFoundError } from '../../shared/errors.js';
 import { guestTokenFor } from '../../shared/guest-token.js';
 import type { CommandResult } from '../../shared/idempotent-command.js';
 import { sendSuccess } from '../../shared/response.js';
+import { streamFileResponse } from '../files/file-stream.js';
+import { verifyFileMediaGrant } from '../files/media-access-grants.js';
 import { readGuestAccessCookie, serializeGuestAccessCookie } from './guest-access-cookie.js';
 import { guestBookingService as booking } from './guest-booking.service.js';
 
@@ -28,6 +31,7 @@ export const guestBookingRouter = Router();
 
 const slugParams = z.object({ slug: z.string().min(1).max(80).regex(/^[a-z0-9-]+$/) }).strict();
 const reservationParams = z.object({ id: reservationId }).strict();
+const renterMediaParams = reservationParams.extend({ fileId: fileObjectId }).strict();
 
 /** Per-address budgets are applied to writes, not normal storefront browsing. */
 const perIp = (name: string, max: number, windowMinutes: number): RequestHandler =>
@@ -99,6 +103,39 @@ guestBookingRouter.get(
   perIp('guest-view', 60, 1),
   validate({ params: reservationParams }),
   send((req) => booking.getReservation(idOf(req), capabilityOf(req, idOf(req)))),
+);
+
+guestBookingRouter.post(
+  '/guest/reservations/:id/media/:fileId/grant',
+  noStore,
+  perIp('guest-media-grant', 60, 1),
+  validate({ params: renterMediaParams }),
+  send((req) => {
+    const { id, fileId } = renterMediaParams.parse(req.params);
+    return booking.authorizeRenterStepsMedia(id, fileId, capabilityOf(req, id));
+  }),
+);
+
+guestBookingRouter.get(
+  '/guest/reservations/:id/media/:fileId',
+  noStore,
+  perIp('guest-media-read', 120, 1),
+  validate({ params: renterMediaParams }),
+  async (req, res, next) => {
+    try {
+      const { id, fileId } = renterMediaParams.parse(req.params);
+      const grant = verifyFileMediaGrant(req.get('X-Drezivo-Media-Access'), {
+        purpose: 'guest',
+        resourceId: id,
+        fileId,
+      });
+      if (!grant) throw new NotFoundError('This booking link is not valid or has expired.');
+      const file = await booking.readRenterStepsMedia(grant);
+      streamFileResponse(req, res, next, file, 'private, no-store');
+    } catch (error) {
+      next(error);
+    }
+  },
 );
 
 guestBookingRouter.post(

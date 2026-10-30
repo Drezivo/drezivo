@@ -30,6 +30,8 @@ import { toDocument } from '../storefront-cms/storefront-cms.service.js';
 import { closedReason, readShopClosures } from './shop-closures.js';
 import { storefrontMediaUrlMapper, type StorefrontMediaUrlMapper } from './storefront-media.js';
 import { createMediaReadGrant, type MediaReadGrant } from '../files/file-read-grant.js';
+import { selectMediaObject } from '../files/file-read-grant.js';
+import { issuePreviewMediaSession } from '../files/media-access-grants.js';
 import type { ImageVariantWidth } from '../files/files.storage-keys.js';
 import { fromPolicyColumns } from './storefront-policy.js';
 import {
@@ -108,6 +110,7 @@ export class PublicStorefrontService {
 
       return publicStorefront.parse({
         slug: core.slug,
+        ...(preview ? { preview_media_session: issuePreviewMediaSession(preview).session } : {}),
         name: document.branding.display_name,
         tagline: document.branding.tagline,
         description: document.branding.description,
@@ -294,19 +297,57 @@ export class PublicStorefrontService {
     slug: string,
     fileId: string,
     preview: PreviewGrant | null = null,
-  ): Promise<{ body: AsyncIterable<Uint8Array>; mimeType: PublicMediaFileRow['mime_type']; byteSize: number } | null> {
-    const row = await withPublishedStore(slug, (client, store) => readPublicStoreMedia(client, {
-      tenantId: store.tenantId,
-      storefrontId: store.id,
-      fileId,
-      preview: preview !== null,
-    }), preview);
-    if (!row) return null;
-    const stored = await objectStorage.readObject({ storageKey: row.storage_key, versionId: row.version_id });
-    if (!stored || (stored.contentLength !== null && stored.contentLength !== row.byte_size)) {
+    width: ImageVariantWidth | null = null,
+  ): Promise<{ body: AsyncIterable<Uint8Array>; mimeType: PublicMediaFileRow['mime_type']; byteSize: number; tenantId: string; fileId: string } | null> {
+    const result = await withPublishedStore(slug, async (client, store) => {
+      const row = await readPublicStoreMedia(client, {
+        tenantId: store.tenantId,
+        storefrontId: store.id,
+        fileId,
+        preview: preview !== null,
+      });
+      return row ? { row, tenantId: store.tenantId } : null;
+    }, preview);
+    if (!result) return null;
+    const { row } = result;
+    const selected = await selectMediaObject({
+      tenantId: result.tenantId,
+      fileId: row.id,
+      purpose: row.purpose,
+      storageKey: row.storage_key,
+      versionId: row.version_id,
+      mimeType: row.mime_type,
+      byteSize: row.byte_size,
+      width,
+    });
+    const stored = await objectStorage.readObject({ storageKey: selected.storageKey, versionId: selected.versionId });
+    if (!stored || (stored.contentLength !== null && stored.contentLength !== selected.byteSize)) {
       throw new DependencyUnavailableError('The published storefront image is temporarily unavailable.');
     }
-    return { body: boundStoredObjectBody(stored.body, row.byte_size), mimeType: row.mime_type, byteSize: row.byte_size };
+    return {
+      body: boundStoredObjectBody(stored.body, selected.byteSize),
+      mimeType: selected.contentType as PublicMediaFileRow['mime_type'],
+      byteSize: selected.byteSize,
+      tenantId: result.tenantId,
+      fileId: row.id,
+    };
+  }
+
+  async authorizePreviewMedia(
+    slug: string,
+    fileId: string,
+    preview: PreviewGrant & { expiresAt: number },
+  ): Promise<(PreviewGrant & { expiresAt: number }) | null> {
+    const result = await withPublishedStore(slug, async (client, store) => {
+      const row = await readPublicStoreMedia(client, {
+        tenantId: store.tenantId,
+        storefrontId: store.id,
+        fileId,
+        preview: true,
+      });
+      return row ? { tenantId: store.tenantId, storefrontId: store.id, expiresAt: preview.expiresAt } : null;
+    }, preview);
+    return result;
   }
 
   async authorizeMediaRead(

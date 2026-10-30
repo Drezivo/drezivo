@@ -1,4 +1,5 @@
 "use client";
+import { StaffMediaImage } from "@/components/ui/staff-media-image";
 
 import { useAuth } from "@clerk/nextjs";
 import { ImagePlus, Loader2, Trash2 } from "lucide-react";
@@ -83,8 +84,7 @@ export function ImageField({
       <p className="text-sm font-medium text-dashboard-navy">{label}</p>
       <div className={cn("relative mt-1.5 overflow-hidden rounded-lg border border-dashed border-dashboard-border bg-dashboard-canvas", aspect)}>
         {preview ? (
-          // eslint-disable-next-line @next/next/no-img-element -- local upload preview or app-owned media route
-          <img src={preview} srcSet={mediaImageSrcSet(preview)} sizes="(min-width: 640px) 180px, 100vw" alt="" className={cn("absolute inset-0 h-full w-full", fit === "contain" ? "object-contain" : "object-cover")} />
+          <StaffMediaImage src={preview} srcSet={mediaImageSrcSet(preview)} sizes="(min-width: 640px) 180px, 100vw" alt="" className={cn("absolute inset-0 h-full w-full", fit === "contain" ? "object-contain" : "object-cover")} />
         ) : (
           <label htmlFor={inputId} className="absolute inset-0 flex cursor-pointer flex-col items-center justify-center gap-2 text-sm text-dashboard-muted hover:bg-dashboard-active/50">
             <ImagePlus className="h-5 w-5" />

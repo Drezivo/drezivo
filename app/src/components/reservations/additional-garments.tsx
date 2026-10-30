@@ -1,4 +1,5 @@
 "use client";
+import { StaffMediaImage } from "@/components/ui/staff-media-image";
 
 import { useAuth } from "@clerk/nextjs";
 import { Plus, Shirt, X } from "lucide-react";
@@ -60,8 +61,7 @@ export function SelectedGarmentCard({
         <div className="flex min-w-0 items-center gap-3">
           <div className="flex h-12 w-10 shrink-0 items-center justify-center overflow-hidden rounded-md bg-dashboard-active text-dashboard-accent">
             {garment.imageUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element -- signed catalogue URLs are dynamic.
-              <img src={garment.imageUrl} srcSet={mediaImageSrcSet(garment.imageUrl)} sizes="64px" alt="" className="h-full w-full object-cover" />
+              <StaffMediaImage src={garment.imageUrl} srcSet={mediaImageSrcSet(garment.imageUrl)} sizes="64px" alt="" className="h-full w-full object-cover" />
             ) : (
               <Shirt className="h-4 w-4" aria-hidden="true" />
             )}

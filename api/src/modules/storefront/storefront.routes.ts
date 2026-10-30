@@ -14,6 +14,7 @@ import { validate } from '../../middleware/validate.js';
 import { sendSuccess } from '../../shared/response.js';
 import { streamFileResponse } from '../files/file-stream.js';
 import { NotFoundError } from '../../shared/errors.js';
+import { issueFileMediaGrant, verifyFileMediaGrant, verifyPreviewMediaSession } from '../files/media-access-grants.js';
 import { verifyPreviewToken, type PreviewGrant } from './storefront-preview.js';
 import { publicStorefrontService as service } from './storefront.service.js';
 
@@ -22,6 +23,7 @@ export const storefrontRouter = Router();
 const slugParams = z.object({ slug: z.string().min(1).max(80).regex(/^[a-z0-9-]+$/) }).strict();
 const itemParams = slugParams.extend({ productId }).strict();
 const mediaParams = slugParams.extend({ fileId: fileObjectId }).strict();
+const mediaQuery = z.object({ w: z.enum(['320', '960', '1600']).optional() }).strict();
 
 /** Anonymous reads are limited per client address; guests browsing normally stay far below this. */
 const publicReadLimit = rateLimit({ windowMs: 60_000, max: 240, keyOf: (req) => `public-read:${req.ip ?? 'unknown'}` });
@@ -35,7 +37,6 @@ const publicReadLimit = rateLimit({ windowMs: 60_000, max: 240, keyOf: (req) => 
 const CATALOGUE_CACHE = 'public, max-age=60, s-maxage=300, stale-while-revalidate=600';
 const LIVE_CACHE = 'public, max-age=15, s-maxage=30';
 const PREVIEW_HEADER = 'X-Storefront-Preview';
-const PUBLIC_MEDIA_CACHE = 'public, max-age=60, s-maxage=300, stale-while-revalidate=600';
 
 /**
  * An owner preview (see storefront-preview.ts) is read through the same handlers. A missing or
@@ -50,6 +51,12 @@ function publicRead<T>(cacheControl: string, read: (req: Request, preview: Previ
     res.setHeader('Vary', PREVIEW_HEADER);
     sendSuccess(req, res, data);
   };
+}
+
+function parseWidth(value: string | undefined): 320 | 960 | 1600 | null {
+  if (value === '320') return 320;
+  if (value === '1600') return 1600;
+  return value === '960' ? 960 : null;
 }
 
 const slugOf = (req: Request): string => (req.params as { slug: string }).slug;
@@ -78,21 +85,57 @@ storefrontRouter.get(
 storefrontRouter.get(
   '/public/stores/:slug/media/:fileId',
   publicReadLimit,
-  validate({ params: mediaParams }),
+  validate({ params: mediaParams, query: mediaQuery }),
   async (req, res, next) => {
     try {
-      const preview = verifyPreviewToken(req.get(PREVIEW_HEADER));
+      const params = mediaParams.parse(req.params);
+      const accessHeader = req.get('X-Drezivo-Media-Access');
+      const access = accessHeader
+        ? verifyFileMediaGrant(accessHeader, { purpose: 'preview', fileId: params.fileId })
+        : null;
+      if (!access) throw new NotFoundError('This store image is not available.');
+      const preview = {
+        tenantId: access.tenantId,
+        storefrontId: access.resourceId,
+        expiresAt: access.expiresAt,
+      };
       const result = await service.readMedia(
-        slugOf(req),
-        (req.params as { fileId: string }).fileId,
+        params.slug,
+        params.fileId,
         preview,
+        parseWidth(mediaQuery.parse(req.query).w),
       );
       if (!result) throw new NotFoundError('This store image is not available.');
-      res.setHeader('Vary', PREVIEW_HEADER);
-      streamFileResponse(req, res, next, result, preview ? 'private, no-store' : PUBLIC_MEDIA_CACHE);
+      res.setHeader('Vary', 'X-Drezivo-Media-Access');
+      streamFileResponse(req, res, next, result, 'private, no-store', undefined, 'inline');
     } catch (error) {
       next(error);
     }
+  },
+);
+
+storefrontRouter.post(
+  '/public/stores/:slug/media/:fileId/grant',
+  publicReadLimit,
+  validate({ params: mediaParams }),
+  async (req, res) => {
+    const params = mediaParams.parse(req.params);
+    const session = verifyPreviewMediaSession(req.get('X-Storefront-Media-Session'));
+    if (!session?.expiresAt) throw new NotFoundError('This store image is not available.');
+    const authorized = await service.authorizePreviewMedia(params.slug, params.fileId, {
+      tenantId: session.tenantId,
+      storefrontId: session.storefrontId,
+      expiresAt: session.expiresAt,
+    });
+    if (!authorized) throw new NotFoundError('This store image is not available.');
+    const grant = issueFileMediaGrant({
+      purpose: 'preview',
+      tenantId: authorized.tenantId,
+      resourceId: authorized.storefrontId,
+      fileId: params.fileId,
+    }, new Date(), authorized.expiresAt);
+    res.setHeader('Cache-Control', 'private, no-store');
+    sendSuccess(req, res, { media_grant: grant.grant, expires_at: grant.expiresAt });
   },
 );
 

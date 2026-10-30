@@ -267,16 +267,30 @@ describe("ClothingPage", () => {
     expect(await screen.findByRole("link", { name: "Batch Add" })).toHaveAttribute("href", "/inventory/import");
   });
 
-  it("hides backup controls while keeping clothing actions available", async () => {
-    render(<ClothingPage />);
+  it("shows a primary Add Clothing action with compact category and batch actions", async () => {
+    const { unmount } = render(<ClothingPage />);
 
     await screen.findByRole("listitem", { name: "Real Black Satin Gown" });
 
     expect(screen.queryByRole("button", { name: "Export inventory" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Download backup" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Restore backup" })).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Manage Categories" })).toBeVisible();
-    expect(screen.getByRole("link", { name: "Add Clothing" })).toBeVisible();
+    const addClothing = screen.getByRole("link", { name: "Add Clothing" });
+    const manageCategories = screen.getByRole("link", { name: "Manage Categories" });
+    expect(addClothing).toHaveAttribute("href", "/inventory/new");
+    expect(addClothing).toHaveClass("dashboard-button-default", "w-full", "sm:w-auto");
+    expect(manageCategories).toHaveAttribute("href", "/inventory/categories");
+    expect(manageCategories).toHaveClass("dashboard-button-secondary", "flex-1", "sm:flex-none");
+    expect(screen.queryByRole("link", { name: "Batch Add" })).not.toBeInTheDocument();
+
+    unmount();
+    api.getCatalogueImportCapabilities.mockResolvedValue({
+      data: { photo_extraction: false, max_batch_items: 25, batch_add: true },
+    });
+    render(<ClothingPage />);
+    const batchAdd = await screen.findByRole("link", { name: "Batch Add" });
+    expect(batchAdd).toHaveAttribute("href", "/inventory/import");
+    expect(batchAdd).toHaveClass("dashboard-button-secondary", "flex-1", "sm:flex-none");
   });
 
   it("renders clothing returned by GET catalogue/clothing instead of mock inventory data", async () => {

@@ -20,6 +20,7 @@ const TOKEN_SHAPE = new RegExp(`^${VERSION}\\.(${UUID})\\.(${UUID})\\.(\\d{10})\
 export interface PreviewGrant {
   tenantId: string;
   storefrontId: string;
+  expiresAt?: number;
 }
 
 function signingKey(): Buffer {
@@ -47,5 +48,5 @@ export function verifyPreviewToken(token: string | undefined, now = new Date()):
   const given = Buffer.from(signature, 'utf8');
   if (expected.length !== given.length || !timingSafeEqual(expected, given)) return null;
   if (Number(expires) * 1000 <= now.getTime()) return null;
-  return { tenantId, storefrontId };
+  return { tenantId, storefrontId, expiresAt: Number(expires) };
 }

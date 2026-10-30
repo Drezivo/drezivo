@@ -1,57 +1,71 @@
 # Cloudflare media Worker
 
-This Worker moves catalogue and storefront image bytes from Vercel to Cloudflare. It uses the
-existing short-lived R2 grants, keeps R2 URLs server-only, and checks staff and preview access on
-every request. Staff and preview responses are never cached. Published storefront images are
-cached for at most 45 seconds and tagged by tenant for global invalidation.
+The Worker handles only public R2-backed images on the API host. Vercel continues to host the
+web and staff app pages; public image bytes use Cloudflare and R2. Staff images, private previews,
+and renter payment-step images stream directly from the API and never use a Vercel image route.
+Private PDF documents retain their existing app delivery path.
 
-## Deploy the Worker
+## Public image request
 
-From the `api/` directory, deploy the staging Worker with `npx wrangler deploy --config wrangler.jsonc`.
-The config points at `edge/media-worker/worker.mjs` and keeps `workers.dev` disabled. Deployment
-does not attach any routes. Add the environment variables and secrets in Cloudflare, then attach
-the staging routes only after the staging app and API deployments are ready. Verify the complete
-staging flow before configuring a production Worker.
+The browser receives an API URL such as
+`https://api.drezivo.shop/api/media/public/stores/{slug}/files/{fileId}?w=960`.
 
-## Configuration and rollout
+1. The Worker checks its local Cloudflare Cache API entry, keyed by the API URL and image width.
+   Entries live for 45 seconds and carry `tenant-{tenantId}` and `media-{fileId}` cache tags.
+2. On a miss, the Worker calls the API's internal grant endpoint with
+   `X-Drezivo-Media-Grant`. The API rechecks publication, tenant, file state, image purpose, and
+   the current storefront reference, then issues a 60-second server-to-server R2 read grant.
+3. The Worker fetches the private R2 object, validates its image type and size, returns the bytes,
+   and fills its local cache. R2 URLs and signatures are never forwarded to the browser.
+4. On a transient API grant or R2 failure, the Worker requests the same API-host URL directly.
+   The API stream rechecks publication and file reference and returns a response eligible for the
+   Cloudflare Cache Rule. Authentication/publication failures from the grant endpoint are preserved
+   and do not fall back.
 
-Use a Cloudflare zone that owns and proxies the app and web hostnames. Configure Worker routes for
-`<staff-host>/api/media/staff/*`, `<web-host>/api/media/public/*`, and `<web-host>/s/*`.
-Cloudflare permits path wildcards only at the end, so the last route includes all storefront
-requests. The Worker passes non-preview requests through to the original web origin unchanged.
-Those requests also count toward the free Worker quota; with fail-closed routing, exceeding the
-quota can temporarily affect storefront pages as well as images. Verify this tradeoff with actual
-request counts before enabling the route. Restrict routes to the intended hostnames. Do not
-use the Worker before its environment and routes are ready. Keep `workers_dev` disabled.
+The API's direct stream at `/api/media/public/stores/{slug}/files/{fileId}` is also the origin
+response when Cloudflare bypasses the Worker. It applies the same database publication checks,
+returns `Cache-Control: public, max-age=0, s-maxage=45`, and attaches Cloudflare tenant/file cache
+tags. A Cache Rule marks the direct response eligible and honors this origin TTL when the Worker
+route is bypassed. Do not override Edge TTL: the Free-plan minimum override is two hours and would
+also risk caching responses marked `no-store`.
 
-Set `STAFF_ORIGIN`, `WEB_ORIGIN`, and `API_ORIGIN` to their exact HTTPS origins. Configure the
-Worker secret `MEDIA_READ_GRANT_SECRET` to match the API. Set an independent, random secret of at
-least 32 characters as `MEDIA_EDGE_AUTH_SECRET` on the Worker and both Next.js applications. Keep
-both secrets in the providers' secret managers, never in repository files. The internal grant
-bridges require both the edge secret and the original staff session or preview cookie.
+## Routes and secrets
 
-Before enabling Worker routes, deploy the application and API changes, configure the web app with
-`CLOUDFLARE_MEDIA_PURGE_ENABLED=true`, the zone ID in `CLOUDFLARE_MEDIA_ZONE_ID`, and a scoped
-`CLOUDFLARE_MEDIA_PURGE_TOKEN` with zone Cache Purge permission. The existing invalidation endpoint
-continues to purge Vercel and then purges Cloudflare; failures return a retryable error to the
-outbox worker. Public edge entries expire after 45 seconds if a purge is delayed. Validate purge
-and cache behavior across regions before enabling routes. A cache fill racing a purge can remain
-until the 45-second expiry; do not rely on purge as an instantaneous security boundary.
+The Wrangler configs declare one route per environment:
 
-The Worker Cache API keeps entries in the data center that filled them; entries do not replicate
-between regions. A first request from a new region can miss, obtain a small authorization grant,
-and fetch image bytes directly from R2 before filling that region's cache. Staff and preview images
-always reauthorize and fetch from R2 because they are never shared-cache hits. The `/s/*` route also
-passes ordinary storefront requests through the Worker, so those requests consume Worker requests
-too. Track the account-wide Worker request quota before enabling that route.
+- Staging: `api-preview.drezivo.shop/api/media/public/*`
+- Production: `api.drezivo.shop/api/media/public/*`
 
-Activate routes only after staging checks. Disable the Worker routes to roll back to the existing
-Next.js image proxies. New preview URLs continue to work through their Next.js fallback route.
-Do not expose a public R2 bucket or use a fail-open route for private media. Missing secrets,
-authorization failures, or upstream failures return errors rather than revealing grants.
+The Cloudflare dashboard route must use **Fail Open**. This lets requests go straight to the API
+origin if Worker execution fails or the Workers Free daily request budget is reached. Configure a
+Cache Rule matching the same host and `/api/media/public/*` path: eligible for cache, with Edge TTL
+set to use the response's cache-control header and bypass when it is absent. Keep the default cache
+key's query string so widths stay distinct. Keep staff, preview, guest, and PDF paths outside this
+rule.
 
-Cloudflare Workers Free has an account-wide daily request limit; cached requests handled through
-this Worker still count. R2 Standard has monthly storage and operation allowances. Check current
-provider pricing and account usage before rollout. Measure cache hit ratio, Worker request counts,
-R2 reads, Vercel origin transfer, and cold/warm image latency. Private requests still make small
-authorization calls to the app/API; only their image bytes bypass those services.
+Set `API_ORIGIN` in each Wrangler config. Set `MEDIA_READ_GRANT_SECRET` as a Worker secret matching
+the API's environment-specific value. It is only used for the server-to-server R2 grant. The API
+also needs `MEDIA_PUBLIC_ORIGIN`, `CLOUDFLARE_MEDIA_ZONE_ID`, and
+`CLOUDFLARE_MEDIA_PURGE_TOKEN`; the latter token is scoped to Cache Purge for the relevant zone.
+Neither secret belongs in the web/app environment or browser bundle.
+
+## Cache invalidation
+
+When media visibility or references change, the API outbox worker calls Cloudflare's cache purge
+API directly with the `tenant-{tenantId}` tag. A rejected purge is retried by the outbox. This
+purges Worker Cache API responses and direct API-origin CDN entries; the 45-second TTL bounds stale
+content if a purge is delayed.
+
+## Deploy and verify
+
+From `api/`, validate the selected config with `npx wrangler deploy --dry-run --config
+wrangler.jsonc` for staging or `wrangler.production.jsonc` for production. Deploy only through the
+approved release workflow. Configure Fail Open and the Cache Rule in Cloudflare separately.
+
+For staging, verify a Worker `MISS`, a following `HIT`, expiry after 45 seconds, each `w` variant,
+and a cold-region miss. Simulate transient grant and R2 failures and confirm `API-FALLBACK`; verify
+401/403/404/409/429 are preserved. Disable/bypass the Worker and confirm the API stream fills the
+native CDN cache. Confirm no image request reaches a Vercel media route and no response exposes an
+R2 hostname, object key, or signature. See
+[`cloudflare-media-worker-setup.md`](../../../docs/runbooks/cloudflare-media-worker-setup.md) for
+the full rollout checklist.

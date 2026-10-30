@@ -1,4 +1,5 @@
 "use client";
+import { StaffMediaImage } from "@/components/ui/staff-media-image";
 
 import { useAuth } from "@clerk/nextjs";
 import { Check, ChevronLeft, ChevronRight, Plus, Search, Shirt } from "lucide-react";
@@ -1016,8 +1017,7 @@ function StepGarments({
                 <span className="flex items-start gap-3">
                   <span className="flex h-12 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-dashboard-active text-dashboard-accent">
                     {product.primary_image_url ? (
-                      // eslint-disable-next-line @next/next/no-img-element -- catalogue media uses an authenticated same-origin API route.
-                      <img
+                      <StaffMediaImage
                         src={product.primary_image_url}
                         srcSet={mediaImageSrcSet(product.primary_image_url)}
                         sizes="64px"
