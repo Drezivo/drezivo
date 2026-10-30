@@ -100,7 +100,7 @@ const listItem = fittingListItem.parse({
         sku: "EMERALD-M",
         size_label: null,
         color_label: "Emerald",
-        primary_image_url: "https://cdn.example.test/emerald-gown.webp",
+        primary_image_url: "https://api.example.test/api/v1/files/media/staff/00000000-0000-4000-8000-000000000101?branch_id=00000000-0000-4000-8000-000000000102&w=960",
       },
       garment_mode: "guaranteed",
     },
@@ -232,7 +232,7 @@ describe("FittingsPage production cutover", () => {
     expect(screen.getByText("Emerald Evening Gown")).toBeVisible();
     expect(screen.getByRole("img", { name: "Emerald Evening Gown catalogue photo" })).toHaveAttribute(
       "src",
-      "https://cdn.example.test/emerald-gown.webp"
+      "https://api.example.test/api/v1/files/media/staff/00000000-0000-4000-8000-000000000101?branch_id=00000000-0000-4000-8000-000000000102&w=960"
     );
     expect(screen.getByText("₱500")).toBeVisible();
     expect(screen.getByText("Not started")).toBeVisible();
@@ -411,7 +411,7 @@ describe("FittingsPage production cutover", () => {
     expect(within(dialog).getByText("Flexible fit · Emerald")).toBeVisible();
     expect(within(dialog).getByRole("img", { name: "Emerald Evening Gown catalogue photo" })).toHaveAttribute(
       "src",
-      "https://cdn.example.test/emerald-gown.webp"
+      "https://api.example.test/api/v1/files/media/staff/00000000-0000-4000-8000-000000000101?branch_id=00000000-0000-4000-8000-000000000102&w=960"
     );
     expect(within(dialog).queryByText(/Guaranteed asset/i)).not.toBeInTheDocument();
     expect(within(dialog).queryByText("GWN-0042")).not.toBeInTheDocument();

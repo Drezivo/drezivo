@@ -159,6 +159,26 @@ export async function readReceiptFile(client: PoolClient, tenantId: string, file
   return result.rows[0] ?? null;
 }
 
+/** Reads only the accepted image frozen into a reservation's renter-payment-step snapshot. */
+export async function readGuestPaymentStepsImage(
+  client: PoolClient,
+  tenantId: string,
+  fileId: string,
+): Promise<FileObjectRow | null> {
+  const result = await client.query<FileObjectRow>(
+    `SELECT id, tenant_id, purpose, storage_key, version_id, sha256, mime_type, byte_size,
+            lifecycle_status, upload_expires_at, frozen_at
+       FROM file_object
+      WHERE tenant_id = $1 AND id = $2
+        AND purpose = 'payment_method_material'
+        AND lifecycle_status = 'accepted' AND frozen_at IS NOT NULL
+        AND mime_type IN ('image/jpeg', 'image/png', 'image/webp')
+        AND byte_size BETWEEN 1 AND 10485760`,
+    [tenantId, fileId],
+  );
+  return result.rows[0] ?? null;
+}
+
 export async function appendGuestAudit(
   client: PoolClient,
   input: { tenantId: string; actorKey: string; action: string; entityType: string; entityId: string; summary: Record<string, unknown>; requestId: string },

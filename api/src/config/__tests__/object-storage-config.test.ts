@@ -9,8 +9,10 @@ const baseEnvironment: NodeJS.ProcessEnv = {
   CLERK_PUBLISHABLE_KEY: 'test-public',
   CLERK_WEBHOOK_SIGNING_SECRET: 'test-webhook',
   STAFF_APP_URL: 'https://staff.example.test',
-  STOREFRONT_WEB_URL: 'https://store.example.test',
+  MEDIA_PUBLIC_ORIGIN: 'https://api.example.test',
   MEDIA_READ_GRANT_SECRET: 'x'.repeat(48),
+  CLOUDFLARE_MEDIA_ZONE_ID: 'a'.repeat(32),
+  CLOUDFLARE_MEDIA_PURGE_TOKEN: 'cloudflare-purge-test-token-123',
   CORS_ALLOWED_ORIGINS: 'https://staff.example.test',
   INVITATION_EMAIL_ENCRYPTION_KEY: Buffer.alloc(32, 1).toString('base64url'),
   INVITATION_EMAIL_DIGEST_KEY: Buffer.alloc(32, 2).toString('base64url'),
@@ -226,21 +228,24 @@ describe('staff application URL configuration', () => {
 });
 
 describe('media delivery configuration', () => {
-  it('requires a private grant secret and storefront origin in deployed environments', () => {
+  it('requires the private grant secret, public API origin, and Cloudflare purge credentials when deployed', () => {
     expect(() => parseConfig({ ...baseEnvironment, MEDIA_READ_GRANT_SECRET: undefined })).toThrow(
       'Staging and production require MEDIA_READ_GRANT_SECRET for private media delivery.',
     );
-    expect(() => parseConfig({ ...baseEnvironment, STOREFRONT_WEB_URL: undefined })).toThrow(
-      'Staging and production require STOREFRONT_WEB_URL for media cache invalidation.',
+    expect(() => parseConfig({ ...baseEnvironment, MEDIA_PUBLIC_ORIGIN: undefined })).toThrow(
+      'Staging and production require MEDIA_PUBLIC_ORIGIN for API-host media URLs.',
+    );
+    expect(() => parseConfig({ ...baseEnvironment, CLOUDFLARE_MEDIA_PURGE_TOKEN: undefined })).toThrow(
+      'Staging and production require Cloudflare media cache purge credentials.',
     );
   });
 
-  it('accepts only an HTTPS origin for the deployed storefront', () => {
-    expect(() => parseConfig({ ...baseEnvironment, STOREFRONT_WEB_URL: 'http://store.example.test' })).toThrow(
-      'STOREFRONT_WEB_URL must be an HTTPS origin, or a loopback HTTP origin in development.',
+  it('accepts only an HTTPS origin for the public media host', () => {
+    expect(() => parseConfig({ ...baseEnvironment, MEDIA_PUBLIC_ORIGIN: 'http://api.example.test' })).toThrow(
+      'MEDIA_PUBLIC_ORIGIN must be an HTTPS origin, or a loopback HTTP origin in development.',
     );
-    expect(() => parseConfig({ ...baseEnvironment, STOREFRONT_WEB_URL: 'https://store.example.test/path' })).toThrow(
-      'STOREFRONT_WEB_URL must be an HTTPS origin, or a loopback HTTP origin in development.',
+    expect(() => parseConfig({ ...baseEnvironment, MEDIA_PUBLIC_ORIGIN: 'https://api.example.test/path' })).toThrow(
+      'MEDIA_PUBLIC_ORIGIN must be an HTTPS origin, or a loopback HTTP origin in development.',
     );
   });
 });

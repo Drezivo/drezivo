@@ -1,4 +1,5 @@
 "use client";
+import { StaffMediaImage } from "@/components/ui/staff-media-image";
 
 import { useAuth } from "@clerk/nextjs";
 import {
@@ -825,8 +826,7 @@ function ReservationClothingThumbnail({ reservation }: { reservation: Reservatio
   return (
     <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-dashboard-active text-dashboard-accent">
       {imageUrl && !imageFailed ? (
-        // eslint-disable-next-line @next/next/no-img-element -- API-provided signed URLs are short-lived and dynamic.
-        <img
+        <StaffMediaImage
           src={imageUrl}
           srcSet={mediaImageSrcSet(imageUrl)}
           sizes="56px"

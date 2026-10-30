@@ -62,7 +62,9 @@ const catalog = {
   plans: [
     { code: "free", name: "Free", monthly_price_minor: 0, currency: "PHP", trial_days: 0, limits: { active_garments: 20, frontdesk_seats: 0 }, features: { fittings: false, storefront_reservations: false, storefront_payments: false, storefront_themes: ["ivory", "sage"] } },
     { code: "starter", name: "Starter", monthly_price_minor: 14900, currency: "PHP", trial_days: 14, limits: { active_garments: 125, frontdesk_seats: 0 }, features: { fittings: true, storefront_reservations: true, storefront_payments: true, storefront_themes: themes } },
-    { code: "standard", name: "Standard", monthly_price_minor: 29900, currency: "PHP", trial_days: 14, limits: { active_garments: 300, frontdesk_seats: 3 }, features: { fittings: true, storefront_reservations: true, storefront_payments: true, storefront_themes: themes } },
+    { code: "standard", name: "Standard", monthly_price_minor: 29900, currency: "PHP", trial_days: 14, limits: { active_garments: 400, frontdesk_seats: 3 }, features: { fittings: true, storefront_reservations: true, storefront_payments: true, storefront_themes: themes } },
+    { code: "growth", name: "Growth", monthly_price_minor: 49900, currency: "PHP", trial_days: 14, limits: { active_garments: 500, frontdesk_seats: 5 }, features: { fittings: true, storefront_reservations: true, storefront_payments: true, storefront_themes: themes } },
+    { code: "scale", name: "Scale", monthly_price_minor: 99900, currency: "PHP", trial_days: 14, limits: { active_garments: 1000, frontdesk_seats: 8 }, features: { fittings: true, storefront_reservations: true, storefront_payments: true, storefront_themes: themes } },
   ],
 };
 
@@ -91,7 +93,23 @@ describe("Free plan upgrade in the workspace", () => {
 
     expect(await screen.findByRole("heading", { name: "Choose a plan" })).toBeVisible();
     expect(await screen.findByRole("radio", { name: /Starter/ })).toBeChecked();
+    expect(screen.getByRole("radio", { name: /Growth/ })).toHaveTextContent("500 active garments");
+    expect(screen.getByRole("radio", { name: /Growth/ })).toHaveTextContent("5 Front Desk staff");
+    expect(screen.getByRole("radio", { name: /Scale/ })).toHaveTextContent("1,000 active garments");
+    expect(screen.getByRole("radio", { name: /Scale/ })).toHaveTextContent("8 Front Desk staff");
     expect(screen.queryByText(/Pay ₱0/)).toBeNull();
+  });
+
+  it("shows higher plans without offering paid workspaces a switch", async () => {
+    mocks.getBilling.mockResolvedValue({ data: freeBilling({
+      plan: { code: "standard", name: "Standard", monthly_minor: "29900", currency: "PHP", physical_assets_max: 400, frontdesk_seats_max: 3, trial_days: 14 },
+    }) });
+    renderShell(null);
+    fireEvent.click(screen.getByRole("button", { name: "Upgrade" }));
+    expect(await screen.findByRole("button", { name: /Growth/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Scale/ })).toBeDisabled();
+    expect(screen.getByText(/Moving between paid plans is not/)).toBeVisible();
+    expect(mocks.changeSubscriptionPlan).not.toHaveBeenCalled();
   });
 
   it("starts the chosen plan's trial once and confirms when it ends", async () => {

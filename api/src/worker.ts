@@ -22,6 +22,11 @@ import {
 import { EMAIL_EVENT_TYPE } from './modules/notifications/email-notifications.js';
 import { logger } from './shared/logger.js';
 import { SUBSCRIPTION_LIFECYCLE_SWEEP_ENABLED } from './modules/billing/billing.constants.js';
+import {
+  CATALOGUE_BACKUP_EXPORT_EVENT,
+  createCatalogueBackupExportHandler,
+  sweepCatalogueBackupArtifactsForAllTenants,
+} from './modules/catalogue-import/catalogue-backup.service.js';
 
 /**
  * Durable worker entrypoint — a SEPARATE PROCESS from server.ts, sharing the same compiled
@@ -44,6 +49,7 @@ const handlers: Record<string, EventHandler> = {
   [PAYMENT_REVIEWED_EVENT_TYPE]: createSubscriptionPaymentReviewedHandler(),
   [FILE_OBJECT_CLEANUP_EVENT_TYPE]: handleFileObjectCleanup,
   [FILE_IMAGE_VARIANTS_EVENT_TYPE]: handleFileImageVariants,
+  [CATALOGUE_BACKUP_EXPORT_EVENT]: createCatalogueBackupExportHandler(),
   [MEDIA_CACHE_INVALIDATION_EVENT_TYPE]: handleMediaCacheInvalidation,
   'clerk.invitation.dispatch_requested': handleMembershipInvitationDispatch,
   'clerk.invitation.revoke_requested': handleMembershipInvitationDispatch,
@@ -71,6 +77,11 @@ const SWEEPS: readonly Sweep[] = [
   {
     name: 'recovery readiness',
     run: promoteElapsedRecoveryReadinessForAllTenants,
+    intervalMs: Math.max(config.WORKER_POLL_INTERVAL_MS, 60_000),
+  },
+  {
+    name: 'catalogue backup expiry',
+    run: sweepCatalogueBackupArtifactsForAllTenants,
     intervalMs: Math.max(config.WORKER_POLL_INTERVAL_MS, 60_000),
   },
 ];

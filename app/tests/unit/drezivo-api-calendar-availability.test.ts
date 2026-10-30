@@ -41,7 +41,7 @@ describe("Drezivo clothing availability API client", () => {
             product: {
               id: "00000000-0000-4000-8000-000000000202",
               name: "Emerald Evening Gown",
-              primary_image_url: "https://images.example.test/emerald.jpg",
+              primary_image_url: "https://api.example.test/api/v1/files/media/staff/00000000-0000-4000-8000-000000000101?branch_id=00000000-0000-4000-8000-000000000102&w=960",
             },
             variant: {
               id: "00000000-0000-4000-8000-000000000203",

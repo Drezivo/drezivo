@@ -53,6 +53,7 @@ describe('createMediaReadGrant', () => {
     expect(MEDIA_READ_GRANT_TTL_SECONDS).toBe(60);
     expect(grant).toMatchObject({
       tenant_id: tenantId,
+      purpose: 'catalogue_image',
       content_type: 'image/webp',
       byte_size: 4321,
       expires_at: '2026-10-14T10:01:00.000Z',

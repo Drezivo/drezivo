@@ -11,7 +11,8 @@ export interface FileObjectRow {
     | 'storefront_asset'
     | 'export_result'
     | 'subscription_payment_proof'
-    | 'payment_method_material';
+    | 'payment_method_material'
+    | 'catalogue_backup';
   storage_key: string;
   version_id: string | null;
   sha256: string | null;

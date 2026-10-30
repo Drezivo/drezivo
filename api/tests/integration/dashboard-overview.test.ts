@@ -680,12 +680,31 @@ describe('Dashboard overview API', async () => {
     expect(
       data.upcoming_fitting_appointments.items.map((item) => item.garment_names).flat(),
     ).not.toContain('Outside-Window Fitting Gown');
+    const todayParts = new Intl.DateTimeFormat('en-US', {
+      timeZone: data.window.timezone,
+      year: 'numeric',
+      month: 'numeric',
+      day: 'numeric',
+    }).formatToParts(new Date(data.window.today.start));
+    const datePart = (type: string): number =>
+      Number(todayParts.find((part) => part.type === type)?.value);
+    const currentYear = datePart('year');
+    const currentMonth = datePart('month');
+    const currentDay = datePart('day');
+    const secondUpcomingPickup = new Date(Date.UTC(currentYear, currentMonth - 1, currentDay + 2));
+    const secondUpcomingIsInCurrentMonth =
+      secondUpcomingPickup.getUTCFullYear() === currentYear &&
+      secondUpcomingPickup.getUTCMonth() === currentMonth - 1;
+
     expect(data.business_performance).toMatchObject({
       currency: 'PHP',
       completed_rental_value: { current_minor: '12000', previous_minor: '7000' },
       completed_rentals: { current: 1, previous: 1 },
       average_rental_value: { current_minor: '12000', previous_minor: '7000' },
-      projected_sales_current_month: { current_minor: '17000', reservations: 1 },
+      projected_sales_current_month: {
+        current_minor: secondUpcomingIsInCurrentMonth ? '17000' : '12000',
+        reservations: secondUpcomingIsInCurrentMonth ? 1 : 0,
+      },
       new_customers: { current: 1, previous: 1 },
     });
     expect(data.business_performance.projected_rental_value).toEqual({

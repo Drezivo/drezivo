@@ -74,22 +74,12 @@ function SinglePlan({ plan, signUpUrl }: { plan: PublicPlan; signUpUrl: string }
 }
 
 /** Plan cards side by side, with the highlighted fixed plan on the night ground. */
-function PlanCards({
-  plans,
-  signUpUrl,
-  customPlanContactHref,
-}: {
-  plans: readonly PublicPlan[];
-  signUpUrl: string;
-  customPlanContactHref?: string;
-}) {
-  const layout = customPlanContactHref
-    ? 'md:grid-cols-2 xl:grid-cols-4'
-    : plans.length === 2
-      ? 'md:grid-cols-2 max-w-[60rem]'
-      : plans.length === 3
-        ? 'lg:grid-cols-3'
-        : 'md:grid-cols-2 xl:grid-cols-4';
+function PlanCards({ plans, signUpUrl }: { plans: readonly PublicPlan[]; signUpUrl: string }) {
+  const layout = plans.length === 2
+    ? 'md:grid-cols-2 max-w-[60rem]'
+    : plans.length === 3
+      ? 'lg:grid-cols-3'
+      : 'md:grid-cols-2 xl:grid-cols-4';
   return (
     <ul data-at-stagger className={`mx-auto mt-12 grid items-stretch gap-4 sm:gap-6 lg:mt-16 xl:gap-5 ${layout}`}>
       {plans.map((plan) => (
@@ -110,23 +100,6 @@ function PlanCards({
           <a href={signUpUrl} className={`at-button mt-8 w-full justify-center ${plan.highlighted ? 'at-button-light' : 'at-button-dark'}`}>Start with {plan.name}</a>
         </li>
       ))}
-      {customPlanContactHref ? (
-        <li data-at-item className="flex min-w-0 flex-col rounded-[1.25rem] border border-atelier-paper-line bg-atelier-paper-2 p-6 xl:p-7 2xl:p-8">
-          <p className="at-eyebrow text-atelier-gold-ink">Custom</p>
-          <p className="mt-6 font-[family-name:var(--font-atelier-display)] text-at-subhead leading-[1.2]">
-            A monthly quote shaped around your shop.
-          </p>
-          <p className="mt-6 flex-1 text-at-body leading-[1.6] text-atelier-muted">
-            Need more capacity, such as 500 active garments or 10 Front Desk seats, or a different mix of features Drezivo already offers? Talk with us about what fits.
-          </p>
-          <p className="mt-6 text-at-small text-atelier-muted">
-            Custom terms are discussed with our team and are not available for self-service signup.
-          </p>
-          <a href={customPlanContactHref} className="at-button at-button-dark mt-8 w-full justify-center">
-            Talk to us
-          </a>
-        </li>
-      ) : null}
     </ul>
   );
 }
@@ -138,17 +111,15 @@ function PlanCards({
 export function PlanShowcase({
   plans,
   signUpUrl,
-  customPlanContactHref,
   headingLevel = 'h2',
 }: {
   plans: readonly PublicPlan[];
   signUpUrl: string;
-  customPlanContactHref?: string;
   /** `h1` when the showcase is the page itself (/pricing) rather than a landing section. */
   headingLevel?: 'h1' | 'h2';
 }) {
   if (plans.length === 0) return null;
-  const single = plans.length === 1 && !customPlanContactHref;
+  const single = plans.length === 1;
   const Heading = headingLevel;
   return (
     <section id="pricing" data-header="light" className="relative isolate overflow-hidden bg-atelier-paper py-at-section text-atelier-ink">
@@ -173,7 +144,7 @@ export function PlanShowcase({
         {single ? (
           <SinglePlan plan={plans[0]!} signUpUrl={signUpUrl} />
         ) : (
-          <PlanCards plans={plans} signUpUrl={signUpUrl} customPlanContactHref={customPlanContactHref} />
+          <PlanCards plans={plans} signUpUrl={signUpUrl} />
         )}
       </div>
     </section>

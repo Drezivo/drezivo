@@ -119,7 +119,7 @@ export function SubscribeDialog({
       ? "Review the current price and payment details for the plan selected for this workspace."
       : payable && payable.code !== "free"
         ? planDescription(payable)
-        : "Choose Starter or Standard to upgrade from Free.";
+        : "Choose a paid plan to upgrade from Free.";
 
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
@@ -213,7 +213,7 @@ function SubscribeBody({
           billing.payment_methods.length > 0 ? (
             targetPlan?.code === "free" ? (
               <p className="text-sm text-dashboard-muted">
-                Free needs no payment. Open Settings, Plan &amp; billing to choose Starter or Standard.
+                Free needs no payment. Open Settings, Plan &amp; billing to choose a paid plan.
               </p>
             ) : targetPlan ? (
               <PaymentForm billing={billing} targetPlan={targetPlan} onSubmitted={onSubmitted} />

@@ -27,9 +27,9 @@ export const PUBLIC_MARKETING_PLANS: readonly PublicPlan[] = [
     features: [
       'Up to 20 active garments',
       'Owner-only access (no Front Desk accounts)',
-      'Availability-only storefront with contact links; 2 storefront designs',
-      'Reservations, calendar & availability; customers and staff payment records',
-      'Returns & exports; no fittings on the business app or storefront; no online storefront payment methods',
+      'Availability-only storefront; contact links; 2 designs',
+      'Reservations, calendar, and customer/staff payment records',
+      'Returns and exports; no fittings or storefront payment methods',
     ],
     highlighted: false,
   },

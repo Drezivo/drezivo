@@ -11,6 +11,7 @@ type AuthSplitLayoutProps = {
   lockViewport?: boolean;
   backControl?: ReactNode;
   showBackButton?: boolean;
+  planSelectionLayout?: boolean;
 };
 
 export function AuthSplitLayout({
@@ -21,11 +22,13 @@ export function AuthSplitLayout({
   lockViewport = false,
   backControl,
   showBackButton = true,
+  planSelectionLayout = false,
 }: AuthSplitLayoutProps) {
   return (
     <main
       className={[
         "auth-layout",
+        planSelectionLayout ? "auth-plan-selection-layout" : "",
         lockViewport ? "lg:h-[100svh] lg:max-h-[100svh] lg:overflow-y-hidden" : "",
       ].join(" ")}
     >

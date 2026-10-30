@@ -35,6 +35,8 @@ way a contract-affecting change with no `@drezivo/contracts` PR is incomplete
 | `github-ruleset.md`      | You are configuring or reviewing protection for the root `main` branch.                                              |
 | `security-automation.md` | You are deciding when GitHub secret scanning or dependency review can be enabled.                                    |
 
+For Cloudflare image delivery, see the [media Worker setup guide](cloudflare-media-worker-setup.md).
+
 Start with `incident.md` if you are not sure which one applies and something is on fire.
 
 ## Source priority

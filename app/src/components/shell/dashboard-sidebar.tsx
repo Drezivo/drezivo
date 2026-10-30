@@ -35,6 +35,7 @@ import { activateAccessibleWorkspace, listAllAccessibleWorkspaces } from "@/lib/
 import { WORKSPACE_HOME } from "@/lib/workspace-routes";
 
 import { useRequestPlanUpgrade } from "@/components/billing/plan-upgrade-dialog";
+import { StaffMediaImage } from "@/components/ui/staff-media-image";
 const WORKSPACE_LINKS = [
   { href: "/settings", label: "Business information", icon: Building2 },
   { href: "/settings/billing", label: "Plan & billing", icon: Receipt },
@@ -71,7 +72,7 @@ function BusinessTile({ identity }: { identity: DashboardIdentity }) {
   return (
     <span className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-dashboard-border bg-dashboard-gold-soft">
       {identity.businessLogoUrl ? (
-        <img
+        <StaffMediaImage
           src={identity.businessLogoUrl}
           alt={`${identity.businessName} logo`}
           className="h-full w-full object-cover"

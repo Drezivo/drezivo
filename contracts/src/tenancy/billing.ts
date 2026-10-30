@@ -1,5 +1,5 @@
 /**
- * Pilot billing: perpetual Free plus paid Starter/Standard plans with an eligible 14-day trial
+ * Pilot billing: perpetual Free plus paid plans with an eligible 14-day trial
  * and manual payment by QR/transfer with uploaded proof that an operator approves.
  *
  * Access is derived at request time from the subscription (no background job decides it). Free has
@@ -123,6 +123,28 @@ const billingPlanDetails = z.discriminatedUnion('code', [
     .object({
       code: z.literal('standard'),
       name: z.literal('Standard'),
+      monthly_minor: z.string().regex(/^\d+$/),
+      currency: z.string().regex(/^[A-Z]{3}$/),
+      physical_assets_max: z.number().int().positive(),
+      frontdesk_seats_max: z.number().int().nonnegative(),
+      trial_days: z.number().int().positive(),
+    })
+    .strict(),
+  z
+    .object({
+      code: z.literal('growth'),
+      name: z.literal('Growth'),
+      monthly_minor: z.string().regex(/^\d+$/),
+      currency: z.string().regex(/^[A-Z]{3}$/),
+      physical_assets_max: z.number().int().positive(),
+      frontdesk_seats_max: z.number().int().nonnegative(),
+      trial_days: z.number().int().positive(),
+    })
+    .strict(),
+  z
+    .object({
+      code: z.literal('scale'),
+      name: z.literal('Scale'),
       monthly_minor: z.string().regex(/^\d+$/),
       currency: z.string().regex(/^[A-Z]{3}$/),
       physical_assets_max: z.number().int().positive(),

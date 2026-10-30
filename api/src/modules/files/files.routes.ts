@@ -24,6 +24,7 @@ const fileWriteRateLimit = rateLimit({
   keyOf: (req) => req.tenantContext?.tenantId ?? req.clerkPrincipal?.clerkUserId ?? req.ip ?? 'unknown',
 });
 const writePolicy = requireTenantAction('asset_write');
+const mediaQuery = z.object({ w: z.enum(['320', '960', '1600']).optional(), branch_id: z.string().uuid().optional() }).strict();
 
 filesRouter.post(
   '/uploads',
@@ -50,11 +51,15 @@ filesRouter.post(
 );
 
 filesRouter.get(
-  '/media/staff/:fileId',
+  '/files/media/staff/:fileId',
+  (_req, res, next) => {
+    res.setHeader('Cache-Control', 'private, no-store');
+    next();
+  },
   requireStaffAuth,
   requireTenantContext,
   rateLimit({ windowMs: 60_000, max: 120, keyOf: (req) => req.tenantContext?.tenantId ?? req.ip ?? 'unknown' }),
   requireTenantAction('context_read'),
-  validate({ params: z.object({ fileId: fileObjectId }).strict() }),
+  validate({ params: z.object({ fileId: fileObjectId }).strict(), query: mediaQuery }),
   readStaffFileController,
 );

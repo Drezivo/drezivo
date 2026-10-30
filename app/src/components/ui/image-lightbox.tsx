@@ -1,4 +1,5 @@
 "use client";
+import { StaffMediaImage } from "@/components/ui/staff-media-image";
 
 import * as Dialog from "@radix-ui/react-dialog";
 import { ChevronLeft, ChevronRight, X } from "lucide-react";
@@ -79,8 +80,7 @@ export function ImageLightbox({
 
           <div className="relative flex max-h-[90vh] max-w-[92vw] items-center justify-center overflow-hidden rounded-2xl border border-white/10 bg-black/25 shadow-2xl">
             {activeImage ? (
-              // eslint-disable-next-line @next/next/no-img-element -- caller can provide API-proxied or public storefront media paths.
-              <img
+              <StaffMediaImage
                 src={activeImage.src}
                 alt={activeImage.alt}
                 className="max-h-[88vh] max-w-[90vw] object-contain"

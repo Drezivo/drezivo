@@ -40,6 +40,7 @@ export const filePurposeEnum = pgEnum('file_purpose', [
   'export_result',
   'subscription_payment_proof',
   'payment_method_material',
+  'catalogue_backup',
 ]);
 
 export const file = pgTable(

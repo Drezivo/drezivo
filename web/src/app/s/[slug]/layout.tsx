@@ -57,7 +57,7 @@ export default async function StorefrontLayout({ children, params }: Props) {
           </a>
         </div>
       ) : null}
-      <PreviewProvider preview={Boolean(preview)}>
+      <PreviewProvider preview={Boolean(preview)} mediaSession={store.preview_media_session}>
         <StoreHeader store={store} />
         <main id="main" className="flex-1">
           {children}

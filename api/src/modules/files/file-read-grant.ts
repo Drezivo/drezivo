@@ -12,13 +12,22 @@ export const MEDIA_READ_GRANT_TTL_SECONDS = 60;
 
 export interface MediaReadGrant {
   tenant_id: string;
+  purpose: string;
   read_url: string;
   content_type: FileStreamResponse['mimeType'];
   byte_size: number;
   expires_at: string;
 }
 
-export async function createMediaReadGrant(
+export interface SelectedMediaObject {
+  storageKey: string;
+  versionId: string | null;
+  contentType: FileStreamResponse['mimeType'];
+  byteSize: number;
+}
+
+/** Selects an accepted generated variant when one is ready; otherwise reads the original object. */
+export async function selectMediaObject(
   input: {
     tenantId: string;
     fileId: string;
@@ -30,7 +39,7 @@ export async function createMediaReadGrant(
     width: ImageVariantWidth | null;
   },
   storage: ObjectStorage = objectStorage,
-): Promise<MediaReadGrant> {
+): Promise<SelectedMediaObject> {
   let storageKey = input.storageKey;
   let versionId = input.versionId;
   let contentType = input.mimeType;
@@ -64,17 +73,35 @@ export async function createMediaReadGrant(
       }
     }
   }
+  return { storageKey, versionId, contentType, byteSize };
+}
+
+export async function createMediaReadGrant(
+  input: {
+    tenantId: string;
+    fileId: string;
+    purpose: string;
+    storageKey: string;
+    versionId: string | null;
+    mimeType: FileStreamResponse['mimeType'];
+    byteSize: number;
+    width: ImageVariantWidth | null;
+  },
+  storage: ObjectStorage = objectStorage,
+): Promise<MediaReadGrant> {
+  const selected = await selectMediaObject(input, storage);
 
   const authorization = await storage.authorizeRead({
-    storageKey,
-    versionId,
+    storageKey: selected.storageKey,
+    versionId: selected.versionId,
     expiresInSeconds: MEDIA_READ_GRANT_TTL_SECONDS,
   });
   return {
     tenant_id: input.tenantId,
+    purpose: input.purpose,
     read_url: authorization.readUrl,
-    content_type: contentType,
-    byte_size: byteSize,
+    content_type: selected.contentType,
+    byte_size: selected.byteSize,
     expires_at: authorization.expiresAt.toISOString(),
   };
 }

@@ -32,7 +32,7 @@ export const subscriptionEventTypeEnum = pgEnum('subscription_event_type', [
 ]);
 export const subscriptionPaymentStatusEnum = pgEnum('subscription_payment_status', ['pending', 'verified', 'failed']);
 
-/** Migration-managed plan prices, in PHP minor units; Free/Starter/Standard are the current v1 catalog. */
+/** Migration-managed plan prices and entitlements, in PHP minor units; public marketing remains a separate static snapshot. */
 export const plan = pgTable(
   'plan',
   {

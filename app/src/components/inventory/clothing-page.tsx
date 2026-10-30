@@ -1,4 +1,5 @@
 "use client";
+import { StaffMediaImage } from "@/components/ui/staff-media-image";
 
 import { useAuth } from "@clerk/nextjs";
 import {
@@ -205,6 +206,7 @@ export function ClothingPage() {
       })
       .catch((caughtError) => {
         if (cancelled) return;
+        logClothingLoadFailure(caughtError);
         setRows([]);
         setPageMeta({ next_cursor: null, has_more: false });
         setSummary(EMPTY_SUMMARY);
@@ -306,37 +308,45 @@ export function ClothingPage() {
   return (
     <div className="min-h-full bg-dashboard-canvas px-ws-gutter py-6">
       <div className="mx-auto flex w-full max-w-screen-2xl flex-col gap-4">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <h1 className="dashboard-page-title">
-              Clothing
-            </h1>
+        <div className="flex flex-col gap-4 2xl:flex-row 2xl:items-end 2xl:justify-between">
+          <div className="2xl:shrink-0">
+            <h1 className="dashboard-page-title">Clothing</h1>
             <p className="mt-1 text-sm text-dashboard-muted">
               Manage the clothing styles, variants, and serialized pieces in this workspace.
             </p>
           </div>
-          {/* Phones: the actions share rows so the clothing list starts higher on screen. */}
-          <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center">
+          <div className="flex w-full flex-wrap gap-2 2xl:w-auto 2xl:justify-end">
+            <Link
+              href="/inventory/new"
+              className={buttonVariants({ className: "w-full min-w-0 sm:w-auto" })}
+            >
+              <Plus className="h-4 w-4" aria-hidden="true" />
+              Add Clothing
+            </Link>
             <Link
               href="/inventory/categories"
               className={buttonVariants({
                 variant: "secondary",
-                className: batchAddAllowed ? undefined : "col-span-2 sm:col-span-1",
+                size: "sm",
+                className: "min-w-0 flex-1 sm:flex-none",
               })}
             >
               <Tags className="h-4 w-4" aria-hidden="true" />
               Manage Categories
             </Link>
             {batchAddAllowed ? (
-              <Link href="/inventory/import" className={buttonVariants({ variant: "secondary" })}>
+              <Link
+                href="/inventory/import"
+                className={buttonVariants({
+                  variant: "secondary",
+                  size: "sm",
+                  className: "min-w-0 flex-1 sm:flex-none",
+                })}
+              >
                 <Layers3 className="h-4 w-4" aria-hidden="true" />
                 Batch Add
               </Link>
             ) : null}
-            <Link href="/inventory/new" className={buttonVariants({ className: "col-span-2 sm:col-span-1" })}>
-              <Plus className="h-4 w-4" aria-hidden="true" />
-              Add Clothing
-            </Link>
           </div>
         </div>
 
@@ -555,8 +565,7 @@ function ClothingRow({
       <TableCell className="px-2 sm:px-4">
         <div className="flex h-12 w-10 items-center justify-center overflow-hidden rounded-lg bg-dashboard-active text-xs font-semibold text-dashboard-accent">
           {item.primary_image_url ? (
-            // eslint-disable-next-line @next/next/no-img-element -- signed catalogue URLs are dynamic and are not configured as stable next/image remote patterns.
-            <img
+            <StaffMediaImage
               src={item.primary_image_url}
               srcSet={mediaImageSrcSet(item.primary_image_url)}
               sizes="40px"
@@ -652,8 +661,7 @@ function ClothingMobileCard({
         <div className="flex min-w-0 items-start gap-3">
           <div className="flex h-[4.5rem] w-14 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-dashboard-active text-xs font-semibold text-dashboard-accent">
             {item.primary_image_url ? (
-              // eslint-disable-next-line @next/next/no-img-element -- signed catalogue URLs are dynamic and are not configured as stable next/image remote patterns.
-              <img
+              <StaffMediaImage
                 src={item.primary_image_url}
                 srcSet={mediaImageSrcSet(item.primary_image_url)}
                 sizes="56px"
@@ -1009,6 +1017,32 @@ function initials(name: string) {
 function toDrezivoApiError(error: unknown): DrezivoApiError {
   if (error instanceof DrezivoApiError) return error;
   return new DrezivoApiError("We could not load clothing. Please try again.", { status: 500 });
+}
+
+function logClothingLoadFailure(error: unknown) {
+  const errorName =
+    error instanceof Error && /^[A-Za-z][A-Za-z0-9]{0,63}$/.test(error.name)
+      ? error.name
+      : "UnknownError";
+  const diagnostic =
+    error instanceof DrezivoApiError
+      ? {
+          errorName,
+          code: /^[A-Z0-9_]{1,64}$/.test(error.code) ? error.code : "UNKNOWN",
+          status: error.status,
+          requestId:
+            error.requestId &&
+            /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(error.requestId)
+              ? error.requestId
+              : null,
+          ...(error.validationIssues ? { validationIssues: error.validationIssues } : {}),
+        }
+      : { errorName };
+
+  console.error("Clothing catalogue load failed", {
+    operation: "catalogue.clothing.list",
+    ...diagnostic,
+  });
 }
 
 function MetricCard({

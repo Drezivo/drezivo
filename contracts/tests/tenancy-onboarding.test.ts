@@ -28,6 +28,8 @@ describe('tenancy onboarding contracts', () => {
     expect(planCode.safeParse('free').success).toBe(true);
     expect(planCode.safeParse('starter').success).toBe(true);
     expect(planCode.safeParse('standard').success).toBe(true);
+    expect(planCode.safeParse('growth').success).toBe(true);
+    expect(planCode.safeParse('scale').success).toBe(true);
     expect(planCode.safeParse('professional').success).toBe(false);
     expect(planCode.safeParse('enterprise').success).toBe(false);
     expect(subscriptionStatus.safeParse('restricted').success).toBe(true);
@@ -73,6 +75,34 @@ describe('tenancy onboarding contracts', () => {
           currency: 'PHP',
           trial_days: 14,
           limits: { active_garments: 300, frontdesk_seats: 3 },
+          features: {
+            fittings: true,
+            storefront_reservations: true,
+            storefront_payments: true,
+            storefront_themes: ['ivory', 'sage', 'blush', 'noir'],
+          },
+        },
+        {
+          code: 'growth',
+          name: 'Growth',
+          monthly_price_minor: 49900,
+          currency: 'PHP',
+          trial_days: 14,
+          limits: { active_garments: 500, frontdesk_seats: 5 },
+          features: {
+            fittings: true,
+            storefront_reservations: true,
+            storefront_payments: true,
+            storefront_themes: ['ivory', 'sage', 'blush', 'noir'],
+          },
+        },
+        {
+          code: 'scale',
+          name: 'Scale',
+          monthly_price_minor: 99900,
+          currency: 'PHP',
+          trial_days: 14,
+          limits: { active_garments: 1000, frontdesk_seats: 8 },
           features: {
             fittings: true,
             storefront_reservations: true,

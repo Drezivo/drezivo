@@ -36,7 +36,7 @@ import {
 import { canonicalRequestHash } from '../../shared/idempotency.js';
 import type { FailureEnvelope, SuccessEnvelope } from '../../shared/response.js';
 import { claimTenantIdempotency, finalizeTenantIdempotency } from '../../shared/tenant-idempotency.js';
-import { signPaymentRenterStepsImages } from '../files/payment-renter-steps-media.js';
+import { staffFileMediaUrl } from '../files/file-media-url.js';
 import { storefrontMediaUrlMapper } from '../storefront/storefront-media.js';
 import { isPaymentMaterialContentType } from './payment-method-readiness.js';
 import { assertPlanFeatureEnabled } from '../entitlements/entitlements.service.js';
@@ -97,18 +97,17 @@ export async function getPaymentMethodSettings(input: PaymentMethodContext): Pro
     const renterSteps = await readPaymentRenterSteps(client, input.tenantId);
     if (!renterSteps) throw new StateConflictError('Payment settings could not be read.');
     const legacy = renterSteps.text || renterSteps.file_id ? [] : await listLegacyPaymentRenterSteps(client, input.tenantId);
-    // Existing method assets continue to use the authorized staff media route. Shared and
-    // conflicting legacy step images use short-lived direct reads because they are not method assets.
+    // Every image uses the same Clerk-authenticated, branch-scoped API stream.
     const urls = await storefrontMediaUrlMapper.map(
       client,
       input.tenantId,
       rows.flatMap((row) => [row.qr_file_id, row.material_file_id]),
       { kind: 'staff', branchId: input.branchId },
     );
-    const stepImageUrls = await signPaymentRenterStepsImages(
-      client,
-      input.tenantId,
-      [renterSteps.file_id, ...legacy.map((row) => row.file_id)],
+    const stepImageUrls = new Map(
+      [renterSteps.file_id, ...legacy.map((row) => row.file_id)]
+        .filter((id): id is string => id !== null)
+        .map((id) => [id, staffFileMediaUrl(id, input.branchId)] as const),
     );
     return paymentMethodSettingsList.parse({
       items: rows.map((row) => ({

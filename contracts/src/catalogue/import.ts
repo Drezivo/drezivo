@@ -13,7 +13,7 @@ import { z } from 'zod';
 import { fileObjectId } from '../common/ids';
 import { idempotencyKey } from '../common/idempotency';
 import { nonNegativeMoneyString } from '../common/money';
-import { MAX_UPLOAD_BYTES, sha256Base64, uploadContentType } from '../files/uploads';
+import { MAX_UPLOAD_BYTES, catalogueImageContentType, sha256Base64 } from '../files/uploads';
 import { measurementUnit, variantFitRange, variantMeasurementMap } from './admin';
 
 /** Rows per batch request. The client splits larger imports into consecutive batches. */
@@ -41,7 +41,7 @@ export const batchUploadAuthorizationRequest = z
         z
           .object({
             idempotency_key: idempotencyKey,
-            content_type: uploadContentType,
+            content_type: catalogueImageContentType,
             byte_size: z.number().int().positive().max(MAX_UPLOAD_BYTES),
             sha256: sha256Base64,
           })

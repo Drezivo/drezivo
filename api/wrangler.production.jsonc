@@ -1,0 +1,16 @@
+{
+  "name": "drezivo-media-prod",
+  "main": "edge/media-worker/worker.mjs",
+  "compatibility_date": "2026-10-28",
+  "vars": {
+    "API_ORIGIN": "https://api.drezivo.shop"
+  },
+  "routes": [
+    {
+      "pattern": "api.drezivo.shop/api/media/public/*",
+      "zone_name": "drezivo.shop"
+    }
+  ],
+  "preview_urls": false,
+  "workers_dev": false
+}

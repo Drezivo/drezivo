@@ -6,6 +6,7 @@ import type { PaymentMethodSettingsItem } from "@drezivo/contracts";
 import { PaymentMethodSettingsPage, storefrontGap } from "@/components/settings/payment-method-settings-page";
 
 const clerk = vi.hoisted(() => ({ getToken: vi.fn(), useAuth: vi.fn() }));
+const access = vi.hoisted(() => ({ plan: "standard", storefrontPayments: true, requestUpgrade: vi.fn() }));
 const api = vi.hoisted(() => ({
   getPaymentMethodSettings: vi.fn(),
   updatePaymentMethodSettings: vi.fn(),
@@ -16,6 +17,15 @@ const api = vi.hoisted(() => ({
 }));
 
 vi.mock("@clerk/nextjs", () => ({ useAuth: clerk.useAuth }));
+vi.mock("@/components/shell/dashboard-access-gate", () => ({
+  useVerifiedActorContext: () => ({
+    subscription: { plan_code: access.plan },
+    entitlements: { features: { storefront_payments: access.storefrontPayments } },
+  }),
+}));
+vi.mock("@/components/billing/plan-upgrade-dialog", () => ({
+  useRequestPlanUpgrade: () => access.requestUpgrade,
+}));
 vi.mock("@/lib/drezivo-api", () => ({
   DrezivoApiError: class DrezivoApiError extends Error {},
   createDrezivoApiClient: () => api,
@@ -61,6 +71,8 @@ const methods = [
 describe("PaymentMethodSettingsPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    access.plan = "standard";
+    access.storefrontPayments = true;
     clerk.getToken.mockResolvedValue("token");
     clerk.useAuth.mockReturnValue({ getToken: clerk.getToken });
     api.getPaymentMethodSettings.mockResolvedValue({ data: { items: methods, renter_steps: sharedSteps }, requestId: "req-list" });
@@ -204,6 +216,62 @@ describe("PaymentMethodSettingsPage", () => {
       }),
       expect.any(String)
     );
+  });
+
+  it.each(["starter", "standard"])("allows the %s plan to enable and disable storefront availability", async (plan) => {
+    access.plan = plan;
+    api.updatePaymentMethodSettings.mockImplementation(async (_id, request) => ({
+      data: { ...methods[1], storefront_enabled: request.storefront_enabled, version: request.version + 1 },
+    }));
+    render(<PaymentMethodSettingsPage />);
+    await screen.findByText("GCash");
+
+    const toggle = screen.getAllByRole("checkbox")[3]!;
+    fireEvent.click(toggle);
+    expect(toggle).toBeChecked();
+    fireEvent.click(screen.getAllByRole("button", { name: "Save" })[1]!);
+    await waitFor(() => expect(api.updatePaymentMethodSettings).toHaveBeenCalledWith(
+      gcashId, expect.objectContaining({ version: 1, storefront_enabled: true }), expect.any(String),
+    ));
+    await screen.findByText("Saved.");
+
+    fireEvent.click(toggle);
+    expect(toggle).not.toBeChecked();
+    fireEvent.click(screen.getAllByRole("button", { name: "Save" })[1]!);
+    await waitFor(() => expect(api.updatePaymentMethodSettings).toHaveBeenCalledWith(
+      gcashId, expect.objectContaining({ version: 2, storefront_enabled: false }), expect.any(String),
+    ));
+    expect(access.requestUpgrade).not.toHaveBeenCalled();
+  });
+
+  it("opens the upgrade flow when Free attempts to enable storefront availability", async () => {
+    access.plan = "free";
+    access.storefrontPayments = false;
+    render(<PaymentMethodSettingsPage />);
+    await screen.findByText("GCash");
+    const toggle = screen.getAllByRole("checkbox")[3]!;
+    fireEvent.click(toggle);
+    expect(access.requestUpgrade).toHaveBeenCalledWith("storefront payment methods");
+    expect(toggle).not.toBeChecked();
+  });
+
+  it.each([
+    { kind: "QR image", field: "QR image", presentation: "details" },
+    { kind: "payment instructions", field: "Your payment instructions", presentation: "material" },
+  ])("saves a Free plan's $kind for staff without enabling the storefront", async ({ field, presentation }) => {
+    access.plan = "free";
+    access.storefrontPayments = false;
+    Object.assign(URL, { createObjectURL: vi.fn(() => "blob:payment"), revokeObjectURL: vi.fn() });
+    api.updatePaymentMethodSettings.mockResolvedValue({ data: { ...methods[1], storefront_enabled: false, version: 2 } });
+    render(<PaymentMethodSettingsPage />);
+    await screen.findByText("GCash");
+    if (presentation === "material") fireEvent.click(screen.getByRole("radio", { name: /Upload my instructions/ }));
+    const file = new File([new Uint8Array([137, 80, 78, 71])], "payment.png", { type: "image/png" });
+    fireEvent.change(screen.getByLabelText(field), { target: { files: [file] } });
+    fireEvent.click(screen.getAllByRole("button", { name: "Save" })[1]!);
+    await waitFor(() => expect(api.updatePaymentMethodSettings).toHaveBeenCalledWith(
+      gcashId, expect.objectContaining({ active: true, storefront_enabled: false, presentation }), expect.any(String),
+    ));
   });
 
   it("keeps the full file picker when no QR image is selected", async () => {

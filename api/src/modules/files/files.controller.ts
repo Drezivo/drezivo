@@ -52,11 +52,18 @@ export async function readStaffFileController(
       branchId: context.activeBranchId,
       requestId: req.requestId,
       fileId,
+      width: parseImageWidth(req.query.w),
     });
     streamFileResponse(req, res, next, file, 'private, no-store');
   } catch (error) {
     next(error);
   }
+}
+
+function parseImageWidth(value: unknown): 320 | 960 | 1600 | null {
+  if (value === '320') return 320;
+  if (value === '1600') return 1600;
+  return value === '960' ? 960 : null;
 }
 
 function requireContext(req: Request): {

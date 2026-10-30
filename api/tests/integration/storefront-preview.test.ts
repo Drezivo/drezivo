@@ -23,6 +23,7 @@ const dataOf = <T>(response: { body: unknown }): T => (response.body as { data: 
 const adminUrl = requireTestDatabaseUrl();
 process.env.NODE_ENV = 'test';
 process.env.DATABASE_URL = buildAppRoleDatabaseUrl(adminUrl);
+process.env.MEDIA_READ_GRANT_SECRET = 'g'.repeat(48);
 
 /**
  * Owner preview of an unpublished storefront: a signed, short-lived token opens public READS of
@@ -110,6 +111,27 @@ describe('storefront owner preview', async () => {
       .set(HEADER, link.token)
       .send({ email: 'renter@example.com' });
     expect(removed.status).toBe(404);
+  });
+
+  it('rejects expired and other-store preview grants for media', async () => {
+    const ws = await createStorefrontWorkspace('preview-media-a');
+    const other = await createStorefrontWorkspace('preview-media-b');
+    const expired = issuePreviewToken({ tenantId: ws.tenantId, storefrontId: ws.storefrontId }, new Date(Date.now() - 2 * 60 * 60 * 1000));
+    const valid = issuePreviewToken({ tenantId: ws.tenantId, storefrontId: ws.storefrontId });
+    const app = createApp();
+    const route = (slug: string, fileId: string) => `/internal/media/v1/public/stores/${slug}/files/${fileId}/grant?w=960`;
+    expect((await request(app).post(route(ws.slug, ws.imageFileId))
+      .set('X-Drezivo-Media-Grant', 'g'.repeat(48)).set(HEADER, expired.token)).status).toBe(404);
+    expect((await request(app).post(route(other.slug, other.imageFileId))
+      .set('X-Drezivo-Media-Grant', 'g'.repeat(48)).set(HEADER, valid.token)).status).toBe(404);
+  });
+
+  it('does not expose the removed internal staff media grant bridge', async () => {
+    const app = createApp();
+    const response = await request(app)
+      .post('/internal/media/v1/staff/files/0194f6a2-9dd6-7a4c-8e9f-142f1d310001/grant?w=960')
+      .set('X-Drezivo-Media-Grant', 'g'.repeat(48));
+    expect(response.status).toBe(404);
   });
 
   it('keeps ordinary public reads cacheable and marked to vary on the preview header', async () => {

@@ -1,3 +1,4 @@
+import { StorefrontMediaImage } from '@/components/store/storefront-media-image';
 import Link from 'next/link';
 
 import type { CatalogueCard } from '@drezivo/contracts';
@@ -10,8 +11,7 @@ export function ProductCard({ slug, item, priority = false }: { slug: string; it
     <Link href={`/s/${slug}/items/${item.product_id}`} className="group block">
       <div className="relative aspect-[3/4] overflow-hidden bg-sf-line">
         {item.image_url ? (
-          // eslint-disable-next-line @next/next/no-img-element -- app-owned media route is intentionally rendered without a remote image optimizer.
-          <img
+          <StorefrontMediaImage
             src={item.image_url}
             srcSet={mediaImageSrcSet(item.image_url)}
             sizes="(min-width: 1024px) 25vw, (min-width: 768px) 33vw, 50vw"

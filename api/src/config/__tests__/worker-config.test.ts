@@ -45,8 +45,10 @@ describe('worker configuration', () => {
     const stagingEnvironment = {
       NODE_ENV: 'staging',
       STAFF_APP_URL: 'https://partners.example.test',
-      STOREFRONT_WEB_URL: 'https://store.example.test',
+      MEDIA_PUBLIC_ORIGIN: 'https://api.example.test',
       MEDIA_READ_GRANT_SECRET: 'x'.repeat(48),
+      CLOUDFLARE_MEDIA_ZONE_ID: 'a'.repeat(32),
+      CLOUDFLARE_MEDIA_PURGE_TOKEN: 'cloudflare-purge-test-token-123',
       TURNSTILE_SECRET_KEY: 'test-turnstile-secret',
       OBJECT_STORAGE_ENDPOINT: 'https://account.r2.cloudflarestorage.com',
       OBJECT_STORAGE_REGION: 'auto',

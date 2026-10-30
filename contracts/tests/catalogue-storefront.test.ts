@@ -21,7 +21,7 @@ const productId = '00000000-0000-4000-8000-000000000001';
 describe('catalogue storefront contract', () => {
   it('caps product detail image URLs at five photos', () => {
     const imageUrls = Array.from({ length: MAX_CLOTHING_PHOTOS + 1 }, (_, index) =>
-      `https://cdn.example.test/catalogue/${index + 1}.webp`,
+      `https://api.example.test/api/media/public/stores/example/files/00000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}?w=960`,
     );
     const base = {
       product_id: productId,

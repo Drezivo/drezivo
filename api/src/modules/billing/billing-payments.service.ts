@@ -7,6 +7,7 @@ import {
   submitSubscriptionPaymentResponse,
   subscriptionPaymentView,
   type BillingOverview,
+  type PlanCode,
   type SubmitSubscriptionPaymentRequest,
   type SubmitSubscriptionPaymentResponse,
   type SubscriptionAccess,
@@ -45,6 +46,13 @@ import {
 } from './billing-payments.repository.js';
 
 const SUBMIT_OPERATION = 'subscription.payment.submit';
+const PLAN_NAME: Record<PlanCode, string> = {
+  free: 'Free',
+  starter: 'Starter',
+  standard: 'Standard',
+  growth: 'Growth',
+  scale: 'Scale',
+};
 const PAYMENT_HISTORY_LIMIT = 24;
 const PENDING_UNIQUE_INDEX = 'subscription_payment_one_pending_per_tenant';
 export interface BillingActor {
@@ -97,7 +105,7 @@ export function getBillingOverview(actor: BillingActor): Promise<BillingOverview
     return billingOverview.parse({
       plan: {
         code: entitlements.planCode,
-        name: entitlements.planCode === 'free' ? 'Free' : entitlements.planCode === 'starter' ? 'Starter' : 'Standard',
+        name: PLAN_NAME[entitlements.planCode],
         monthly_minor: String(subscription.monthly_minor),
         currency: subscription.currency,
         physical_assets_max: entitlements.physicalAssetsMax,
@@ -174,7 +182,7 @@ export function submitSubscriptionPayment(
         const currentPlan = await resolveTenantEntitlements(client, actor.tenantId);
         const targetPlan = await resolvePlanEntitlements(client, request.plan_code ?? currentPlan.planCode);
         if (targetPlan.planCode === 'free') {
-          throw new ValidationError('Choose Starter or Standard to submit an upgrade payment.');
+          throw new ValidationError('Choose a paid plan to submit an upgrade payment.');
         }
         if (currentPlan.planCode === 'free') {
           if (

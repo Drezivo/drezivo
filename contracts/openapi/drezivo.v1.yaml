@@ -113,7 +113,7 @@ components:
           format: uuid
         booking_channel:
           type: string
-          enum: &a46
+          enum: &a48
             - staff
             - storefront
         status:
@@ -211,14 +211,10 @@ components:
                     minLength: 1
                     maxLength: 80
                   primary_image_url:
-                    anyOf:
-                      - type: string
-                        format: uri
-                      - type: string
-                        pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                      - type: string
-                        pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                      - type: "null"
+                    type:
+                      - string
+                      - "null"
+                    format: uri
                 required:
                   - variant_id
                   - product_name
@@ -333,7 +329,7 @@ components:
           type: array
           items:
             type: string
-            enum: &a47
+            enum: &a49
               - confirm
               - reject
               - cancel
@@ -441,14 +437,10 @@ components:
                           minLength: 1
                           maxLength: 80
                         primary_image_url:
-                          anyOf:
-                            - type: string
-                              format: uri
-                            - type: string
-                              pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                            - type: string
-                              pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                            - type: "null"
+                          type:
+                            - string
+                            - "null"
+                          format: uri
                       required:
                         - variant_id
                         - product_name
@@ -706,6 +698,8 @@ components:
         - free
         - starter
         - standard
+        - growth
+        - scale
     SubscriptionStatus:
       type: string
       enum: &a9
@@ -876,6 +870,8 @@ components:
                   - Free
                   - Starter
                   - Standard
+                  - Growth
+                  - Scale
               monthly_price_minor:
                 type: integer
                 minimum: 0
@@ -1798,23 +1794,15 @@ components:
             - content_type
           additionalProperties: false
         qr_image_url:
-          anyOf:
-            - type: string
-              format: uri
-            - type: string
-              pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-            - type: string
-              pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-            - type: "null"
+          type:
+            - string
+            - "null"
+          format: uri
         material_url:
-          anyOf:
-            - type: string
-              format: uri
-            - type: string
-              pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-            - type: string
-              pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-            - type: "null"
+          type:
+            - string
+            - "null"
+          format: uri
       required:
         - id
         - name
@@ -1902,23 +1890,15 @@ components:
                   - content_type
                 additionalProperties: false
               qr_image_url:
-                anyOf:
-                  - type: string
-                    format: uri
-                  - type: string
-                    pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                  - type: string
-                    pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                  - type: "null"
+                type:
+                  - string
+                  - "null"
+                format: uri
               material_url:
-                anyOf:
-                  - type: string
-                    format: uri
-                  - type: string
-                    pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                  - type: string
-                    pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                  - type: "null"
+                type:
+                  - string
+                  - "null"
+                format: uri
             required:
               - id
               - name
@@ -2749,14 +2729,10 @@ components:
                 type: integer
                 minimum: 0
               image_url:
-                anyOf:
-                  - type: string
-                    format: uri
-                  - type: string
-                    pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                  - type: string
-                    pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                  - type: "null"
+                type:
+                  - string
+                  - "null"
+                format: uri
             required:
               - file_id
               - display_order
@@ -2830,14 +2806,10 @@ components:
                 type: integer
                 minimum: 0
               image_url:
-                anyOf:
-                  - type: string
-                    format: uri
-                  - type: string
-                    pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                  - type: string
-                    pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                  - type: "null"
+                type:
+                  - string
+                  - "null"
+                format: uri
             required:
               - file_id
               - display_order
@@ -2960,7 +2932,7 @@ components:
                         - lost
                     readiness:
                       type: string
-                      enum: &a43
+                      enum: &a45
                         - ready
                         - needs_cleaning
                         - needs_repair
@@ -3093,6 +3065,154 @@ components:
         - has_more_upcoming_allocations
         - created_at
         - updated_at
+    CatalogueBackupExportStatus:
+      type: object
+      properties:
+        job_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: &a42
+            - pending
+            - running
+            - completed
+            - failed
+        available_at:
+          type:
+            - string
+            - "null"
+          format: date-time
+        expires_at:
+          type:
+            - string
+            - "null"
+          format: date-time
+      required:
+        - job_id
+        - status
+        - available_at
+        - expires_at
+    CatalogueBackupImportPreview:
+      type: object
+      properties:
+        import_id:
+          type: string
+          format: uuid
+        branch_id:
+          type: string
+          format: uuid
+        counts:
+          type: object
+          properties:
+            categories_to_create:
+              type: integer
+              minimum: 0
+            products_to_create:
+              type: integer
+              minimum: 0
+            variants_to_create:
+              type: integer
+              minimum: 0
+            pieces_to_create:
+              type: integer
+              minimum: 0
+            guides_to_create:
+              type: integer
+              minimum: 0
+            images_to_restore:
+              type: integer
+              minimum: 0
+          required:
+            - categories_to_create
+            - products_to_create
+            - variants_to_create
+            - pieces_to_create
+            - guides_to_create
+            - images_to_restore
+          additionalProperties: false
+        conflicts:
+          type: array
+          items:
+            type: object
+            properties:
+              entity:
+                type: string
+                enum: &a43
+                  - category
+                  - product
+                  - variant
+                  - piece
+                  - measurement_guide
+                  - image
+              id:
+                type: string
+                format: uuid
+              reason:
+                type: string
+                maxLength: 160
+            required:
+              - entity
+              - id
+              - reason
+          maxItems: 100
+        conflicts_truncated:
+          type: boolean
+        expires_at:
+          type: string
+          format: date-time
+      required:
+        - import_id
+        - branch_id
+        - counts
+        - conflicts
+        - conflicts_truncated
+        - expires_at
+      additionalProperties: false
+    CatalogueBackupImportCommitResponse:
+      type: object
+      properties:
+        import_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum:
+            - committed
+        created:
+          type: object
+          properties:
+            categories_to_create:
+              type: integer
+              minimum: 0
+            products_to_create:
+              type: integer
+              minimum: 0
+            variants_to_create:
+              type: integer
+              minimum: 0
+            pieces_to_create:
+              type: integer
+              minimum: 0
+            guides_to_create:
+              type: integer
+              minimum: 0
+            images_to_restore:
+              type: integer
+              minimum: 0
+          required:
+            - categories_to_create
+            - products_to_create
+            - variants_to_create
+            - pieces_to_create
+            - guides_to_create
+            - images_to_restore
+          additionalProperties: false
+      required:
+        - import_id
+        - status
+        - created
+      additionalProperties: false
     CustomerListQuery:
       type: object
       properties:
@@ -3110,7 +3230,7 @@ components:
           maxLength: 200
         status:
           type: string
-          enum: &a42
+          enum: &a44
             - active
             - archived
             - all
@@ -7685,23 +7805,15 @@ paths:
                                 - content_type
                               additionalProperties: false
                             qr_image_url:
-                              anyOf:
-                                - type: string
-                                  format: uri
-                                - type: string
-                                  pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                                - type: string
-                                  pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                                - type: "null"
+                              type:
+                                - string
+                                - "null"
+                              format: uri
                             material_url:
-                              anyOf:
-                                - type: string
-                                  format: uri
-                                - type: string
-                                  pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                                - type: string
-                                  pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                                - type: "null"
+                              type:
+                                - string
+                                - "null"
+                              format: uri
                           required:
                             - id
                             - name
@@ -8007,23 +8119,15 @@ paths:
                           - content_type
                         additionalProperties: false
                       qr_image_url:
-                        anyOf:
-                          - type: string
-                            format: uri
-                          - type: string
-                            pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                          - type: string
-                            pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                          - type: "null"
+                        type:
+                          - string
+                          - "null"
+                        format: uri
                       material_url:
-                        anyOf:
-                          - type: string
-                            format: uri
-                          - type: string
-                            pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                          - type: string
-                            pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                          - type: "null"
+                        type:
+                          - string
+                          - "null"
+                        format: uri
                     required:
                       - id
                       - name
@@ -8601,23 +8705,15 @@ paths:
                           - content_type
                         additionalProperties: false
                       qr_image_url:
-                        anyOf:
-                          - type: string
-                            format: uri
-                          - type: string
-                            pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                          - type: string
-                            pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                          - type: "null"
+                        type:
+                          - string
+                          - "null"
+                        format: uri
                       material_url:
-                        anyOf:
-                          - type: string
-                            format: uri
-                          - type: string
-                            pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                          - type: string
-                            pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                          - type: "null"
+                        type:
+                          - string
+                          - "null"
+                        format: uri
                     required:
                       - id
                       - name
@@ -8814,6 +8910,148 @@ paths:
                   - success
                   - error
                   - request_id
+  /api/media/public/stores/{slug}/files/{fileId}:
+    get:
+      servers:
+        - url: /
+      tags:
+        - storefront
+      summary: Stream a published storefront image through the API host for Cloudflare
+        caching.
+      description: This unversioned media path is a direct-origin fallback for the
+        Cloudflare Worker. Successful images are cacheable at the edge for 45
+        seconds; access and publication are checked on every origin read.
+      parameters:
+        - schema:
+            type: string
+            minLength: 1
+            maxLength: 80
+            pattern: ^[a-z0-9-]+$
+          required: true
+          name: slug
+          in: path
+        - schema:
+            type: string
+            format: uuid
+          required: true
+          name: fileId
+          in: path
+        - schema:
+            type: string
+            enum:
+              - "320"
+              - "960"
+              - "1600"
+          required: false
+          name: w
+          in: query
+      responses:
+        "200":
+          description: Published image bytes. Cloudflare may cache the response for 45
+            seconds.
+          headers:
+            Cache-Control:
+              description: public, max-age=0, s-maxage=45
+              schema:
+                type: string
+          content:
+            image/jpeg:
+              schema:
+                type: string
+            image/png:
+              schema:
+                type: string
+            image/webp:
+              schema:
+                type: string
+        "404":
+          description: No published image exists at this store and file id.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        enum: *a28
+                      message:
+                        type: string
+                        minLength: 1
+                      fields:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            field:
+                              type: string
+                              minLength: 1
+                            message:
+                              type: string
+                              minLength: 1
+                          required:
+                            - field
+                            - message
+                    required:
+                      - code
+                      - message
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - error
+                  - request_id
+        "429":
+          description: Public media request rate limit exceeded.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        enum: *a28
+                      message:
+                        type: string
+                        minLength: 1
+                      fields:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            field:
+                              type: string
+                              minLength: 1
+                            message:
+                              type: string
+                              minLength: 1
+                          required:
+                            - field
+                            - message
+                    required:
+                      - code
+                      - message
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - error
+                  - request_id
   /public/stores/{slug}:
     get:
       tags:
@@ -8844,6 +9082,10 @@ paths:
                       slug:
                         type: string
                         minLength: 1
+                      preview_media_session:
+                        type: string
+                        minLength: 1
+                        maxLength: 256
                       name:
                         type: string
                         minLength: 1
@@ -8857,29 +9099,21 @@ paths:
                           - "null"
                       theme:
                         type: string
-                        enum: &a51
+                        enum: &a52
                           - ivory
                           - sage
                           - blush
                           - noir
                       logo_url:
-                        anyOf:
-                          - type: string
-                            format: uri
-                          - type: string
-                            pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                          - type: string
-                            pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                          - type: "null"
+                        type:
+                          - string
+                          - "null"
+                        format: uri
                       cover_url:
-                        anyOf:
-                          - type: string
-                            format: uri
-                          - type: string
-                            pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                          - type: string
-                            pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                          - type: "null"
+                        type:
+                          - string
+                          - "null"
+                        format: uri
                       currency:
                         type: string
                         pattern: ^[A-Z]{3}$
@@ -8942,14 +9176,10 @@ paths:
                                   - string
                                   - "null"
                               image_url:
-                                anyOf:
-                                  - type: string
-                                    format: uri
-                                  - type: string
-                                    pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                                  - type: string
-                                    pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                                  - type: "null"
+                                type:
+                                  - string
+                                  - "null"
+                                format: uri
                             required:
                               - heading
                               - body
@@ -8967,14 +9197,10 @@ paths:
                                   - string
                                   - "null"
                               image_url:
-                                anyOf:
-                                  - type: string
-                                    format: uri
-                                  - type: string
-                                    pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                                  - type: string
-                                    pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                                  - type: "null"
+                                type:
+                                  - string
+                                  - "null"
+                                format: uri
                             required:
                               - heading
                               - body
@@ -9054,14 +9280,10 @@ paths:
                               minLength: 1
                               maxLength: 120
                             image_url:
-                              anyOf:
-                                - type: string
-                                  format: uri
-                                - type: string
-                                  pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                                - type: string
-                                  pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                                - type: "null"
+                              type:
+                                - string
+                                - "null"
+                              format: uri
                             price_from_minor:
                               type: string
                               pattern: ^-?(0|[1-9]\d*)$
@@ -9111,14 +9333,10 @@ paths:
                               minLength: 1
                               maxLength: 120
                             image_url:
-                              anyOf:
-                                - type: string
-                                  format: uri
-                                - type: string
-                                  pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                                - type: string
-                                  pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                                - type: "null"
+                              type:
+                                - string
+                                - "null"
+                              format: uri
                             price_from_minor:
                               type: string
                               pattern: ^-?(0|[1-9]\d*)$
@@ -9159,13 +9377,8 @@ paths:
                           image_urls:
                             type: array
                             items:
-                              anyOf:
-                                - type: string
-                                  format: uri
-                                - type: string
-                                  pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                                - type: string
-                                  pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
+                              type: string
+                              format: uri
                             default: []
                           rental:
                             type: string
@@ -9488,14 +9701,10 @@ paths:
                               minLength: 1
                               maxLength: 120
                             image_url:
-                              anyOf:
-                                - type: string
-                                  format: uri
-                                - type: string
-                                  pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                                - type: string
-                                  pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                                - type: "null"
+                              type:
+                                - string
+                                - "null"
+                              format: uri
                             price_from_minor:
                               type: string
                               pattern: ^-?(0|[1-9]\d*)$
@@ -9612,13 +9821,8 @@ paths:
                       image_urls:
                         type: array
                         items:
-                          anyOf:
-                            - type: string
-                              format: uri
-                            - type: string
-                              pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                            - type: string
-                              pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
+                          type: string
+                          format: uri
                         maxItems: 5
                       variants:
                         type: array
@@ -9705,14 +9909,10 @@ paths:
                                       enum:
                                         - default_guide
                                     guide_image_url:
-                                      anyOf:
-                                        - type: string
-                                          format: uri
-                                        - type: string
-                                          pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                                        - type: string
-                                          pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                                        - type: "null"
+                                      type:
+                                        - string
+                                        - "null"
+                                      format: uri
                                   required:
                                     - mode
                                     - guide_image_url
@@ -10060,24 +10260,14 @@ paths:
                                   - manual_qr
                                   - manual_transfer
                               qr_image_url:
-                                anyOf:
-                                  - type: string
-                                    format: uri
-                                  - type: string
-                                    pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                                  - type: string
-                                    pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
+                                type: string
+                                format: uri
                               destination_note:
                                 type: string
                                 maxLength: 2000
                               material_url:
-                                anyOf:
-                                  - type: string
-                                    format: uri
-                                  - type: string
-                                    pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                                  - type: string
-                                    pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
+                                type: string
+                                format: uri
                               material_content_type:
                                 type: string
                                 enum: &a40
@@ -11196,24 +11386,14 @@ paths:
                             type: string
                             enum: *a39
                           qr_image_url:
-                            anyOf:
-                              - type: string
-                                format: uri
-                              - type: string
-                                pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                              - type: string
-                                pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
+                            type: string
+                            format: uri
                           destination_note:
                             type: string
                             maxLength: 2000
                           material_url:
-                            anyOf:
-                              - type: string
-                                format: uri
-                              - type: string
-                                pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                              - type: string
-                                pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
+                            type: string
+                            format: uri
                           material_content_type:
                             type: string
                             enum: *a40
@@ -13888,11 +14068,10 @@ paths:
                         pattern: ^[A-Za-z0-9_-]+$
                       content_type:
                         type: string
-                        enum: &a50
+                        enum:
                           - image/jpeg
                           - image/png
                           - image/webp
-                          - application/pdf
                       byte_size:
                         type: integer
                         exclusiveMinimum: 0
@@ -14612,6 +14791,616 @@ paths:
                   - success
                   - error
                   - request_id
+  /catalogue/backup/exports:
+    post:
+      tags:
+        - catalogue
+      summary: Queue an export of the active branch inventory.
+      parameters:
+        - schema:
+            type: string
+            minLength: 8
+            maxLength: 255
+          required: true
+          name: Idempotency-Key
+          in: header
+      responses:
+        "200":
+          description: An existing running or recently completed export.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      job:
+                        type: object
+                        properties:
+                          job_id:
+                            type: string
+                            format: uuid
+                          status:
+                            type: string
+                            enum: *a42
+                          available_at:
+                            type:
+                              - string
+                              - "null"
+                            format: date-time
+                          expires_at:
+                            type:
+                              - string
+                              - "null"
+                            format: date-time
+                        required:
+                          - job_id
+                          - status
+                          - available_at
+                          - expires_at
+                    required:
+                      - job
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - data
+                  - request_id
+        "409":
+          description: The idempotency key is already processing or was reused for a
+            different request.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        enum: *a28
+                      message:
+                        type: string
+                        minLength: 1
+                      fields:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            field:
+                              type: string
+                              minLength: 1
+                            message:
+                              type: string
+                              minLength: 1
+                          required:
+                            - field
+                            - message
+                    required:
+                      - code
+                      - message
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - error
+                  - request_id
+  /catalogue/backup/exports/{jobId}:
+    get:
+      tags:
+        - catalogue
+      summary: Read the status of an active-branch inventory export.
+      parameters:
+        - schema:
+            type: string
+            format: uuid
+          required: true
+          name: jobId
+          in: path
+      responses:
+        "200":
+          description: Export status and next eligible export time.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      job:
+                        type: object
+                        properties:
+                          job_id:
+                            type: string
+                            format: uuid
+                          status:
+                            type: string
+                            enum: *a42
+                          available_at:
+                            type:
+                              - string
+                              - "null"
+                            format: date-time
+                          expires_at:
+                            type:
+                              - string
+                              - "null"
+                            format: date-time
+                        required:
+                          - job_id
+                          - status
+                          - available_at
+                          - expires_at
+                    required:
+                      - job
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - data
+                  - request_id
+        "404":
+          description: The export does not belong to the active branch or is unavailable.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        enum: *a28
+                      message:
+                        type: string
+                        minLength: 1
+                      fields:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            field:
+                              type: string
+                              minLength: 1
+                            message:
+                              type: string
+                              minLength: 1
+                          required:
+                            - field
+                            - message
+                    required:
+                      - code
+                      - message
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - error
+                  - request_id
+  /catalogue/backup/exports/{jobId}/download:
+    get:
+      tags:
+        - catalogue
+      summary: Download a private, expiring branch inventory ZIP.
+      parameters:
+        - schema:
+            type: string
+            format: uuid
+          required: true
+          name: jobId
+          in: path
+      responses:
+        "200":
+          description: Inventory backup ZIP.
+          content:
+            application/zip:
+              schema:
+                type: string
+                format: binary
+        "404":
+          description: The export is not ready, expired, or outside the active branch.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        enum: *a28
+                      message:
+                        type: string
+                        minLength: 1
+                      fields:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            field:
+                              type: string
+                              minLength: 1
+                            message:
+                              type: string
+                              minLength: 1
+                          required:
+                            - field
+                            - message
+                    required:
+                      - code
+                      - message
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - error
+                  - request_id
+  /catalogue/backup/imports/preview:
+    post:
+      tags:
+        - catalogue
+      summary: Validate and preview an uploaded branch inventory backup.
+      parameters:
+        - schema:
+            type: string
+            minLength: 8
+            maxLength: 255
+          required: true
+          name: Idempotency-Key
+          in: header
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                file_id:
+                  type: string
+                  format: uuid
+              required:
+                - file_id
+              additionalProperties: false
+      responses:
+        "200":
+          description: Restore counts, conflicts, and preview expiry.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      import_id:
+                        type: string
+                        format: uuid
+                      branch_id:
+                        type: string
+                        format: uuid
+                      counts:
+                        type: object
+                        properties:
+                          categories_to_create:
+                            type: integer
+                            minimum: 0
+                          products_to_create:
+                            type: integer
+                            minimum: 0
+                          variants_to_create:
+                            type: integer
+                            minimum: 0
+                          pieces_to_create:
+                            type: integer
+                            minimum: 0
+                          guides_to_create:
+                            type: integer
+                            minimum: 0
+                          images_to_restore:
+                            type: integer
+                            minimum: 0
+                        required:
+                          - categories_to_create
+                          - products_to_create
+                          - variants_to_create
+                          - pieces_to_create
+                          - guides_to_create
+                          - images_to_restore
+                        additionalProperties: false
+                      conflicts:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            entity:
+                              type: string
+                              enum: *a43
+                            id:
+                              type: string
+                              format: uuid
+                            reason:
+                              type: string
+                              maxLength: 160
+                          required:
+                            - entity
+                            - id
+                            - reason
+                        maxItems: 100
+                      conflicts_truncated:
+                        type: boolean
+                      expires_at:
+                        type: string
+                        format: date-time
+                    required:
+                      - import_id
+                      - branch_id
+                      - counts
+                      - conflicts
+                      - conflicts_truncated
+                      - expires_at
+                    additionalProperties: false
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - data
+                  - request_id
+        "422":
+          description: The archive is malformed, oversized, or belongs to another branch
+            or business.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        enum: *a28
+                      message:
+                        type: string
+                        minLength: 1
+                      fields:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            field:
+                              type: string
+                              minLength: 1
+                            message:
+                              type: string
+                              minLength: 1
+                          required:
+                            - field
+                            - message
+                    required:
+                      - code
+                      - message
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - error
+                  - request_id
+  /catalogue/backup/imports/{importId}/commit:
+    post:
+      tags:
+        - catalogue
+      summary: Restore missing inventory records from a reviewed backup preview.
+      parameters:
+        - schema:
+            type: string
+            format: uuid
+          required: true
+          name: importId
+          in: path
+        - schema:
+            type: string
+            minLength: 8
+            maxLength: 255
+          required: true
+          name: Idempotency-Key
+          in: header
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties: {}
+              additionalProperties: false
+      responses:
+        "200":
+          description: Additive restore completed atomically.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      import_id:
+                        type: string
+                        format: uuid
+                      status:
+                        type: string
+                        enum:
+                          - committed
+                      created:
+                        type: object
+                        properties:
+                          categories_to_create:
+                            type: integer
+                            minimum: 0
+                          products_to_create:
+                            type: integer
+                            minimum: 0
+                          variants_to_create:
+                            type: integer
+                            minimum: 0
+                          pieces_to_create:
+                            type: integer
+                            minimum: 0
+                          guides_to_create:
+                            type: integer
+                            minimum: 0
+                          images_to_restore:
+                            type: integer
+                            minimum: 0
+                        required:
+                          - categories_to_create
+                          - products_to_create
+                          - variants_to_create
+                          - pieces_to_create
+                          - guides_to_create
+                          - images_to_restore
+                        additionalProperties: false
+                    required:
+                      - import_id
+                      - status
+                      - created
+                    additionalProperties: false
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - data
+                  - request_id
+        "409":
+          description: The preview expired or inventory changed after preview.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        enum: *a28
+                      message:
+                        type: string
+                        minLength: 1
+                      fields:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            field:
+                              type: string
+                              minLength: 1
+                            message:
+                              type: string
+                              minLength: 1
+                          required:
+                            - field
+                            - message
+                    required:
+                      - code
+                      - message
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - error
+                  - request_id
+        "422":
+          description: The restore archive is invalid or conflicts with existing records.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        enum: *a28
+                      message:
+                        type: string
+                        minLength: 1
+                      fields:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            field:
+                              type: string
+                              minLength: 1
+                            message:
+                              type: string
+                              minLength: 1
+                          required:
+                            - field
+                            - message
+                    required:
+                      - code
+                      - message
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - error
+                  - request_id
   /customers:
     get:
       tags:
@@ -14642,7 +15431,7 @@ paths:
           in: query
         - schema:
             type: string
-            enum: *a42
+            enum: *a44
             default: active
           required: false
           name: status
@@ -16697,7 +17486,7 @@ paths:
           in: query
         - schema:
             type: string
-            enum: &a44
+            enum: &a46
               - reserved
               - rented
               - unavailable
@@ -16801,14 +17590,10 @@ paths:
                                   minLength: 1
                                   maxLength: 200
                                 primary_image_url:
-                                  anyOf:
-                                    - type: string
-                                      format: uri
-                                    - type: string
-                                      pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                                    - type: string
-                                      pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                                    - type: "null"
+                                  type:
+                                    - string
+                                    - "null"
+                                  format: uri
                               required:
                                 - id
                                 - name
@@ -16853,7 +17638,7 @@ paths:
                                   format: uuid
                                 readiness:
                                   type: string
-                                  enum: *a43
+                                  enum: *a45
                               required:
                                 - id
                                 - readiness
@@ -16869,7 +17654,7 @@ paths:
                                     maxLength: 200
                                   type:
                                     type: string
-                                    enum: *a44
+                                    enum: *a46
                                   period:
                                     type: object
                                     properties:
@@ -17397,7 +18182,7 @@ paths:
                                           maximum: 9007199254740991
                                         status:
                                           type: string
-                                          enum: &a45
+                                          enum: &a47
                                             - pending_confirmation
                                             - confirmed
                                             - picked_up
@@ -17482,7 +18267,7 @@ paths:
                                           maximum: 9007199254740991
                                         status:
                                           type: string
-                                          enum: *a45
+                                          enum: *a47
                                       required:
                                         - id
                                         - source
@@ -17654,7 +18439,7 @@ paths:
                                   format: date-time
                                 booking_channel:
                                   type: string
-                                  enum: *a46
+                                  enum: *a48
                                 status:
                                   type: string
                                   enum:
@@ -18277,14 +19062,10 @@ paths:
                                         minLength: 1
                                         maxLength: 80
                                       primary_image_url:
-                                        anyOf:
-                                          - type: string
-                                            format: uri
-                                          - type: string
-                                            pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                                          - type: string
-                                            pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                                          - type: "null"
+                                        type:
+                                          - string
+                                          - "null"
+                                        format: uri
                                     required:
                                       - variant_id
                                       - product_name
@@ -18601,7 +19382,7 @@ paths:
                             format: uuid
                           booking_channel:
                             type: string
-                            enum: *a46
+                            enum: *a48
                           status:
                             type: string
                             enum: *a1
@@ -18697,14 +19478,10 @@ paths:
                                       minLength: 1
                                       maxLength: 80
                                     primary_image_url:
-                                      anyOf:
-                                        - type: string
-                                          format: uri
-                                        - type: string
-                                          pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                                        - type: string
-                                          pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                                        - type: "null"
+                                      type:
+                                        - string
+                                        - "null"
+                                      format: uri
                                   required:
                                     - variant_id
                                     - product_name
@@ -18803,7 +19580,7 @@ paths:
                             type: array
                             items:
                               type: string
-                              enum: *a47
+                              enum: *a49
                             maxItems: 8
                           version:
                             type: integer
@@ -19007,7 +19784,7 @@ paths:
                         format: uuid
                       booking_channel:
                         type: string
-                        enum: *a46
+                        enum: *a48
                       status:
                         type: string
                         enum: *a1
@@ -19103,14 +19880,10 @@ paths:
                                   minLength: 1
                                   maxLength: 80
                                 primary_image_url:
-                                  anyOf:
-                                    - type: string
-                                      format: uri
-                                    - type: string
-                                      pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                                    - type: string
-                                      pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                                    - type: "null"
+                                  type:
+                                    - string
+                                    - "null"
+                                  format: uri
                               required:
                                 - variant_id
                                 - product_name
@@ -19209,7 +19982,7 @@ paths:
                         type: array
                         items:
                           type: string
-                          enum: *a47
+                          enum: *a49
                         maxItems: 8
                       version:
                         type: integer
@@ -19551,7 +20324,7 @@ paths:
                             format: uuid
                           booking_channel:
                             type: string
-                            enum: *a46
+                            enum: *a48
                           status:
                             type: string
                             enum: *a1
@@ -19647,14 +20420,10 @@ paths:
                                       minLength: 1
                                       maxLength: 80
                                     primary_image_url:
-                                      anyOf:
-                                        - type: string
-                                          format: uri
-                                        - type: string
-                                          pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                                        - type: string
-                                          pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                                        - type: "null"
+                                      type:
+                                        - string
+                                        - "null"
+                                      format: uri
                                   required:
                                     - variant_id
                                     - product_name
@@ -19753,7 +20522,7 @@ paths:
                             type: array
                             items:
                               type: string
-                              enum: *a47
+                              enum: *a49
                             maxItems: 8
                           version:
                             type: integer
@@ -19996,7 +20765,7 @@ paths:
                             format: uuid
                           booking_channel:
                             type: string
-                            enum: *a46
+                            enum: *a48
                           status:
                             type: string
                             enum: *a1
@@ -20092,14 +20861,10 @@ paths:
                                       minLength: 1
                                       maxLength: 80
                                     primary_image_url:
-                                      anyOf:
-                                        - type: string
-                                          format: uri
-                                        - type: string
-                                          pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                                        - type: string
-                                          pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                                        - type: "null"
+                                      type:
+                                        - string
+                                        - "null"
+                                      format: uri
                                   required:
                                     - variant_id
                                     - product_name
@@ -20198,7 +20963,7 @@ paths:
                             type: array
                             items:
                               type: string
-                              enum: *a47
+                              enum: *a49
                             maxItems: 8
                           version:
                             type: integer
@@ -20472,7 +21237,7 @@ paths:
                             format: uuid
                           booking_channel:
                             type: string
-                            enum: *a46
+                            enum: *a48
                           status:
                             type: string
                             enum: *a1
@@ -20568,14 +21333,10 @@ paths:
                                       minLength: 1
                                       maxLength: 80
                                     primary_image_url:
-                                      anyOf:
-                                        - type: string
-                                          format: uri
-                                        - type: string
-                                          pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                                        - type: string
-                                          pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                                        - type: "null"
+                                      type:
+                                        - string
+                                        - "null"
+                                      format: uri
                                   required:
                                     - variant_id
                                     - product_name
@@ -20674,7 +21435,7 @@ paths:
                             type: array
                             items:
                               type: string
-                              enum: *a47
+                              enum: *a49
                             maxItems: 8
                           version:
                             type: integer
@@ -20943,7 +21704,7 @@ paths:
                             format: uuid
                           booking_channel:
                             type: string
-                            enum: *a46
+                            enum: *a48
                           status:
                             type: string
                             enum: *a1
@@ -21039,14 +21800,10 @@ paths:
                                       minLength: 1
                                       maxLength: 80
                                     primary_image_url:
-                                      anyOf:
-                                        - type: string
-                                          format: uri
-                                        - type: string
-                                          pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                                        - type: string
-                                          pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                                        - type: "null"
+                                      type:
+                                        - string
+                                        - "null"
+                                      format: uri
                                   required:
                                     - variant_id
                                     - product_name
@@ -21145,7 +21902,7 @@ paths:
                             type: array
                             items:
                               type: string
-                              enum: *a47
+                              enum: *a49
                             maxItems: 8
                           version:
                             type: integer
@@ -21418,7 +22175,7 @@ paths:
                             format: uuid
                           booking_channel:
                             type: string
-                            enum: *a46
+                            enum: *a48
                           status:
                             type: string
                             enum: *a1
@@ -21514,14 +22271,10 @@ paths:
                                       minLength: 1
                                       maxLength: 80
                                     primary_image_url:
-                                      anyOf:
-                                        - type: string
-                                          format: uri
-                                        - type: string
-                                          pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                                        - type: string
-                                          pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                                        - type: "null"
+                                      type:
+                                        - string
+                                        - "null"
+                                      format: uri
                                   required:
                                     - variant_id
                                     - product_name
@@ -21620,7 +22373,7 @@ paths:
                             type: array
                             items:
                               type: string
-                              enum: *a47
+                              enum: *a49
                             maxItems: 8
                           version:
                             type: integer
@@ -21893,7 +22646,7 @@ paths:
                             format: uuid
                           booking_channel:
                             type: string
-                            enum: *a46
+                            enum: *a48
                           status:
                             type: string
                             enum: *a1
@@ -21989,14 +22742,10 @@ paths:
                                       minLength: 1
                                       maxLength: 80
                                     primary_image_url:
-                                      anyOf:
-                                        - type: string
-                                          format: uri
-                                        - type: string
-                                          pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                                        - type: string
-                                          pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                                        - type: "null"
+                                      type:
+                                        - string
+                                        - "null"
+                                      format: uri
                                   required:
                                     - variant_id
                                     - product_name
@@ -22095,7 +22844,7 @@ paths:
                             type: array
                             items:
                               type: string
-                              enum: *a47
+                              enum: *a49
                             maxItems: 8
                           version:
                             type: integer
@@ -22363,7 +23112,7 @@ paths:
                             format: uuid
                           booking_channel:
                             type: string
-                            enum: *a46
+                            enum: *a48
                           status:
                             type: string
                             enum: *a1
@@ -22459,14 +23208,10 @@ paths:
                                       minLength: 1
                                       maxLength: 80
                                     primary_image_url:
-                                      anyOf:
-                                        - type: string
-                                          format: uri
-                                        - type: string
-                                          pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                                        - type: string
-                                          pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                                        - type: "null"
+                                      type:
+                                        - string
+                                        - "null"
+                                      format: uri
                                   required:
                                     - variant_id
                                     - product_name
@@ -22565,7 +23310,7 @@ paths:
                             type: array
                             items:
                               type: string
-                              enum: *a47
+                              enum: *a49
                             maxItems: 8
                           version:
                             type: integer
@@ -22833,7 +23578,7 @@ paths:
                             format: uuid
                           booking_channel:
                             type: string
-                            enum: *a46
+                            enum: *a48
                           status:
                             type: string
                             enum: *a1
@@ -22929,14 +23674,10 @@ paths:
                                       minLength: 1
                                       maxLength: 80
                                     primary_image_url:
-                                      anyOf:
-                                        - type: string
-                                          format: uri
-                                        - type: string
-                                          pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                                        - type: string
-                                          pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                                        - type: "null"
+                                      type:
+                                        - string
+                                        - "null"
+                                      format: uri
                                   required:
                                     - variant_id
                                     - product_name
@@ -23035,7 +23776,7 @@ paths:
                             type: array
                             items:
                               type: string
-                              enum: *a47
+                              enum: *a49
                             maxItems: 8
                           version:
                             type: integer
@@ -23306,7 +24047,7 @@ paths:
                             format: uuid
                           booking_channel:
                             type: string
-                            enum: *a46
+                            enum: *a48
                           status:
                             type: string
                             enum: *a1
@@ -23402,14 +24143,10 @@ paths:
                                       minLength: 1
                                       maxLength: 80
                                     primary_image_url:
-                                      anyOf:
-                                        - type: string
-                                          format: uri
-                                        - type: string
-                                          pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                                        - type: string
-                                          pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                                        - type: "null"
+                                      type:
+                                        - string
+                                        - "null"
+                                      format: uri
                                   required:
                                     - variant_id
                                     - product_name
@@ -23508,7 +24245,7 @@ paths:
                             type: array
                             items:
                               type: string
-                              enum: *a47
+                              enum: *a49
                             maxItems: 8
                           version:
                             type: integer
@@ -23779,7 +24516,7 @@ paths:
                             format: uuid
                           booking_channel:
                             type: string
-                            enum: *a46
+                            enum: *a48
                           status:
                             type: string
                             enum: *a1
@@ -23875,14 +24612,10 @@ paths:
                                       minLength: 1
                                       maxLength: 80
                                     primary_image_url:
-                                      anyOf:
-                                        - type: string
-                                          format: uri
-                                        - type: string
-                                          pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                                        - type: string
-                                          pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                                        - type: "null"
+                                      type:
+                                        - string
+                                        - "null"
+                                      format: uri
                                   required:
                                     - variant_id
                                     - product_name
@@ -23981,7 +24714,7 @@ paths:
                             type: array
                             items:
                               type: string
-                              enum: *a47
+                              enum: *a49
                             maxItems: 8
                           version:
                             type: integer
@@ -24272,7 +25005,7 @@ paths:
                             format: uuid
                           booking_channel:
                             type: string
-                            enum: *a46
+                            enum: *a48
                           status:
                             type: string
                             enum: *a1
@@ -24368,14 +25101,10 @@ paths:
                                       minLength: 1
                                       maxLength: 80
                                     primary_image_url:
-                                      anyOf:
-                                        - type: string
-                                          format: uri
-                                        - type: string
-                                          pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                                        - type: string
-                                          pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                                        - type: "null"
+                                      type:
+                                        - string
+                                        - "null"
+                                      format: uri
                                   required:
                                     - variant_id
                                     - product_name
@@ -24474,7 +25203,7 @@ paths:
                             type: array
                             items:
                               type: string
-                              enum: *a47
+                              enum: *a49
                             maxItems: 8
                           version:
                             type: integer
@@ -25158,24 +25887,14 @@ paths:
                             type: string
                             enum: *a39
                           qr_image_url:
-                            anyOf:
-                              - type: string
-                                format: uri
-                              - type: string
-                                pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                              - type: string
-                                pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
+                            type: string
+                            format: uri
                           destination_note:
                             type: string
                             maxLength: 2000
                           material_url:
-                            anyOf:
-                              - type: string
-                                format: uri
-                              - type: string
-                                pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                              - type: string
-                                pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
+                            type: string
+                            format: uri
                           material_content_type:
                             type: string
                             enum: *a40
@@ -25383,7 +26102,7 @@ paths:
                               type:
                                 - string
                                 - "null"
-                              enum: &a49
+                              enum: &a51
                                 - requested
                                 - processing
                                 - completed
@@ -25639,24 +26358,14 @@ paths:
                             type: string
                             enum: *a39
                           qr_image_url:
-                            anyOf:
-                              - type: string
-                                format: uri
-                              - type: string
-                                pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                              - type: string
-                                pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
+                            type: string
+                            format: uri
                           destination_note:
                             type: string
                             maxLength: 2000
                           material_url:
-                            anyOf:
-                              - type: string
-                                format: uri
-                              - type: string
-                                pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                              - type: string
-                                pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
+                            type: string
+                            format: uri
                           material_content_type:
                             type: string
                             enum: *a40
@@ -25776,7 +26485,7 @@ paths:
                   pattern: ^[A-Z]{3}$
                 purpose:
                   type: string
-                  enum: &a48
+                  enum: &a50
                     - rental_refund
                     - security_deposit_release
                     - goodwill_adjustment
@@ -25823,10 +26532,10 @@ paths:
                             pattern: ^[A-Z]{3}$
                           purpose:
                             type: string
-                            enum: *a48
+                            enum: *a50
                           status:
                             type: string
-                            enum: *a49
+                            enum: *a51
                           merchant_reference:
                             type:
                               - string
@@ -25916,35 +26625,63 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                purpose:
-                  type: string
-                  enum:
-                    - catalogue_image
-                    - measurement_guide
-                    - payment_receipt
-                    - verification_document
-                    - storefront_asset
-                    - export_result
-                    - subscription_payment_proof
-                    - payment_method_material
-                content_type:
-                  type: string
-                  enum: *a50
-                byte_size:
-                  type: integer
-                  exclusiveMinimum: 0
-                  maximum: 10485760
-                sha256:
-                  type: string
-                  pattern: ^[A-Za-z0-9+/]{43}=$
-              required:
-                - purpose
-                - content_type
-                - byte_size
-                - sha256
-              additionalProperties: false
+              oneOf:
+                - type: object
+                  properties:
+                    purpose:
+                      type: string
+                      enum:
+                        - catalogue_image
+                        - measurement_guide
+                        - payment_receipt
+                        - verification_document
+                        - storefront_asset
+                        - export_result
+                        - subscription_payment_proof
+                        - payment_method_material
+                    content_type:
+                      type: string
+                      enum:
+                        - image/jpeg
+                        - image/png
+                        - image/webp
+                        - application/pdf
+                    byte_size:
+                      type: integer
+                      exclusiveMinimum: 0
+                      maximum: 10485760
+                    sha256:
+                      type: string
+                      pattern: ^[A-Za-z0-9+/]{43}=$
+                  required:
+                    - purpose
+                    - content_type
+                    - byte_size
+                    - sha256
+                  additionalProperties: false
+                - type: object
+                  properties:
+                    purpose:
+                      type: string
+                      enum:
+                        - catalogue_backup
+                    content_type:
+                      type: string
+                      enum:
+                        - application/zip
+                    byte_size:
+                      type: integer
+                      exclusiveMinimum: 0
+                      maximum: 67108864
+                    sha256:
+                      type: string
+                      pattern: ^[A-Za-z0-9+/]{43}=$
+                  required:
+                    - purpose
+                    - content_type
+                    - byte_size
+                    - sha256
+                  additionalProperties: false
       responses:
         "201":
           description: Upload authorized.
@@ -25993,8 +26730,8 @@ paths:
         "422":
           description: Validation failed — see catalogue_image, measurement_guide,
             payment_receipt, verification_document, storefront_asset,
-            export_result, subscription_payment_proof, payment_method_material
-            for allowed purposes.
+            export_result, subscription_payment_proof, payment_method_material,
+            catalogue_backup for allowed purposes.
           content:
             application/json:
               schema:
@@ -27282,7 +28019,7 @@ paths:
                         pattern: ^[a-z0-9](?:[a-z0-9-]{1,48}[a-z0-9])$
                       status:
                         type: string
-                        enum: &a52
+                        enum: &a53
                           - draft
                           - published
                           - suspended
@@ -27333,7 +28070,7 @@ paths:
                                 format: uuid
                               theme:
                                 type: string
-                                enum: *a51
+                                enum: *a52
                             required:
                               - display_name
                               - tagline
@@ -27530,41 +28267,25 @@ paths:
                         type: object
                         properties:
                           logo_url:
-                            anyOf:
-                              - type: string
-                                format: uri
-                              - type: string
-                                pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                              - type: string
-                                pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                              - type: "null"
+                            type:
+                              - string
+                              - "null"
+                            format: uri
                           cover_url:
-                            anyOf:
-                              - type: string
-                                format: uri
-                              - type: string
-                                pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                              - type: string
-                                pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                              - type: "null"
+                            type:
+                              - string
+                              - "null"
+                            format: uri
                           hero_image_url:
-                            anyOf:
-                              - type: string
-                                format: uri
-                              - type: string
-                                pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                              - type: string
-                                pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                              - type: "null"
+                            type:
+                              - string
+                              - "null"
+                            format: uri
                           about_image_url:
-                            anyOf:
-                              - type: string
-                                format: uri
-                              - type: string
-                                pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                              - type: string
-                                pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                              - type: "null"
+                            type:
+                              - string
+                              - "null"
+                            format: uri
                         required:
                           - logo_url
                           - cover_url
@@ -27587,7 +28308,7 @@ paths:
                             properties:
                               format:
                                 type: string
-                                enum: &a53
+                                enum: &a54
                                   - text
                                   - images
                                 default: text
@@ -27615,7 +28336,7 @@ paths:
                                   type: string
                                   format: uuid
                                 maxItems: 6
-                                default: &a54 []
+                                default: &a55 []
                               delivery:
                                 type: object
                                 properties:
@@ -27650,14 +28371,9 @@ paths:
                           image_urls:
                             type: object
                             additionalProperties:
-                              anyOf:
-                                - type: string
-                                  format: uri
-                                - type: string
-                                  pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                                - type: string
-                                  pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                            default: &a55 {}
+                              type: string
+                              format: uri
+                            default: &a56 {}
                         required:
                           - version
                           - effective_at
@@ -27845,7 +28561,7 @@ paths:
                           format: uuid
                         theme:
                           type: string
-                          enum: *a51
+                          enum: *a52
                       required:
                         - display_name
                         - tagline
@@ -28062,7 +28778,7 @@ paths:
                         pattern: ^[a-z0-9](?:[a-z0-9-]{1,48}[a-z0-9])$
                       status:
                         type: string
-                        enum: *a52
+                        enum: *a53
                       version:
                         type: integer
                         exclusiveMinimum: 0
@@ -28110,7 +28826,7 @@ paths:
                                 format: uuid
                               theme:
                                 type: string
-                                enum: *a51
+                                enum: *a52
                             required:
                               - display_name
                               - tagline
@@ -28307,41 +29023,25 @@ paths:
                         type: object
                         properties:
                           logo_url:
-                            anyOf:
-                              - type: string
-                                format: uri
-                              - type: string
-                                pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                              - type: string
-                                pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                              - type: "null"
+                            type:
+                              - string
+                              - "null"
+                            format: uri
                           cover_url:
-                            anyOf:
-                              - type: string
-                                format: uri
-                              - type: string
-                                pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                              - type: string
-                                pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                              - type: "null"
+                            type:
+                              - string
+                              - "null"
+                            format: uri
                           hero_image_url:
-                            anyOf:
-                              - type: string
-                                format: uri
-                              - type: string
-                                pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                              - type: string
-                                pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                              - type: "null"
+                            type:
+                              - string
+                              - "null"
+                            format: uri
                           about_image_url:
-                            anyOf:
-                              - type: string
-                                format: uri
-                              - type: string
-                                pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                              - type: string
-                                pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                              - type: "null"
+                            type:
+                              - string
+                              - "null"
+                            format: uri
                         required:
                           - logo_url
                           - cover_url
@@ -28364,7 +29064,7 @@ paths:
                             properties:
                               format:
                                 type: string
-                                enum: *a53
+                                enum: *a54
                                 default: text
                               rental:
                                 type: string
@@ -28390,7 +29090,7 @@ paths:
                                   type: string
                                   format: uuid
                                 maxItems: 6
-                                default: *a54
+                                default: *a55
                               delivery:
                                 type: object
                                 properties:
@@ -28425,14 +29125,9 @@ paths:
                           image_urls:
                             type: object
                             additionalProperties:
-                              anyOf:
-                                - type: string
-                                  format: uri
-                                - type: string
-                                  pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                                - type: string
-                                  pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                            default: *a55
+                              type: string
+                              format: uri
+                            default: *a56
                         required:
                           - version
                           - effective_at
@@ -28745,7 +29440,7 @@ paths:
                         pattern: ^[a-z0-9](?:[a-z0-9-]{1,48}[a-z0-9])$
                       status:
                         type: string
-                        enum: *a52
+                        enum: *a53
                       version:
                         type: integer
                         exclusiveMinimum: 0
@@ -28793,7 +29488,7 @@ paths:
                                 format: uuid
                               theme:
                                 type: string
-                                enum: *a51
+                                enum: *a52
                             required:
                               - display_name
                               - tagline
@@ -28990,41 +29685,25 @@ paths:
                         type: object
                         properties:
                           logo_url:
-                            anyOf:
-                              - type: string
-                                format: uri
-                              - type: string
-                                pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                              - type: string
-                                pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                              - type: "null"
+                            type:
+                              - string
+                              - "null"
+                            format: uri
                           cover_url:
-                            anyOf:
-                              - type: string
-                                format: uri
-                              - type: string
-                                pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                              - type: string
-                                pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                              - type: "null"
+                            type:
+                              - string
+                              - "null"
+                            format: uri
                           hero_image_url:
-                            anyOf:
-                              - type: string
-                                format: uri
-                              - type: string
-                                pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                              - type: string
-                                pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                              - type: "null"
+                            type:
+                              - string
+                              - "null"
+                            format: uri
                           about_image_url:
-                            anyOf:
-                              - type: string
-                                format: uri
-                              - type: string
-                                pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                              - type: string
-                                pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                              - type: "null"
+                            type:
+                              - string
+                              - "null"
+                            format: uri
                         required:
                           - logo_url
                           - cover_url
@@ -29047,7 +29726,7 @@ paths:
                             properties:
                               format:
                                 type: string
-                                enum: *a53
+                                enum: *a54
                                 default: text
                               rental:
                                 type: string
@@ -29073,7 +29752,7 @@ paths:
                                   type: string
                                   format: uuid
                                 maxItems: 6
-                                default: *a54
+                                default: *a55
                               delivery:
                                 type: object
                                 properties:
@@ -29108,14 +29787,9 @@ paths:
                           image_urls:
                             type: object
                             additionalProperties:
-                              anyOf:
-                                - type: string
-                                  format: uri
-                                - type: string
-                                  pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                                - type: string
-                                  pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                            default: *a55
+                              type: string
+                              format: uri
+                            default: *a56
                         required:
                           - version
                           - effective_at
@@ -29293,7 +29967,7 @@ paths:
                         pattern: ^[a-z0-9](?:[a-z0-9-]{1,48}[a-z0-9])$
                       status:
                         type: string
-                        enum: *a52
+                        enum: *a53
                       version:
                         type: integer
                         exclusiveMinimum: 0
@@ -29341,7 +30015,7 @@ paths:
                                 format: uuid
                               theme:
                                 type: string
-                                enum: *a51
+                                enum: *a52
                             required:
                               - display_name
                               - tagline
@@ -29538,41 +30212,25 @@ paths:
                         type: object
                         properties:
                           logo_url:
-                            anyOf:
-                              - type: string
-                                format: uri
-                              - type: string
-                                pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                              - type: string
-                                pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                              - type: "null"
+                            type:
+                              - string
+                              - "null"
+                            format: uri
                           cover_url:
-                            anyOf:
-                              - type: string
-                                format: uri
-                              - type: string
-                                pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                              - type: string
-                                pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                              - type: "null"
+                            type:
+                              - string
+                              - "null"
+                            format: uri
                           hero_image_url:
-                            anyOf:
-                              - type: string
-                                format: uri
-                              - type: string
-                                pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                              - type: string
-                                pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                              - type: "null"
+                            type:
+                              - string
+                              - "null"
+                            format: uri
                           about_image_url:
-                            anyOf:
-                              - type: string
-                                format: uri
-                              - type: string
-                                pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                              - type: string
-                                pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                              - type: "null"
+                            type:
+                              - string
+                              - "null"
+                            format: uri
                         required:
                           - logo_url
                           - cover_url
@@ -29595,7 +30253,7 @@ paths:
                             properties:
                               format:
                                 type: string
-                                enum: *a53
+                                enum: *a54
                                 default: text
                               rental:
                                 type: string
@@ -29621,7 +30279,7 @@ paths:
                                   type: string
                                   format: uuid
                                 maxItems: 6
-                                default: *a54
+                                default: *a55
                               delivery:
                                 type: object
                                 properties:
@@ -29656,14 +30314,9 @@ paths:
                           image_urls:
                             type: object
                             additionalProperties:
-                              anyOf:
-                                - type: string
-                                  format: uri
-                                - type: string
-                                  pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                                - type: string
-                                  pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                            default: *a55
+                              type: string
+                              format: uri
+                            default: *a56
                         required:
                           - version
                           - effective_at
@@ -29841,7 +30494,7 @@ paths:
                         pattern: ^[a-z0-9](?:[a-z0-9-]{1,48}[a-z0-9])$
                       status:
                         type: string
-                        enum: *a52
+                        enum: *a53
                       version:
                         type: integer
                         exclusiveMinimum: 0
@@ -29889,7 +30542,7 @@ paths:
                                 format: uuid
                               theme:
                                 type: string
-                                enum: *a51
+                                enum: *a52
                             required:
                               - display_name
                               - tagline
@@ -30086,41 +30739,25 @@ paths:
                         type: object
                         properties:
                           logo_url:
-                            anyOf:
-                              - type: string
-                                format: uri
-                              - type: string
-                                pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                              - type: string
-                                pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                              - type: "null"
+                            type:
+                              - string
+                              - "null"
+                            format: uri
                           cover_url:
-                            anyOf:
-                              - type: string
-                                format: uri
-                              - type: string
-                                pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                              - type: string
-                                pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                              - type: "null"
+                            type:
+                              - string
+                              - "null"
+                            format: uri
                           hero_image_url:
-                            anyOf:
-                              - type: string
-                                format: uri
-                              - type: string
-                                pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                              - type: string
-                                pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                              - type: "null"
+                            type:
+                              - string
+                              - "null"
+                            format: uri
                           about_image_url:
-                            anyOf:
-                              - type: string
-                                format: uri
-                              - type: string
-                                pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                              - type: string
-                                pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                              - type: "null"
+                            type:
+                              - string
+                              - "null"
+                            format: uri
                         required:
                           - logo_url
                           - cover_url
@@ -30143,7 +30780,7 @@ paths:
                             properties:
                               format:
                                 type: string
-                                enum: *a53
+                                enum: *a54
                                 default: text
                               rental:
                                 type: string
@@ -30169,7 +30806,7 @@ paths:
                                   type: string
                                   format: uuid
                                 maxItems: 6
-                                default: *a54
+                                default: *a55
                               delivery:
                                 type: object
                                 properties:
@@ -30204,14 +30841,9 @@ paths:
                           image_urls:
                             type: object
                             additionalProperties:
-                              anyOf:
-                                - type: string
-                                  format: uri
-                                - type: string
-                                  pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                                - type: string
-                                  pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                            default: *a55
+                              type: string
+                              format: uri
+                            default: *a56
                         required:
                           - version
                           - effective_at
@@ -30371,7 +31003,7 @@ paths:
                   properties:
                     format:
                       type: string
-                      enum: *a53
+                      enum: *a54
                       default: text
                     rental:
                       type: string
@@ -30397,7 +31029,7 @@ paths:
                         type: string
                         format: uuid
                       maxItems: 6
-                      default: *a54
+                      default: *a55
                     delivery:
                       type: object
                       properties:
@@ -30453,7 +31085,7 @@ paths:
                         pattern: ^[a-z0-9](?:[a-z0-9-]{1,48}[a-z0-9])$
                       status:
                         type: string
-                        enum: *a52
+                        enum: *a53
                       version:
                         type: integer
                         exclusiveMinimum: 0
@@ -30501,7 +31133,7 @@ paths:
                                 format: uuid
                               theme:
                                 type: string
-                                enum: *a51
+                                enum: *a52
                             required:
                               - display_name
                               - tagline
@@ -30698,41 +31330,25 @@ paths:
                         type: object
                         properties:
                           logo_url:
-                            anyOf:
-                              - type: string
-                                format: uri
-                              - type: string
-                                pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                              - type: string
-                                pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                              - type: "null"
+                            type:
+                              - string
+                              - "null"
+                            format: uri
                           cover_url:
-                            anyOf:
-                              - type: string
-                                format: uri
-                              - type: string
-                                pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                              - type: string
-                                pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                              - type: "null"
+                            type:
+                              - string
+                              - "null"
+                            format: uri
                           hero_image_url:
-                            anyOf:
-                              - type: string
-                                format: uri
-                              - type: string
-                                pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                              - type: string
-                                pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                              - type: "null"
+                            type:
+                              - string
+                              - "null"
+                            format: uri
                           about_image_url:
-                            anyOf:
-                              - type: string
-                                format: uri
-                              - type: string
-                                pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                              - type: string
-                                pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                              - type: "null"
+                            type:
+                              - string
+                              - "null"
+                            format: uri
                         required:
                           - logo_url
                           - cover_url
@@ -30755,7 +31371,7 @@ paths:
                             properties:
                               format:
                                 type: string
-                                enum: *a53
+                                enum: *a54
                                 default: text
                               rental:
                                 type: string
@@ -30781,7 +31397,7 @@ paths:
                                   type: string
                                   format: uuid
                                 maxItems: 6
-                                default: *a54
+                                default: *a55
                               delivery:
                                 type: object
                                 properties:
@@ -30816,14 +31432,9 @@ paths:
                           image_urls:
                             type: object
                             additionalProperties:
-                              anyOf:
-                                - type: string
-                                  format: uri
-                                - type: string
-                                  pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                                - type: string
-                                  pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                            default: *a55
+                              type: string
+                              format: uri
+                            default: *a56
                         required:
                           - version
                           - effective_at
@@ -32746,6 +33357,74 @@ paths:
                               - frontdesk_seats_max
                               - trial_days
                             additionalProperties: false
+                          - type: object
+                            properties:
+                              code:
+                                type: string
+                                enum:
+                                  - growth
+                              name:
+                                type: string
+                                enum:
+                                  - Growth
+                              monthly_minor:
+                                type: string
+                                pattern: ^\d+$
+                              currency:
+                                type: string
+                                pattern: ^[A-Z]{3}$
+                              physical_assets_max:
+                                type: integer
+                                exclusiveMinimum: 0
+                              frontdesk_seats_max:
+                                type: integer
+                                minimum: 0
+                              trial_days:
+                                type: integer
+                                exclusiveMinimum: 0
+                            required:
+                              - code
+                              - name
+                              - monthly_minor
+                              - currency
+                              - physical_assets_max
+                              - frontdesk_seats_max
+                              - trial_days
+                            additionalProperties: false
+                          - type: object
+                            properties:
+                              code:
+                                type: string
+                                enum:
+                                  - scale
+                              name:
+                                type: string
+                                enum:
+                                  - Scale
+                              monthly_minor:
+                                type: string
+                                pattern: ^\d+$
+                              currency:
+                                type: string
+                                pattern: ^[A-Z]{3}$
+                              physical_assets_max:
+                                type: integer
+                                exclusiveMinimum: 0
+                              frontdesk_seats_max:
+                                type: integer
+                                minimum: 0
+                              trial_days:
+                                type: integer
+                                exclusiveMinimum: 0
+                            required:
+                              - code
+                              - name
+                              - monthly_minor
+                              - currency
+                              - physical_assets_max
+                              - frontdesk_seats_max
+                              - trial_days
+                            additionalProperties: false
                       subscription:
                         type: object
                         properties:
@@ -32892,7 +33571,7 @@ paths:
                               pattern: ^[A-Z]{3}$
                             status:
                               type: string
-                              enum: &a56
+                              enum: &a57
                                 - pending
                                 - verified
                                 - failed
@@ -33086,7 +33765,7 @@ paths:
                             pattern: ^[A-Z]{3}$
                           status:
                             type: string
-                            enum: *a56
+                            enum: *a57
                           reference:
                             type: string
                             minLength: 1
@@ -33417,23 +34096,15 @@ paths:
                           - content_type
                         additionalProperties: false
                       qr_image_url:
-                        anyOf:
-                          - type: string
-                            format: uri
-                          - type: string
-                            pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                          - type: string
-                            pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                          - type: "null"
+                        type:
+                          - string
+                          - "null"
+                        format: uri
                       material_url:
-                        anyOf:
-                          - type: string
-                            format: uri
-                          - type: string
-                            pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                          - type: string
-                            pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
-                          - type: "null"
+                        type:
+                          - string
+                          - "null"
+                        format: uri
                     required:
                       - id
                       - name
@@ -33669,24 +34340,14 @@ paths:
                             type: string
                             enum: *a39
                           qr_image_url:
-                            anyOf:
-                              - type: string
-                                format: uri
-                              - type: string
-                                pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                              - type: string
-                                pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
+                            type: string
+                            format: uri
                           destination_note:
                             type: string
                             maxLength: 2000
                           material_url:
-                            anyOf:
-                              - type: string
-                                format: uri
-                              - type: string
-                                pattern: ^\/api\/media\/staff\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?branch_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:&w=(?:320|960|1600))?$
-                              - type: string
-                                pattern: ^\/api\/media\/(?:public|preview)\/[a-z0-9-]{1,80}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?w=(?:320|960|1600))?$
+                            type: string
+                            format: uri
                           material_content_type:
                             type: string
                             enum: *a40
