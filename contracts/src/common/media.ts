@@ -28,7 +28,7 @@ export const mediaUrl = z.string().superRefine((value, context) => {
   }
 
   const relativeStaffMatch = isRelative && relativeStaffRoute.test(url.pathname);
-  if (isRelative && !relativeStaffMatch) {
+  if (isRelative && (url.origin !== 'https://media.invalid' || !relativeStaffMatch)) {
     context.addIssue({ code: 'custom', message: 'Media URL is not an approved API media route.' });
     return;
   }
@@ -45,7 +45,7 @@ export const mediaUrl = z.string().superRefine((value, context) => {
   const previewMatch = previewRoute.test(path);
   const guestMatch = guestRoute.test(path);
   const documentMatch = documentRoute.test(path);
-  if (!publicMatch && !staffMatch && !previewMatch && !guestMatch && !documentMatch) {
+  if (!publicMatch && !staffMatch && !relativeStaffMatch && !previewMatch && !guestMatch && !documentMatch) {
     context.addIssue({ code: 'custom', message: 'Media URL is not an approved API media route.' });
     return;
   }

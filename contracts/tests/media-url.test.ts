@@ -21,6 +21,25 @@ describe('mediaUrl', () => {
     }
   });
 
+  it.each([320, 960, 1600])('accepts relative staff media with width %s', (width) => {
+    expect(mediaUrl.safeParse(`/api/media/staff/${fileId}?branch_id=${branchId}&w=${width}`).success).toBe(true);
+  });
+
+  it.each([
+    `/api/media/staff/${fileId}`,
+    `/api/media/staff/${fileId}?branch_id=invalid&w=960`,
+    `/api/media/staff/not-an-id?branch_id=${branchId}&w=960`,
+    `/api/media/staff/${fileId}?branch_id=${branchId}&w=400`,
+    `/api/media/staff/${fileId}?branch_id=${branchId}&w=960&extra=value`,
+    `/api/media/staff/${fileId}?branch_id=${branchId}&branch_id=${branchId}`,
+    `/api/media/staff/${fileId}?branch_id=${branchId}#fragment`,
+    `//example.test/api/media/staff/${fileId}?branch_id=${branchId}`,
+    `/\\example.test/api/media/staff/${fileId}?branch_id=${branchId}`,
+    `/api/media/public/stores/shop/files/${fileId}`,
+  ])('rejects invalid relative media URL %s', (url) => {
+    expect(mediaUrl.safeParse(url).success).toBe(false);
+  });
+
   it('accepts the local API origin over HTTP', () => {
     expect(mediaUrl.safeParse(`http://localhost:4000/api/media/public/stores/drezivo/files/${fileId}`).success).toBe(true);
   });
