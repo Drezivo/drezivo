@@ -38,6 +38,7 @@ const PNG_SHA = createHash('sha256').update(PNG).digest('base64');
 
 describe('storefront guest booking', async () => {
   const { createApp } = await import('../../src/app.js');
+  const { config } = await import('../../src/config/index.js');
   const { closePool } = await import('../../src/db/client.js');
   const { storefrontCmsService: cms } = await import('../../src/modules/storefront-cms/storefront-cms.service.js');
   const { settingsService } = await import('../../src/modules/settings/settings.service.js');
@@ -269,8 +270,10 @@ describe('storefront guest booking', async () => {
       text: null,
       image_content_type: 'image/png',
     });
-    expect(reservation.payment_instructions?.renter_steps?.image_url).toBe(
-      `https://files.test/api/v1/guest/reservations/${reservation.id}/media/${fileId}`,
+    const imageUrl = new URL(reservation.payment_instructions?.renter_steps?.image_url ?? '');
+    expect(imageUrl.origin).toBe(config.MEDIA_PUBLIC_ORIGIN);
+    expect(imageUrl.pathname).toBe(
+      `/api/v1/guest/reservations/${reservation.id}/media/${fileId}`,
     );
 
     const cookie = serializeGuestAccessCookie(

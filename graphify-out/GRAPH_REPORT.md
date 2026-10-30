@@ -1,17 +1,17 @@
 # Graph Report - drezivo  (2026-10-30)
 
 ## Corpus Check
-- 1516 files · ~1,113,687 words
+- 1516 files · ~1,113,773 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 47 file(s) not represented in the graph (top: (none) 27, .jsonc 5, .example 4)
 
 ## Summary
-- 11048 nodes · 27927 edges · 647 communities (465 shown, 182 thin omitted)
+- 11048 nodes · 27928 edges · 647 communities (465 shown, 182 thin omitted)
 - Extraction: 97% EXTRACTED · 3% INFERRED · 0% AMBIGUOUS · INFERRED: 719 edges (avg confidence: 0.91)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `9ad30007`
+- Built from commit: `93b16266`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 

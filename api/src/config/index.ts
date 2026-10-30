@@ -293,7 +293,7 @@ export const envSchema = z
   .transform((env) => ({
     ...env,
     STAFF_APP_URL: env.STAFF_APP_URL ?? 'http://localhost:3000',
-    MEDIA_PUBLIC_ORIGIN: env.MEDIA_PUBLIC_ORIGIN ?? 'http://localhost:3000',
+    MEDIA_PUBLIC_ORIGIN: env.MEDIA_PUBLIC_ORIGIN ?? `http://localhost:${env.PORT}`,
     FILE_OBJECT_CLEANUP_ENABLED:
       env.FILE_OBJECT_CLEANUP_ENABLED ?? !['staging', 'production'].includes(env.NODE_ENV),
     OBJECT_STORAGE_UPLOADS_ENABLED:
