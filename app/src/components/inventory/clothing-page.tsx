@@ -206,6 +206,7 @@ export function ClothingPage() {
       })
       .catch((caughtError) => {
         if (cancelled) return;
+        logClothingLoadFailure(caughtError);
         setRows([]);
         setPageMeta({ next_cursor: null, has_more: false });
         setSummary(EMPTY_SUMMARY);
@@ -1016,6 +1017,32 @@ function initials(name: string) {
 function toDrezivoApiError(error: unknown): DrezivoApiError {
   if (error instanceof DrezivoApiError) return error;
   return new DrezivoApiError("We could not load clothing. Please try again.", { status: 500 });
+}
+
+function logClothingLoadFailure(error: unknown) {
+  const errorName =
+    error instanceof Error && /^[A-Za-z][A-Za-z0-9]{0,63}$/.test(error.name)
+      ? error.name
+      : "UnknownError";
+  const diagnostic =
+    error instanceof DrezivoApiError
+      ? {
+          errorName,
+          code: /^[A-Z0-9_]{1,64}$/.test(error.code) ? error.code : "UNKNOWN",
+          status: error.status,
+          requestId:
+            error.requestId &&
+            /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(error.requestId)
+              ? error.requestId
+              : null,
+          ...(error.validationIssues ? { validationIssues: error.validationIssues } : {}),
+        }
+      : { errorName };
+
+  console.error("Clothing catalogue load failed", {
+    operation: "catalogue.clothing.list",
+    ...diagnostic,
+  });
 }
 
 function MetricCard({
