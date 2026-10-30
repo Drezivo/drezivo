@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ClothingPage } from "@/components/inventory/clothing-page";
+import { DrezivoApiError } from "@/lib/drezivo-api";
 
 const clerk = vi.hoisted(() => ({
   getToken: vi.fn(),
@@ -36,15 +37,17 @@ vi.mock("@/lib/drezivo-api", () => ({
     code: string;
     requestId: string | null;
     status: number;
+    validationIssues: readonly { code: string; path: string }[] | null;
 
     constructor(
       message: string,
-      options: { code?: string; requestId?: string | null; status?: number } = {}
+      options: { code?: string; requestId?: string | null; status?: number; validationIssues?: readonly { code: string; path: string }[] } = {}
     ) {
       super(message);
       this.code = options.code ?? "INTERNAL_ERROR";
       this.requestId = options.requestId ?? null;
       this.status = options.status ?? 500;
+      this.validationIssues = options.validationIssues ?? null;
     }
   },
   createDrezivoApiClient: () => api,
@@ -199,6 +202,39 @@ describe("ClothingPage", () => {
     });
     expect(await screen.findByRole("listitem", { name: "Real Black Satin Gown" })).toBeVisible();
     expect(screen.queryByRole("status", { name: "Loading clothing" })).not.toBeInTheDocument();
+  });
+
+  it("shows clothing and workspace counts when a staff image URL is relative", async () => {
+    const imageUrl = "/api/media/staff/00000000-0000-4000-8000-000000000004?branch_id=00000000-0000-4000-8000-000000000005&w=960";
+    api.getCatalogueClothing.mockResolvedValue({
+      data: { items: [{ ...firstItem, primary_image_url: imageUrl }], page_meta: { next_cursor: null, has_more: false }, summary: defaultSummary },
+      requestId: "req-clothing",
+    });
+
+    render(<ClothingPage />);
+
+    expect(await screen.findByRole("listitem", { name: "Real Black Satin Gown" })).toBeVisible();
+    expect(screen.getByText("Total Clothing").parentElement).toHaveTextContent("2");
+    expect(screen.getByText("Active Rental Items").parentElement).toHaveTextContent("3");
+    expect(screen.getAllByRole("img", { name: /Real Black Satin Gown/ })[0]).toHaveAttribute("src", imageUrl);
+  });
+
+  it("logs sanitized validation details when the clothing response is invalid", async () => {
+    const logger = vi.spyOn(console, "error").mockImplementation(() => {});
+    const requestId = "00000000-0000-4000-8000-000000000001";
+    api.getCatalogueClothing.mockRejectedValue(new DrezivoApiError("Invalid response", {
+      code: "INVALID_RESPONSE", status: 200, requestId,
+      validationIssues: [{ code: "custom", path: "data.items.[0].primary_image_url" }],
+    }));
+
+    render(<ClothingPage />);
+
+    await screen.findByText("Could not load clothing");
+    expect(logger).toHaveBeenCalledWith("Clothing catalogue load failed", expect.objectContaining({
+      operation: "catalogue.clothing.list", code: "INVALID_RESPONSE", status: 200, requestId,
+      validationIssues: [{ code: "custom", path: "data.items.[0].primary_image_url" }],
+    }));
+    logger.mockRestore();
   });
 
   it("shows a one-time draft-saved notice that can be dismissed", async () => {
