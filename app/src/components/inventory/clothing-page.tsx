@@ -315,11 +315,7 @@ export function ClothingPage() {
             </p>
           </div>
           <CatalogueBackupControls
-            onRestored={() => {
-              setNotice("Inventory backup restored");
-              resetPagination();
-              setReloadVersion((value) => value + 1);
-            }}
+            showBackupControls={false}
             toolbarActions={
               <>
                 <Link
