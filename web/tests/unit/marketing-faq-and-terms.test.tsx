@@ -40,13 +40,9 @@ describe('marketing FAQ, pricing, and terms', () => {
     expect(pricingText).toContain('₱299');
     expect(pricingText).toContain('Up to 300 active garments');
     expect(pricingText).toContain('Up to 3 Front Desk staff');
-    expect(pricingText).toContain('Custom');
-    expect(pricingText).toContain('500 active garments or 10 Front Desk seats');
-    expect(pricingText).toContain('not available for self-service signup');
-    const customLink = screen.getByRole('link', { name: 'Talk to us' });
-    expect(customLink.getAttribute('href')).toBe(
-      'mailto:drezivoshop@gmail.com?subject=Custom%20Drezivo%20plan%20inquiry',
-    );
+    expect(pricingText).not.toContain('Custom');
+    expect(pricing?.querySelectorAll('a[aria-label]')).toHaveLength(0);
+    expect(pricing?.querySelectorAll('a.at-button.w-full')).toHaveLength(3);
     const starterCard = screen.getByRole('link', { name: 'Start with Starter' }).closest('li');
     expect(starterCard?.textContent).toContain('All Free plan features, plus these upgrades:');
     expect(starterCard?.textContent).toContain('Online storefront payment methods');
@@ -75,10 +71,9 @@ describe('marketing FAQ, pricing, and terms', () => {
     expect(pricing?.textContent).toContain('₱299');
     expect(pricing?.textContent).toContain('Up to 300 active garments');
     expect(pricing?.textContent).toContain('All Starter plan features, plus these upgrades:');
-    expect(pricing?.textContent).toContain('Custom');
-    expect(pricing?.querySelector('a[href^="mailto:"]')?.getAttribute('href')).toContain(
-      'Custom%20Drezivo%20plan%20inquiry',
-    );
+    expect(pricing?.textContent).not.toContain('Custom');
+    expect(pricing?.querySelectorAll('a.at-button.w-full')).toHaveLength(3);
+    expect(pricing?.querySelector('a[href^="mailto:"]')).toBeNull();
   });
 
   it('moves billing-detail explanations to the FAQ instead of the pricing page', () => {
@@ -114,7 +109,7 @@ describe('marketing FAQ, pricing, and terms', () => {
     expect(pricingAnswer).toContain('up to 125 active garments');
     expect(pricingAnswer).toContain('Standard is ₱299 a month');
     expect(pricingAnswer).toContain('up to 300 active garments');
-    expect(pricingAnswer).toContain('monthly Custom quote');
+    expect(pricingAnswer).not.toContain('Custom');
     expect(pricingAnswer).toContain('Starter and Standard include a 14-day trial');
     const trialAnswer = answerFor(
       'What happens when my paid-plan trial ends? Will I lose my data?',

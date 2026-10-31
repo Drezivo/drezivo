@@ -551,7 +551,7 @@ export async function getReservationPaymentReceipts(
   const receipts = rows.map((row) => ({
           file_id: row.file_id,
           content_type: row.mime_type,
-          url: staffFileMediaUrl(row.file_id, input.branchId),
+          url: staffFileMediaUrl(row.file_id, input.branchId, row.mime_type),
           submitted_at: row.submitted_at.toISOString(),
           evidence_status: row.evidence_status,
         }));

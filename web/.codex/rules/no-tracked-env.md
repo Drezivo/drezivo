@@ -12,7 +12,7 @@ anything that looks like one even as a placeholder that could be copy-pasted int
 
 ## Required variable names (values documented in `docs/runbooks/environments.md`, never here)
 
-- `NEXT_PUBLIC_API_BASE_URL` — the public Express API origin this site calls.
+- `NEXT_PUBLIC_API_ORIGIN` — the public Express API origin this site calls.
 - `NEXT_PUBLIC_SITE_URL` — the canonical `drezivo.com` origin used for SEO and canonical tags.
 - `GUEST_CAPABILITY_COOKIE_DOMAIN` — the parent domain the HttpOnly guest capability cookie is
   scoped to.

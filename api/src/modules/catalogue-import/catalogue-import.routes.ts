@@ -1,4 +1,7 @@
 import {
+  catalogueBackupImportCommitRequest,
+  catalogueBackupImportPreviewRequest,
+  catalogueBackupJobId,
   MAX_IMPORT_BATCH_ITEMS,
   batchCreateClothingRequest,
   batchUploadAuthorizationRequest,
@@ -6,7 +9,7 @@ import {
   clothingPhotoExtractRequest,
   type CatalogueImportCapabilities,
 } from '@drezivo/contracts';
-import { Router, type Request, type RequestHandler, type Response } from 'express';
+import { Router, type NextFunction, type Request, type RequestHandler, type Response } from 'express';
 import type { z } from 'zod';
 
 import { config } from '../../config/index.js';
@@ -16,8 +19,16 @@ import { rateLimit } from '../../middleware/rate-limit.js';
 import { requireTenantContext } from '../../middleware/tenant-context.js';
 import { ForbiddenError, ValidationError } from '../../shared/errors.js';
 import { sendSuccess } from '../../shared/response.js';
-import { requireAssetManagePermission } from '../catalogue/catalogue.middleware.js';
+import { requireAssetManagePermission, requireCatalogueIdempotencyKey } from '../catalogue/catalogue.middleware.js';
 import { requireTenantAction } from '../tenancy/tenancy.service.js';
+import { streamFileResponse } from '../files/file-stream.js';
+import {
+  readCatalogueBackupExport,
+  readCatalogueBackupExportStatus,
+  startCatalogueBackupExport,
+  type CatalogueBackupContext,
+} from './catalogue-backup.service.js';
+import { commitCatalogueBackupImport, previewCatalogueBackupImport } from './catalogue-backup.restore.js';
 import {
   authorizeImportUploads,
   createImportClothing,
@@ -159,3 +170,98 @@ catalogueImportRouter.post(
     sendSuccess(req, res, { fields });
   },
 );
+
+catalogueImportRouter.post(
+  '/catalogue/backup/exports',
+  ...guarded,
+  createRateLimit,
+  writePolicy,
+  requireAssetManagePermission,
+  requireCatalogueIdempotencyKey,
+  async (req: Request, res: Response): Promise<void> => {
+    const job = await startCatalogueBackupExport({ ...backupContext(req), idempotencyKey: catalogueIdempotencyKey(req) });
+    sendSuccess(req, res, { job });
+  },
+);
+
+catalogueImportRouter.get(
+  '/catalogue/backup/exports/:jobId',
+  ...guarded,
+  readRateLimit,
+  readPolicy,
+  requireAssetManagePermission,
+  async (req: Request, res: Response): Promise<void> => {
+    const jobId = catalogueBackupJobId.safeParse(req.params['jobId']);
+    if (!jobId.success) throw new ValidationError('A valid export job id is required.');
+    const job = await readCatalogueBackupExportStatus({ ...backupContext(req), jobId: jobId.data });
+    sendSuccess(req, res, { job });
+  },
+);
+
+catalogueImportRouter.get(
+  '/catalogue/backup/exports/:jobId/download',
+  ...guarded,
+  readRateLimit,
+  readPolicy,
+  requireAssetManagePermission,
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const jobId = catalogueBackupJobId.safeParse(req.params['jobId']);
+      if (!jobId.success) throw new ValidationError('A valid export job id is required.');
+      const backup = await readCatalogueBackupExport({ ...backupContext(req), jobId: jobId.data });
+      streamFileResponse(req, res, next, { body: backup.body, byteSize: backup.byteSize, mimeType: 'application/zip' }, 'private, no-store', backup.filename);
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+catalogueImportRouter.post(
+  '/catalogue/backup/imports/preview',
+  ...guarded,
+  createRateLimit,
+  writePolicy,
+  requireAssetManagePermission,
+  requireCatalogueIdempotencyKey,
+  async (req: Request, res: Response): Promise<void> => {
+    const request = parseBody(catalogueBackupImportPreviewRequest, req.body, 'Inventory backup preview request is invalid.');
+    const preview = await previewCatalogueBackupImport({ ...backupContext(req), fileId: request.file_id, idempotencyKey: catalogueIdempotencyKey(req) });
+    sendSuccess(req, res, preview);
+  },
+);
+
+catalogueImportRouter.post(
+  '/catalogue/backup/imports/:importId/commit',
+  ...guarded,
+  createRateLimit,
+  writePolicy,
+  requireAssetManagePermission,
+  requireCatalogueIdempotencyKey,
+  async (req: Request, res: Response): Promise<void> => {
+    const parsedId = catalogueBackupJobId.safeParse(req.params['importId']);
+    if (!parsedId.success) throw new ValidationError('A valid import job id is required.');
+    parseBody(catalogueBackupImportCommitRequest, req.body, 'Inventory restore request is invalid.');
+    const result = await commitCatalogueBackupImport({ ...backupContext(req), importId: parsedId.data, idempotencyKey: catalogueIdempotencyKey(req) });
+    sendSuccess(req, res, result);
+  },
+);
+
+function backupContext(req: Request): CatalogueBackupContext {
+  const principalId = req.clerkPrincipal?.clerkUserId;
+  const context = req.tenantContext;
+  if (!principalId || !context) throw new ValidationError('Workspace context is required.');
+  return {
+    tenantId: context.tenantId,
+    branchId: context.activeBranchId,
+    membershipId: context.membershipId,
+    principalId,
+    permissionCodes: context.permissionCodes,
+    effectiveTenantStatus: context.effectiveTenantStatus,
+    requestId: req.requestId,
+  };
+}
+
+function catalogueIdempotencyKey(req: Request): string {
+  if (!req.catalogueIdempotencyKey) throw new ValidationError('A valid Idempotency-Key header is required.');
+  return req.catalogueIdempotencyKey;
+}

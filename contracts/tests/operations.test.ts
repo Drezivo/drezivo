@@ -278,7 +278,7 @@ describe('BE-8 operational integration contracts', () => {
           product: {
             id: '00000000-0000-4000-8000-000000000206',
             name: 'Emerald Evening Gown',
-            primary_image_url: 'https://images.example.test/gown.jpg',
+            primary_image_url: 'https://api.example.test/api/v1/files/media/staff/00000000-0000-4000-8000-000000000101?branch_id=00000000-0000-4000-8000-000000000102&w=960',
           },
           variant: {
             id: '00000000-0000-4000-8000-000000000207',

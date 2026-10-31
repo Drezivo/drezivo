@@ -1,71 +1,57 @@
 # Private media delivery
 
-The source bucket is intended to remain private. Uploads use a short-lived, single-object presigned
-PUT. The main public storefront and staff media routes use application URLs and keep R2 signed GET
-URLs out of browser responses. One current exception returns five-minute signed URLs for shared and
-legacy renter-payment-step images; those are payment instructions, not receipt or verification
-evidence. See the [object storage and image delivery architecture guide](../architecture/object-storage-image-delivery-evolution.md)
-for the complete design and exception details.
+The source R2 bucket stays private. Browsers never receive R2 object URLs, keys, or signatures. Uploads still use short-lived, single-object presigned `PUT` URLs; this guide covers image reads.
 
-## Request flow
+## Current request paths
 
-- Public storefront URLs are stable `/api/media/public/{slug}/{fileId}` URLs on `web`. A CDN miss
-  calls the API's internal grant route. The API checks the published store, accepted/frozen file,
-  tenant, purpose, and current public reference before signing one R2 GET for 60 seconds. `web`
-  fetches the object server-to-server and streams the bytes.
-- Public image responses carry a 45-second Vercel CDN lifetime and tenant cache tag. The browser
-  must revalidate its stable URL, so it does not need a page reload after the internal R2 grant
-  expires. The API worker deletes tenant-tagged cache entries when relevant published content,
-  access state, or file references change. Deletion prevents stale-while-revalidate from returning
-  bytes after a visibility revocation. The 45-second lifetime is the fallback if invalidation is
-  delayed.
-- Draft previews use `/api/media/preview/{slug}/{fileId}`. That route forwards the HttpOnly preview
-  token to the API and never caches the image.
-- Staff files use `/api/media/staff/{fileId}` on `app`. The app server sends the Clerk token and
-  selected branch to the API, which checks tenant membership, branch, purpose, permissions, and the
-  live business-record reference before issuing a grant. Staff responses are always `private,
-  no-store`.
-- On these main routes, R2 signed URLs exist only between trusted servers. Their 60-second
-  expiration does not expire a public application URL, and clients do not need to refresh a page
-  because the grant changed. The renter-payment-step exception returns a five-minute R2 signed URL
-  to the browser, so that exact link stops working when its grant expires. An image already loaded
-  in the page remains displayed.
+### Public storefront images
+
+Storefront data contains an absolute API-host URL such as `https://api.drezivo.shop/api/media/public/stores/{slug}/files/{fileId}?w=960`.
+
+1. The API-host Cloudflare Worker looks up the URL plus width in its local cache. A fresh entry is served for up to 45 seconds.
+2. On a miss, the Worker requests a private, server-to-server grant from the API. The API rechecks publication, tenant, file state, image purpose, current storefront reference, and the selected 320/960/1600 variant before issuing a 60-second R2 read grant.
+3. The Worker fetches the private object, validates its response, returns the image and caches it. R2 URLs and signatures stay between the Worker and R2.
+4. If grant/R2 delivery fails transiently, the Worker asks the API's direct public stream for the same URL. That stream performs the publication checks again and returns a 45-second edge-cacheable response.
+5. If Worker execution fails or its request quota is reached, the Cloudflare route must be configured **Fail Open**. The request proceeds to the API origin, where an eligible-for-cache rule honors the direct stream's `s-maxage=45` response header. Keep the default query-string cache key so widths stay distinct, and do not override Edge TTL.
+
+The Worker route and Cache Rule cover only `/api/media/public/*` on the staging and production API hosts. When both delivery layers and the API/R2 are unavailable and no fresh edge copy exists, the image cannot load; web/app pages should keep their layout usable with an image placeholder and bounded retry.
+
+### Staff images
+
+The app browser fetches image bytes directly from the API with a Clerk bearer token and the selected branch ID in a header. The API rechecks tenant, branch, purpose, permissions, and the live business-record reference. These responses are `private, no-store`. The app no longer proxies image bytes or image grants through a Vercel route.
+
+### Store previews
+
+The API includes a short-lived preview media session in preview storefront data. For each lazy-loaded preview image, the browser requests a file-scoped grant and fetches the bytes with the grant in a header. The API checks that the file is still referenced by that store. Grants are limited to five minutes and preview responses are `private, no-store`; a delayed image can request a fresh grant. Neither the session nor media grant is put in a URL.
+
+### Renter payment-step images
+
+A guest with the reservation's HttpOnly API cookie requests a five-minute grant scoped to that reservation and file, then sends it in a header to the API image stream. The API rechecks the reservation snapshot and file reference. These responses are `private, no-store`; the browser refreshes an expired grant once. The page uses a placeholder with bounded retry if delivery remains unavailable.
+
+Private PDF document delivery is unchanged. Staff PDFs continue through the existing app document route, which forwards authorized requests to the API. This exception is for documents only; R2-backed image bytes do not pass through Vercel media routes.
 
 ## Environment configuration
 
-Set a different random `MEDIA_READ_GRANT_SECRET` per environment on the API, API worker, `web`, and
-`app`. It must be at least 32 characters and must never be exposed as `NEXT_PUBLIC_*`. Set
-`STOREFRONT_WEB_URL` on the API and worker to that environment's exact HTTPS `web` origin. The web
-deployment needs its server-side `API_ORIGIN`; the app deployment needs `API_BASE_URL`. See
-[`environments.md`](environments.md) for the full environment inventory.
+- API: `MEDIA_PUBLIC_ORIGIN` is the exact API HTTPS origin for the environment. `MEDIA_READ_GRANT_SECRET` authenticates Worker-to-API public grants and signs API media sessions/grants. `CLOUDFLARE_MEDIA_ZONE_ID` and `CLOUDFLARE_MEDIA_PURGE_TOKEN` let the API outbox worker purge cache tags directly from Cloudflare.
+- Cloudflare Worker: `API_ORIGIN` and the matching environment's `MEDIA_READ_GRANT_SECRET`.
+- App: browser-safe `NEXT_PUBLIC_API_ORIGIN`, Clerk configuration, and existing `API_BASE_URL`. Staff image reads use the Clerk token in the browser.
+- Web: browser-safe `NEXT_PUBLIC_API_ORIGIN` and existing server-side `API_ORIGIN` used for storefront data.
 
-The secret rotation procedure is coordinated: set the same new value on API/worker/web/app, then
-restart or redeploy each service. During a mismatched rollout, media grants fail closed with a
-service error. Do not log or paste secret values, R2 URLs, or object keys into incident reports.
+Do not configure `MEDIA_READ_GRANT_SECRET` in app/web or expose it with a `NEXT_PUBLIC_` prefix. Do not put secrets, grants, R2 URLs, or object keys into logs. The API, API worker, and Cloudflare Worker must use matching grant secrets for each environment. See [`environments.md`](environments.md).
 
 ## Private derivatives and cleanup
 
-The worker generates WebP variants at 320, 960, and 1600 pixels after accepting eligible image
-files. Migration `0080_file_image_variants_backfill.sql` queues existing accepted images; new
-acceptances enqueue jobs transactionally. Until the worker writes a variant, reads fall back to the
-accepted source image. PNG source images use lossless WebP encoding to preserve QR and document
-edges. Migration `0081_storefront_media_cache_invalidation.sql` adds tenant-scoped outbox
-invalidation triggers. Both migrations must be applied before enabling this flow in a deployed
-environment. File cleanup removes source and variant keys before marking the database row deleted.
+Eligible accepted images receive private WebP variants at widths 320, 960, and 1600. Until a variant exists, reads fall back to the accepted source image. Migration `0080_file_image_variants_backfill.sql` queues existing accepted images; new acceptances enqueue jobs transactionally. Migration `0081_storefront_media_cache_invalidation.sql` adds tenant-scoped invalidation events. Apply both through the protected migration workflow before enabling this delivery flow. Cleanup removes source and variant keys before marking a file deleted.
 
 ## Verification and rollout
 
-- Keep `r2.dev` and public bucket domains disabled. Verify the R2 token is scoped to this private
-  bucket and required object operations.
-- Set the environment variables above before deploying API and web/app code.
-- Apply migrations `0080` and `0081` through the protected migration workflow; do not run them
-  against production from a developer workstation.
-- Deploy API and worker, then `web` and `app` to the matching environment. Confirm the worker has
-  processed derivative and invalidation outbox events.
-- In browser network tools, confirm main public and staff image requests use the application origin,
-  a public image has a Vercel cache lifetime no longer than 45 seconds, and preview/staff image
-  responses say `private, no-store`. Those image responses should not contain R2 URLs, keys, or
-  signatures. The shared and legacy renter-payment-step API responses are a documented exception:
-  they currently contain a five-minute signed R2 URL.
-- Use only a confirmed test bucket for anonymous-read-denial checks. Do not run a live-storage test
-  against production as part of routine rollout.
+- Keep `r2.dev` and public bucket domains disabled; scope the R2 token to the private bucket and required object operations.
+- Set the API and Worker environment variables above. Configure the two API-host Worker routes as **Fail Open**, and create the matching Cloudflare Cache Rule with cache eligibility enabled and origin cache-control honored. The API sets the 45-second edge TTL; keep the default cache key's query string so the `w` variants stay distinct.
+- Roll out API routes and configuration first, then app/web URL and image-fetch changes, then Cloudflare routes and cache rules. Do not enable routes before matching code and secrets are live.
+- On staging, verify Worker `MISS`, `HIT`, 45-second expiry, all three widths, and an independent cold-region miss. Bypass the Worker and verify the API response fills the native CDN cache.
+- Force transient grant/R2 errors and verify the API fallback; confirm authorization/publication errors remain errors. Check staff tenant/branch denial, preview store/file scope and grant refresh, guest reservation/file scope and grant refresh, and `private, no-store` headers.
+- Verify CORS preflights for the authorization and media-grant headers. Inspect requests and logs to confirm no R2 URL, object key, signature, or credential appears in a browser URL or application log.
+- Confirm image requests do not reach a Vercel media endpoint. On API/R2 failure with no cache copy, confirm pages remain usable and image components show a placeholder with bounded retry.
+- Monitor Worker requests/cache hits, API/R2 fallback volume, media failures, Cloudflare purge errors, and Vercel Fast Origin Transfer. R2 image transfer should leave Vercel; page and bundled static asset traffic remain on Vercel.
+
+See [`cloudflare-media-worker-setup.md`](cloudflare-media-worker-setup.md) and the [delivery evolution guide](../architecture/object-storage-image-delivery-evolution.md) for the operational checklist and design history.

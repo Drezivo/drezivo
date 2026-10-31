@@ -7,6 +7,11 @@ import {
   bootstrapTenantRequest,
   catalogueCategory,
   catalogueCategoryList,
+  catalogueBackupExportStartResponse,
+  catalogueBackupImportCommitRequest,
+  catalogueBackupImportCommitResponse,
+  catalogueBackupImportPreview,
+  catalogueBackupImportPreviewRequest,
   createCatalogueCategoryRequest,
   createClothingVariantRequest,
   createClothingVariantResponse,
@@ -23,6 +28,7 @@ import {
   removeClothingVariantRequest,
   restoreClothingRequest,
   restoreClothingResponse,
+  updateClothingVariantLifecycleRequest,
   reservationCancelRequest,
   reservationCancelResponse,
   reservationEditRequest,
@@ -183,6 +189,7 @@ import {
   type RemoveClothingVariantRequest,
   type RestoreClothingRequest,
   type RestoreClothingResponse,
+  type UpdateClothingVariantLifecycleRequest,
   type ReservationCancelRequest,
   type ReservationCancelResponse,
   type ReservationEditRequestInput,
@@ -228,6 +235,9 @@ import {
   type UploadAuthorizationRequest,
   type UploadAuthorizationResponse,
   type UploadFinalizeResponse,
+  type CatalogueBackupExportStatus,
+  type CatalogueBackupImportCommitResponse,
+  type CatalogueBackupImportPreview,
   type CreateOwnerOnboardingRequest,
   type OnboardingActorContext,
   type TermsAcceptanceRequest,
@@ -337,16 +347,23 @@ export class DrezivoApiError extends Error {
   readonly code: string;
   readonly requestId: string | null;
   readonly status: number;
+  readonly validationIssues: readonly { code: string; path: string }[] | null;
 
   constructor(
     message: string,
-    options: { code?: string; requestId?: string | null; status: number }
+    options: {
+      code?: string;
+      requestId?: string | null;
+      status: number;
+      validationIssues?: readonly { code: string; path: string }[];
+    }
   ) {
     super(message);
     this.name = "DrezivoApiError";
     this.code = options.code ?? "INTERNAL_ERROR";
     this.requestId = options.requestId ?? null;
     this.status = options.status;
+    this.validationIssues = options.validationIssues ?? null;
   }
 }
 
@@ -1153,6 +1170,42 @@ export function createDrezivoApiClient(getToken: TokenGetter) {
         path: `/api/v1/uploads/${encodeURIComponent(fileId)}/finalize`,
         responseSchema: apiEnvelope(uploadFinalizeResponse),
       }),
+    startCatalogueBackupExport: (idempotencyKey: string) =>
+      request<{ job: CatalogueBackupExportStatus }>({
+        getToken,
+        body: {},
+        idempotencyKey,
+        method: "POST",
+        path: "/api/v1/catalogue/backup/exports",
+        responseSchema: apiEnvelope(catalogueBackupExportStartResponse),
+      }),
+    getCatalogueBackupExportStatus: (jobId: string) =>
+      request<{ job: CatalogueBackupExportStatus }>({
+        getToken,
+        method: "GET",
+        path: `/api/v1/catalogue/backup/exports/${encodeURIComponent(jobId)}`,
+        responseSchema: apiEnvelope(catalogueBackupExportStartResponse),
+      }),
+    downloadCatalogueBackupExport: (jobId: string) =>
+      fetchAuthorizedBlob(getToken, `/api/v1/catalogue/backup/exports/${encodeURIComponent(jobId)}/download`),
+    previewCatalogueBackupImport: (fileId: string, idempotencyKey: string) =>
+      request<CatalogueBackupImportPreview>({
+        getToken,
+        body: catalogueBackupImportPreviewRequest.parse({ file_id: fileId }),
+        idempotencyKey,
+        method: "POST",
+        path: "/api/v1/catalogue/backup/imports/preview",
+        responseSchema: apiEnvelope(catalogueBackupImportPreview),
+      }),
+    commitCatalogueBackupImport: (importId: string, idempotencyKey: string) =>
+      request<CatalogueBackupImportCommitResponse>({
+        getToken,
+        body: catalogueBackupImportCommitRequest.parse({}),
+        idempotencyKey,
+        method: "POST",
+        path: `/api/v1/catalogue/backup/imports/${encodeURIComponent(importId)}/commit`,
+        responseSchema: apiEnvelope(catalogueBackupImportCommitResponse),
+      }),
     getCatalogueImportCapabilities: () =>
       request<CatalogueImportCapabilities>({
         getToken,
@@ -1307,6 +1360,20 @@ export function createDrezivoApiClient(getToken: TokenGetter) {
         idempotencyKey,
         method: "POST",
         path: `/api/v1/catalogue/clothing/${encodeURIComponent(productId)}/variants/${encodeURIComponent(variantId)}/remove`,
+        responseSchema: apiEnvelope(updateClothingVariantLifecycleResponse),
+      }),
+    updateClothingVariantLifecycle: (
+      productId: string,
+      variantId: string,
+      input: UpdateClothingVariantLifecycleRequest,
+      idempotencyKey: string
+    ) =>
+      request<UpdateClothingVariantLifecycleResponse>({
+        getToken,
+        body: updateClothingVariantLifecycleRequest.parse(input),
+        idempotencyKey,
+        method: "PATCH",
+        path: `/api/v1/catalogue/clothing/${encodeURIComponent(productId)}/variants/${encodeURIComponent(variantId)}/lifecycle`,
         responseSchema: apiEnvelope(updateClothingVariantLifecycleResponse),
       }),
     updatePhysicalAssetState: (
@@ -1541,6 +1608,21 @@ async function fetchAuthorizedObjectUrl(
   return URL.createObjectURL(await response.blob());
 }
 
+async function fetchAuthorizedBlob(getToken: TokenGetter, path: string): Promise<Blob> {
+  const token = await getToken();
+  if (!token) throw new DrezivoApiError("Your session has expired. Please sign in again.", { status: 401 });
+  const apiOrigin = process.env["NEXT_PUBLIC_API_ORIGIN"]?.replace(/\/$/, "");
+  if (!apiOrigin) throw new DrezivoApiError("The Drezivo API is not configured for this environment.", { status: 503 });
+  let response: Response;
+  try {
+    response = await fetch(`${apiOrigin}${path}`, { cache: "no-store", headers: { Authorization: `Bearer ${token}` } });
+  } catch {
+    throw new DrezivoApiError("We could not reach Drezivo. Check your connection and try again.", { status: 503 });
+  }
+  if (!response.ok) throw new DrezivoApiError("The inventory backup could not be downloaded.", { status: response.status });
+  return response.blob();
+}
+
 async function request<T>({
   body,
   getToken,
@@ -1586,8 +1668,31 @@ async function request<T>({
   const payload: unknown = await response.json().catch(() => null);
   const parsed = responseSchema.safeParse(payload);
   if (!parsed.success) {
+    const requestId =
+      typeof payload === "object" &&
+      payload !== null &&
+      "request_id" in payload &&
+      typeof payload.request_id === "string" &&
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(payload.request_id)
+        ? payload.request_id
+        : null;
+    const validationIssues = parsed.error.issues.map(({ code, path }) => ({
+      code,
+      path: path
+        .map((segment) =>
+          typeof segment === "number"
+            ? `[${segment}]`
+            : /^[a-zA-Z0-9_-]{1,64}$/.test(segment)
+              ? segment
+              : "[field]"
+        )
+        .join("."),
+    }));
     throw new DrezivoApiError("Drezivo returned an invalid response. Please try again.", {
+      code: "INVALID_RESPONSE",
+      requestId,
       status: response.status,
+      validationIssues,
     });
   }
 

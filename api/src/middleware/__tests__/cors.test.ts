@@ -29,11 +29,17 @@ describe('CORS boundary', () => {
       .options('/resource')
       .set('Origin', 'http://localhost:3000')
       .set('Access-Control-Request-Method', 'POST')
-      .set('Access-Control-Request-Headers', 'Authorization, Content-Type, Idempotency-Key');
+      .set(
+        'Access-Control-Request-Headers',
+        'Authorization, Content-Type, Idempotency-Key, X-Drezivo-Branch-Id, X-Drezivo-Media-Access, X-Storefront-Media-Session',
+      );
 
     expect(response.status).toBe(204);
     expect(response.headers['access-control-allow-methods']).toContain('POST');
     expect(response.headers['access-control-allow-headers']).toContain('Authorization');
+    expect(response.headers['access-control-allow-headers']).toContain('X-Drezivo-Media-Access');
+    expect(response.headers['access-control-allow-headers']).toContain('X-Storefront-Media-Session');
+    expect(response.headers['access-control-allow-headers']).toContain('X-Drezivo-Branch-Id');
     expect(response.headers['access-control-max-age']).toBe('600');
   });
 

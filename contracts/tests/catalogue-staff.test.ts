@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { apiEnvelope } from '../src/common/envelope.js';
 
 import {
   archiveClothingRequest,
@@ -36,6 +37,40 @@ const ids = {
 const instant = '2026-09-20T08:00:00.000Z';
 
 describe('catalogue staff contract', () => {
+  it('accepts the full clothing response with a relative staff image URL', () => {
+    const response = {
+      success: true,
+      data: {
+        items: [{
+          product_id: ids.product,
+          code: 'CG-75589D92',
+          name: 'Elise',
+          subcategory: null,
+          category: { id: ids.category, name: 'Dresses' },
+          product_status: 'active',
+          sizing_mode: 'free_size',
+          has_free_size: true,
+          size_labels: [],
+          price_from_minor: '30000',
+          currency: 'PHP',
+          primary_image_url: `/api/media/staff/${ids.asset}?branch_id=${ids.branch}&w=960`,
+          readiness: { active_assets: 1, ready: 1, needs_cleaning: 0, needs_repair: 0, unready: 0 },
+          availability: {
+            window: { start: '2026-10-30T14:13:52.370Z', end: '2026-10-31T14:13:52.370Z' },
+            active_assets: 1, available_assets: 1, unavailable_assets: 0, reserved_assets: 0,
+            rented_assets: 0, cleaning_assets: 0, maintenance_assets: 0, manual_blocked_assets: 0,
+          },
+          created_at: '2026-10-30T10:49:28.722Z',
+          updated_at: '2026-10-30T10:49:28.722Z',
+        }],
+        page_meta: { next_cursor: null, has_more: false },
+        summary: { total_products: 1, active_rental_items: 1, active_categories: 6, archived_products: 0, matching_products: 1 },
+      },
+      request_id: ids.product,
+    };
+
+    expect(apiEnvelope(clothingListResponse).parse(response)).toMatchObject(response);
+  });
   it('allows a publish response when no variant needed activation during the publish', () => {
     expect(
       publishClothingResponse.safeParse({

@@ -235,7 +235,7 @@ describe('RSV Phase 1 reservation read model', async () => {
     );
 
     expect(list.items[0]?.line.image_url).toBe(
-      `/api/media/staff/${coverFileId}?branch_id=${seed.branchId}&w=960`,
+      `http://localhost:3000/api/v1/files/media/staff/${coverFileId}?branch_id=${seed.branchId}&w=960`,
     );
   });
 

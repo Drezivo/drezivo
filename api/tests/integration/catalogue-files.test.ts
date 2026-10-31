@@ -161,7 +161,7 @@ describe('CLT-022 clothing file attachment flow', async () => {
     expect(result.guide?.file_id).toBe(seeded.fileId);
     expect(result.guide?.name).toBe('Standard Size Guide');
     expect(result.guide?.image_url).toBe(
-      `/api/media/staff/${seeded.fileId}?branch_id=${seed.branchId}&w=960`,
+      `http://localhost:3000/api/v1/files/media/staff/${seeded.fileId}?branch_id=${seed.branchId}&w=960`,
     );
     expect(storage.authorizedReads).toEqual([]);
     expect(JSON.stringify(result)).not.toContain('reads.example.test');

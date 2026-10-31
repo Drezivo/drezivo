@@ -1,4 +1,5 @@
 "use client";
+import { StaffMediaImage } from "@/components/ui/staff-media-image";
 
 import { useAuth } from "@clerk/nextjs";
 import * as Dialog from "@radix-ui/react-dialog";
@@ -1828,8 +1829,7 @@ export function NewReservationSheet({
                           <div className="flex min-w-0 items-center gap-3">
                             <div className="flex h-14 w-12 shrink-0 items-center justify-center overflow-hidden rounded-md bg-dashboard-active text-xs font-semibold text-dashboard-accent">
                               {product.primary_image_url ? (
-                                // eslint-disable-next-line @next/next/no-img-element -- signed catalogue URLs are dynamic and are not configured as stable next/image remote patterns.
-                                <img
+                                <StaffMediaImage
                                   src={product.primary_image_url}
                                   srcSet={mediaImageSrcSet(product.primary_image_url)}
                                   sizes="64px"
@@ -2494,8 +2494,7 @@ export function NewReservationSheet({
                           <div className="flex flex-col items-start gap-1">
                             <div className="relative h-24 w-24 overflow-hidden rounded-md border border-dashboard-border bg-dashboard-canvas">
                               {receiptPreviewUrl ? (
-                                // eslint-disable-next-line @next/next/no-img-element -- local receipt preview
-                                <img
+                                <StaffMediaImage
                                   src={receiptPreviewUrl}
                                   alt={receiptFile.name}
                                   className="h-full w-full object-contain"

@@ -300,7 +300,7 @@ describe("CalendarAvailabilityPage", () => {
     api.getClothingAvailabilityTimeline.mockImplementationOnce(
       async (input: { start_date: string; end_date: string }) => ({
         data: timelineResponse(input.start_date, input.end_date, {
-          imageUrl: "https://cdn.example.test/emerald-gown.webp",
+          imageUrl: "https://api.example.test/api/v1/files/media/staff/00000000-0000-4000-8000-000000000101?branch_id=00000000-0000-4000-8000-000000000102&w=960",
         }),
       })
     );

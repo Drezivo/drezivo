@@ -68,15 +68,16 @@ describe('public plans', () => {
       expect.objectContaining({
         code: 'free',
         name: 'Free',
+        tagline: 'The essential tools to organize your shop and help renters check availability.',
         price: '0.00',
         trialDays: 0,
         highlighted: false,
         features: [
           'Up to 20 active garments',
           'Owner-only access (no Front Desk accounts)',
-          'Availability-only storefront with contact links; 2 storefront designs',
-          'Reservations, calendar & availability; customers and staff payment records',
-          'Returns & exports; no fittings on the business app or storefront; no online storefront payment methods',
+          'Availability-only storefront; contact links; 2 designs',
+          'Reservations, calendar, and customer/staff payment records',
+          'Returns and exports; no fittings or storefront payment methods',
         ],
       }),
       expect.objectContaining({
@@ -113,7 +114,6 @@ describe('public plans', () => {
       <PlanShowcase
         plans={PUBLIC_MARKETING_PLANS}
         signUpUrl="https://partners.example/sign-up"
-        customPlanContactHref="mailto:hello@example.com"
       />,
     );
 
@@ -124,20 +124,16 @@ describe('public plans', () => {
     expect(screen.getByText('₱149')).toBeTruthy();
     expect(screen.getByText('₱299')).toBeTruthy();
     expect(screen.getAllByRole('link', { name: /Start with/ })).toHaveLength(3);
-    expect(screen.getByRole('link', { name: 'Talk to us' }).getAttribute('href')).toBe(
-      'mailto:hello@example.com',
-    );
+    expect(screen.queryByRole('link', { name: 'Talk to us' })).toBeNull();
+    expect(text(container.querySelector('#pricing')!)).not.toContain('Custom');
     const pricingSection = container.querySelector('#pricing')!;
     expect(pricingSection.querySelector('[data-at-reveal="lines"]')?.className).toContain(
       'text-center',
     );
     expect(pricingSection.querySelector('ul[data-at-stagger]')?.className).toContain(
-      'md:grid-cols-2',
+      'lg:grid-cols-3',
     );
-    expect(pricingSection.querySelector('ul[data-at-stagger]')?.className).toContain(
-      'xl:grid-cols-4',
-    );
-    expect(pricingSection.querySelectorAll('a.at-button.w-full')).toHaveLength(4);
+    expect(pricingSection.querySelectorAll('a.at-button.w-full')).toHaveLength(3);
     const standardCard = screen.getByRole('link', { name: 'Start with Standard' }).closest('li');
     for (const [name, intro, featureCount] of [
       ['Free', undefined, 5],
@@ -155,6 +151,10 @@ describe('public plans', () => {
     expect(standardCard?.className).toContain('bg-atelier-night');
     const freeCard = screen.getByRole('link', { name: 'Start with Free' }).closest('li');
     expect(text(freeCard!)).toContain('Free forever');
+    expect(within(freeCard!).getByText('The essential tools to organize your shop and help renters check availability.')).toBeTruthy();
+    expect(within(freeCard!).getByText('Availability-only storefront; contact links; 2 designs')).toBeTruthy();
+    expect(within(freeCard!).getByText('Reservations, calendar, and customer/staff payment records')).toBeTruthy();
+    expect(within(freeCard!).getByText('Returns and exports; no fittings or storefront payment methods')).toBeTruthy();
     expect(text(freeCard!)).not.toContain('14-day free trial');
   });
 

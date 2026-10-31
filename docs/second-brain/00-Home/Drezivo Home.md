@@ -4,7 +4,7 @@ type: index
 status: active
 owner: Drezivo team
 source: "ROOT-REPOSITORY-ARCHITECTURE.md and linked second-brain notes"
-updated: 2026-10-10
+updated: 2026-10-28
 tags: [drezivo, index]
 ---
 
@@ -39,6 +39,7 @@ The navigation hub for the Drezivo second brain.
 - [[08-Daily/2026-10-02]]
 - [[08-Daily/2026-10-10]]
 - [[08-Daily/2026-10-11]]
+- [[08-Daily/2026-10-28]]
 
 ## Current truth
 
