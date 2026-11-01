@@ -148,6 +148,9 @@ export function EditClothingPage({ productId }: { productId: string }) {
   const [defaultGuide, setDefaultGuide] = useState<MeasurementGuide | null>(null);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  // Color belongs to the clothing, not to a size: one field here, copied onto every variant on save.
+  const [clothingColor, setClothingColor] = useState("");
+  const [colorWasMixed, setColorWasMixed] = useState(false);
   const [subcategorySelection, setSubcategorySelection] = useState<SubcategorySelection>("none");
   const [customSubcategory, setCustomSubcategory] = useState("");
   const [categoryId, setCategoryId] = useState<string | null>(null);
@@ -207,6 +210,9 @@ export function EditClothingPage({ productId }: { productId: string }) {
       }
       setCategoryId(item.category?.id ?? null);
       setVariants(item.variants.map(variantToDraft));
+      const shared = sharedClothingColor(item.variants);
+      setClothingColor(shared.color);
+      setColorWasMixed(shared.mixed);
       setPhotos(
         item.images
           .slice()
@@ -822,6 +828,26 @@ export function EditClothingPage({ productId }: { productId: string }) {
                     />
                   ) : null}
                 </Field>
+                <Field label="Color (optional)">
+                  <Input
+                    aria-label="Clothing color"
+                    value={clothingColor}
+                    maxLength={80}
+                    disabled={saveGuard.isSubmitting}
+                    onChange={(event) => {
+                      const value = event.target.value;
+                      setClothingColor(value);
+                      setVariants((current) => current.map((variant) => ({ ...variant, color: value })));
+                      markDirty();
+                    }}
+                    placeholder="e.g. Emerald Green"
+                  />
+                  <p className="mt-1 text-xs text-dashboard-muted">
+                    {colorWasMixed
+                      ? "Sizes have different colors. Change this to give every size one color."
+                      : "Applies to every size of this clothing."}
+                  </p>
+                </Field>
               </div>
               <Field label="Description">
                 <textarea
@@ -1034,6 +1060,7 @@ export function EditClothingPage({ productId }: { productId: string }) {
       />
 
       <AddVariantDialog
+        clothingColor={clothingColor}
         open={addVariantOpen}
         onOpenChange={setAddVariantOpen}
         productId={item.product_id}
@@ -1076,6 +1103,7 @@ export function EditClothingPage({ productId }: { productId: string }) {
 }
 
 function AddVariantDialog({
+  clothingColor,
   defaultGuide,
   getToken,
   onCapacityLimit,
@@ -1084,6 +1112,7 @@ function AddVariantDialog({
   open,
   productId,
 }: {
+  clothingColor: string;
   defaultGuide: MeasurementGuide | null;
   getToken: () => Promise<string | null>;
   onCapacityLimit?: () => void;
@@ -1094,7 +1123,6 @@ function AddVariantDialog({
 }) {
   const submitGuard = useSubmitGuard();
   const [sizeLabel, setSizeLabel] = useState("");
-  const [color, setColor] = useState("");
   const [measurementMode, setMeasurementMode] = useState<MeasurementMode>("none");
   const [measurementUnit, setMeasurementUnit] = useState<MeasurementUnit>("cm");
   const [measurements, setMeasurements] = useState<Record<string, string>>({ bust: "", waist: "", length: "" });
@@ -1109,7 +1137,6 @@ function AddVariantDialog({
 
   const reset = () => {
     setSizeLabel("");
-    setColor("");
     setMeasurementMode("none");
     setMeasurementUnit("cm");
     setMeasurements({ bust: "", waist: "", length: "" });
@@ -1140,7 +1167,7 @@ function AddVariantDialog({
         status: "active",
         updatedAt: "",
         sizeLabel,
-        color,
+        color: clothingColor,
         measurementMode,
         measurementGuideId: measurementMode === "default_guide" ? defaultGuide?.id ?? null : null,
         measurementUnit,
@@ -1159,7 +1186,7 @@ function AddVariantDialog({
       const measurement = buildMeasurementPatch(draft, defaultGuide);
       const request: CreateClothingVariantRequest = {
         size_label: sizeLabel.trim(),
-        color_label: color.trim() || null,
+        color_label: clothingColor.trim() || null,
         measurement_mode: measurement.measurement_mode,
         measurement_guide_id: measurement.measurement_guide_id,
         measurement_unit: measurement.measurement_unit,
@@ -1191,7 +1218,7 @@ function AddVariantDialog({
             <div>
               <Dialog.Title className="text-lg font-semibold text-dashboard-navy">Add Variant</Dialog.Title>
               <Dialog.Description className="mt-1 text-sm leading-6 text-dashboard-muted">
-                Add another size or color to this clothing style. In V1, each new variant automatically receives one serialized garment.
+                Add another size to this clothing style; it takes the clothing's color. In V1, each new variant automatically receives one serialized garment.
               </Dialog.Description>
             </div>
             <Dialog.Close asChild>
@@ -1205,9 +1232,6 @@ function AddVariantDialog({
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label="Size Label" required>
                 <Input aria-label="New Variant Size Label" value={sizeLabel} disabled={submitGuard.isSubmitting} onChange={(event) => setSizeLabel(event.target.value)} placeholder="e.g. XL" />
-              </Field>
-              <Field label="Color (optional)">
-                <Input aria-label="New Variant Color" value={color} disabled={submitGuard.isSubmitting} onChange={(event) => setColor(event.target.value)} placeholder="e.g. Emerald Green" />
               </Field>
             </div>
 
@@ -1442,15 +1466,6 @@ function VariantEditor({
               value={variant.sizeLabel ?? "Flexible fit"}
               disabled={disabled || variant.sizeLabel === null}
               onChange={(event) => onChange({ sizeLabel: event.target.value })}
-            />
-          </Field>
-          <Field label="Color (optional)">
-            <Input
-              aria-label={`${variant.sku} Color`}
-              value={variant.color}
-              disabled={disabled}
-              placeholder="No color"
-              onChange={(event) => onChange({ color: event.target.value })}
             />
           </Field>
         </div>
@@ -2168,4 +2183,16 @@ function errorMessage(error: unknown, fallback: string): string {
 function toDrezivoApiError(error: unknown): DrezivoApiError {
   if (error instanceof DrezivoApiError) return error;
   return new DrezivoApiError(errorMessage(error, "Could not load clothing."), { status: 500 });
+}
+
+/** The clothing's color: the one its sizes share (the most common when they differ). */
+function sharedClothingColor(variants: readonly { color_label: string | null }[]): { color: string; mixed: boolean } {
+  const counts = new Map<string, number>();
+  for (const variant of variants) {
+    const color = variant.color_label?.trim();
+    if (color) counts.set(color, (counts.get(color) ?? 0) + 1);
+  }
+  const distinct = new Set(variants.map((variant) => variant.color_label?.trim() || ""));
+  const color = [...counts.entries()].sort((left, right) => right[1] - left[1])[0]?.[0] ?? "";
+  return { color, mixed: distinct.size > 1 };
 }
