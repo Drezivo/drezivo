@@ -12,6 +12,7 @@ import { promoteElapsedRecoveryReadinessForAllTenants } from './worker/handlers/
 import { WorkerRunner, type EventHandler } from './worker/runner.js';
 import { createEmailDeliveryHandler } from './worker/handlers/email-delivery.js';
 import { createSubscriptionPaymentReviewedHandler, PAYMENT_REVIEWED_EVENT_TYPE } from './worker/handlers/subscription-payment-reviewed.js';
+import { createOperatorAnnouncementHandler, OPERATOR_ANNOUNCEMENT_EVENT_TYPE } from './worker/handlers/operator-announcement.js';
 import { FILE_OBJECT_CLEANUP_EVENT_TYPE, handleFileObjectCleanup } from './modules/files/file-object-cleanup.js';
 import { FILE_IMAGE_VARIANTS_EVENT_TYPE } from './modules/files/file-image-variants.js';
 import { handleFileImageVariants } from './worker/handlers/file-image-variants.js';
@@ -47,6 +48,7 @@ const handlers: Record<string, EventHandler> = {
   'tenant.bootstrapped': handleTenantBootstrapped,
   [EMAIL_EVENT_TYPE]: createEmailDeliveryHandler(),
   [PAYMENT_REVIEWED_EVENT_TYPE]: createSubscriptionPaymentReviewedHandler(),
+  [OPERATOR_ANNOUNCEMENT_EVENT_TYPE]: createOperatorAnnouncementHandler(),
   [FILE_OBJECT_CLEANUP_EVENT_TYPE]: handleFileObjectCleanup,
   [FILE_IMAGE_VARIANTS_EVENT_TYPE]: handleFileImageVariants,
   [CATALOGUE_BACKUP_EXPORT_EVENT]: createCatalogueBackupExportHandler(),
