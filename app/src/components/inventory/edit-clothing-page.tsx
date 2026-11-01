@@ -1218,7 +1218,7 @@ function AddVariantDialog({
             <div>
               <Dialog.Title className="text-lg font-semibold text-dashboard-navy">Add Variant</Dialog.Title>
               <Dialog.Description className="mt-1 text-sm leading-6 text-dashboard-muted">
-                Add another size to this clothing style; it takes the clothing's color. In V1, each new variant automatically receives one serialized garment.
+                Add another size to this clothing style. It uses the clothing color. In V1, each new variant automatically receives one serialized garment.
               </Dialog.Description>
             </div>
             <Dialog.Close asChild>

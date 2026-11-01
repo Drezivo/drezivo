@@ -59,7 +59,7 @@ describe('operator announcements', async () => {
   const send = (subject = 'Maintenance on Sunday', body = 'Drezivo is offline from 1 AM to 2 AM.', key = KEY) =>
     asOperator(async (client) => (await client.query<{ data: { id: string; recipient_count: number; replayed: boolean } }>(
       'SELECT operator_send_announcement($1, $2, $3, $4, $5) AS data', ['op_1', key, 'req-1', subject, body],
-    )).rows[0]!.data);
+    )).rows.map((row) => row.data)[0]);
 
   it('queues one email per business once for a repeated or concurrent intent, and refuses a changed one', async () => {
     const withEmail = await createTestTenant({ clerkOrgId: 'org_ann_a' });
@@ -69,7 +69,7 @@ describe('operator announcements', async () => {
     await admin.query("INSERT INTO tenant_settings (tenant_id, business_email) VALUES ($1, 'shop@ann.test') ON CONFLICT (tenant_id) DO UPDATE SET business_email = EXCLUDED.business_email", [withEmail.id]);
 
     const results = await Promise.all([send(), send(), send()]);
-    expect(new Set(results.map((result) => result.id)).size).toBe(1);
+    expect(new Set(results.map((result) => result?.id)).size).toBe(1);
     expect(results[0]?.recipient_count).toBe(2);
     const jobs = await admin.query<{ tenant_id: string }>("SELECT tenant_id FROM outbox_event WHERE event_type = 'operator.announcement'");
     expect(jobs.rows.map((row) => row.tenant_id).sort()).toEqual([withEmail.id, withoutEmail.id].sort());
@@ -92,7 +92,7 @@ describe('operator announcements', async () => {
     await admin.query("UPDATE outbox_event SET status = 'succeeded' WHERE event_type = 'operator.announcement'");
     const history = await asOperator(async (client) => (await client.query<{ data: Array<{ subject: string; recipient_count: number; delivered: number }> }>(
       'SELECT operator_announcements(10) AS data',
-    )).rows[0]!.data);
+    )).rows.map((row) => row.data)[0]);
     expect(history).toEqual([expect.objectContaining({ subject: 'Maintenance on Sunday', recipient_count: 2, delivered: 2 })]);
   });
 });
