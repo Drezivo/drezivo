@@ -217,8 +217,8 @@ lifetime trial eligibility, including for a person who used that trial previousl
 owners can start a selected paid plan trial immediately. Otherwise a manual payment
 records the selected target plan and leaves the workspace on Free until operator approval starts
 the paid period. After a paid trial or period ends, request-time policy provides read-only access
-for up to 30 days; the storefront remains online without bookings or fittings for the first three
-days and is then offline. The workspace locks after day 30 except for subscribing. One current
+for up to 7 days; the storefront remains online without bookings or fittings for the first day
+and is then offline. The workspace locks after day 7 except for subscribing (ADR 0017). One current
 subscription exists per tenant; no period is silently repriced.
 
 `file_object` stores purpose, ownership, content metadata, accepted version/checksum and retention. An available evidence object needs frozen bytes: exact version or immutable final-key strategy. A reusable upload URL must not change accepted evidence. Private evidence cannot become public through an arbitrary boolean change. Retention/deletion includes versions and derivatives; legal holds are explicit.

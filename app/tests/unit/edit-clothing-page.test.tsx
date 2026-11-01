@@ -257,7 +257,9 @@ describe("EditClothingPage", () => {
     expect(screen.getByLabelText("Subcategory")).toHaveValue("custom");
     expect(screen.getByLabelText("Custom subcategory")).toHaveValue("Tea Length");
     expect(screen.getByLabelText("GWN-023-M Size Label")).toHaveValue("M");
-    expect(screen.getByLabelText("GWN-023-M Color")).toHaveValue("Emerald Green");
+    // Color is one field for the clothing; sizes no longer have their own.
+    expect(screen.getByLabelText("Clothing color")).toHaveValue("Emerald Green");
+    expect(screen.queryByLabelText("GWN-023-M Color")).not.toBeInTheDocument();
     expect(screen.getByLabelText("GWN-023-M bust")).toHaveValue("90");
     expect(screen.getByLabelText("GWN-023-M length")).toHaveValue("60");
     expect(screen.getByText(/Legacy Hips \(read-only\)/)).toBeVisible();
@@ -592,7 +594,8 @@ describe("EditClothingPage", () => {
     });
     fireEvent.click(await screen.findByRole("menuitem", { name: "Custom measurements" }));
     fireEvent.change(within(dialog).getByLabelText("New Variant Size Label"), { target: { value: "XL" } });
-    fireEvent.change(within(dialog).getByLabelText("New Variant Color"), { target: { value: "Emerald Green" } });
+    // A new size takes the clothing's color.
+    expect(within(dialog).queryByLabelText("New Variant Color")).not.toBeInTheDocument();
     fireEvent.change(within(dialog).getByLabelText("New Variant bust"), { target: { value: "Flexible fit" } });
     fireEvent.change(within(dialog).getByLabelText("New Variant length"), { target: { value: "61" } });
     expect(within(dialog).queryByLabelText("New Variant bust type")).not.toBeInTheDocument();
@@ -638,7 +641,7 @@ describe("EditClothingPage", () => {
     fireEvent.change(screen.getByLabelText("Clothing Name"), {
       target: { value: "Emerald Gala Gown" },
     });
-    fireEvent.change(screen.getByLabelText("GWN-023-M Color"), {
+    fireEvent.change(screen.getByLabelText("Clothing color"), {
       target: { value: "Forest Emerald" },
     });
     fireEvent.change(screen.getByLabelText("Daily Rate"), {
@@ -701,7 +704,7 @@ describe("EditClothingPage", () => {
     expect(waistInput).toHaveValue("72");
     expect(waistInput.parentElement).toHaveTextContent("cm");
     expect(screen.getByLabelText("GWN-023-M bust").parentElement).not.toHaveTextContent("cm");
-    fireEvent.change(screen.getByLabelText("GWN-023-M Color"), { target: { value: "Forest Green" } });
+    fireEvent.change(screen.getByLabelText("Clothing color"), { target: { value: "Forest Green" } });
     fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
 
     await waitFor(() => expect(api.updateClothingVariant).toHaveBeenCalledTimes(1));

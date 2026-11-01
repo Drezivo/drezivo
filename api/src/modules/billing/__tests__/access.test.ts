@@ -65,24 +65,24 @@ describe('accessOf', () => {
     expect(accessOf(trial(), at(-1))).toMatchObject({ level: 'full', reason: 'trial_ending', days_left: 0, storefront_online: true });
   });
 
-  it('turns read-only at the exact trial end instant, with the storefront online for three days', () => {
+  it('turns read-only at the exact trial end instant, with the storefront online for one day', () => {
     const atEnd = accessOf(trial(), at(0));
     expect(atEnd).toMatchObject({
       level: 'read_only',
       reason: 'trial_ended',
       storefront_online: true,
-      storefront_offline_at: at(3 * DAY).toISOString(),
-      read_only_until: at(30 * DAY).toISOString(),
-      ends_at: at(30 * DAY).toISOString(),
-      days_left: 30,
+      storefront_offline_at: at(1 * DAY).toISOString(),
+      read_only_until: at(7 * DAY).toISOString(),
+      ends_at: at(7 * DAY).toISOString(),
+      days_left: 7,
     });
-    expect(accessOf(trial(), at(3 * DAY - 1))).toMatchObject({ level: 'read_only', storefront_online: true });
-    expect(accessOf(trial(), at(3 * DAY))).toMatchObject({ level: 'read_only', storefront_online: false, storefront_offline_at: null });
+    expect(accessOf(trial(), at(1 * DAY - 1))).toMatchObject({ level: 'read_only', storefront_online: true });
+    expect(accessOf(trial(), at(1 * DAY))).toMatchObject({ level: 'read_only', storefront_online: false, storefront_offline_at: null });
   });
 
-  it('locks at exactly thirty days after the end', () => {
-    expect(accessOf(trial(), at(30 * DAY - 1))).toMatchObject({ level: 'read_only', days_left: 0 });
-    expect(accessOf(trial(), at(30 * DAY))).toEqual({
+  it('locks at exactly seven days after the end', () => {
+    expect(accessOf(trial(), at(7 * DAY - 1))).toMatchObject({ level: 'read_only', days_left: 0 });
+    expect(accessOf(trial(), at(7 * DAY))).toEqual({
       level: 'locked',
       reason: 'trial_ended',
       ends_at: null,
@@ -113,7 +113,7 @@ describe('accessOf', () => {
     const subscription = trial({ grace_ends_at: at(5 * DAY) });
     expect(accessOf(subscription, at(4 * DAY))).toMatchObject({
       reason: 'trial_extension',
-      read_only_until: at(30 * DAY).toISOString(),
+      read_only_until: at(7 * DAY).toISOString(),
       storefront_offline_at: at(5 * DAY).toISOString(),
     });
     expect(accessOf(subscription, at(5 * DAY))).toMatchObject({ level: 'read_only', reason: 'trial_ended', storefront_online: false });

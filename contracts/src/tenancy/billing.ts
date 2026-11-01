@@ -5,11 +5,11 @@
  * Access is derived at request time from the subscription (no background job decides it). Free has
  * no end date; for paid plans, "End" is the trial end while trialing, otherwise the paid-through date:
  * - `full`: before the end (the last 3 days carry a reminder reason).
- * - `read_only`: from the end, for READ_ONLY_ACCESS_DAYS (30). Everything is viewable, nothing can
+ * - `read_only`: from the end, for READ_ONLY_ACCESS_DAYS (7). Everything is viewable, nothing can
  *   change, renters cannot book. The storefront stays online (bookings paused) for the first
- *   STOREFRONT_GRACE_DAYS (3), then goes offline. An operator extension (`grace_ends_at`) keeps
+ *   STOREFRONT_GRACE_DAYS (1), then goes offline. An operator extension (`grace_ends_at`) keeps
  *   read-only access and the storefront online until that date.
- * - `locked`: after the 30 read-only days (or cancelled). Only subscribing is possible.
+ * - `locked`: after the 7 read-only days (or cancelled). Only subscribing is possible.
  */
 import { z } from 'zod';
 
@@ -36,9 +36,9 @@ export type SubscriptionAccessReason = z.infer<typeof subscriptionAccessReason>;
 /** How many days before an end date the owner sees the countdown reminder. */
 export const SUBSCRIPTION_REMINDER_DAYS = 3;
 /** Days after the end during which the storefront stays online (bookings paused). */
-export const STOREFRONT_GRACE_DAYS = 3;
+export const STOREFRONT_GRACE_DAYS = 1;
 /** Days after the end during which the business keeps read-only access before it is locked. */
-export const READ_ONLY_ACCESS_DAYS = 30;
+export const READ_ONLY_ACCESS_DAYS = 7;
 
 export const subscriptionAccess = z
   .object({

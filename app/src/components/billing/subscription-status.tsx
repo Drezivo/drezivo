@@ -13,8 +13,9 @@ import { Button } from "@/components/ui/button";
 
 /**
  * Billing status UI for perpetual Free and the paid plan catalog. Every "Pay" action opens
- * the Subscribe dialog. After a paid trial or month ends the workspace is view-only for 30 days
- * (the storefront stays up, taking no bookings, for the first 3), then it locks until the owner pays.
+ * the Subscribe dialog. After a paid trial or month ends the workspace is view-only for
+ * READ_ONLY_ACCESS_DAYS (the storefront stays up, taking no bookings, for the first
+ * STOREFRONT_GRACE_DAYS), then it locks until the owner pays.
  */
 
 /** Fired by the API client when the server refuses an action because of the subscription. */

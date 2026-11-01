@@ -476,8 +476,8 @@ export function BookingDrawer({ store, item, variant, onClose }: { store: Public
                   I accept the{' '}
                   <Link href={`/s/${store.slug}/policies`} target="_blank" className="underline underline-offset-4">
                     rental terms and privacy notice
-                  </Link>{' '}
-                  (version {store.policy.version}). My size is held for 15 minutes while I pay.
+                  </Link>
+                  . My size is held for 15 minutes while I pay.
                 </span>
               </label>
               <Turnstile ref={robotCheck} onToken={setRobotToken} onUnavailable={() => dispatch({ type: 'error', message: 'The security check could not load. Refresh the page and try again.' })} />
