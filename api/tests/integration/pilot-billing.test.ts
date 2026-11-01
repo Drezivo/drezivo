@@ -198,7 +198,8 @@ describe('pilot billing', async () => {
 
     it('makes a lapsed shop view-only: reads work, writes are refused, the storefront stays up with bookings paused', async () => {
       const ws = await publishedWorkspace('pb-readonly');
-      await setSubscription(ws.tenantId, "current_period_end = now() - interval '1 day'");
+      // Inside the first day after the end, the storefront is still up with bookings paused.
+      await setSubscription(ws.tenantId, "current_period_end = now() - interval '12 hours'");
       asOwner(ws);
       const app = createApp();
 
@@ -236,7 +237,7 @@ describe('pilot billing', async () => {
       expect(bodyOf(hold).error?.code).toBe('BOOKING_PAUSED');
     });
 
-    it('takes the storefront offline three days after the end, while staff can still read', async () => {
+    it('takes the storefront offline one day after the end, while staff can still read', async () => {
       const ws = await publishedWorkspace('pb-offline');
       await setSubscription(ws.tenantId, "current_period_end = now() - interval '4 days'");
       asOwner(ws);
@@ -245,11 +246,11 @@ describe('pilot billing', async () => {
       expect((await request(app).get('/api/v1/storefront')).status).toBe(200);
     });
 
-    it('locks the workspace 30 days after an ended trial: only billing and subscribing remain', async () => {
+    it('locks the workspace 7 days after an ended trial: only billing and subscribing remain', async () => {
       const ws = await publishedWorkspace('pb-locked');
       await setSubscription(
         ws.tenantId,
-        "status = 'trialing', trial_ends_at = now() - interval '31 days', current_period_end = now() - interval '31 days'",
+        "status = 'trialing', trial_ends_at = now() - interval '8 days', current_period_end = now() - interval '8 days'",
       );
       asOwner(ws);
       const app = createApp();
