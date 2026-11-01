@@ -43,7 +43,7 @@ export default async function PoliciesPage({ params }: { params: Promise<{ slug:
       <header className="max-w-3xl">
         <h1 className="font-sf-display text-5xl font-light sm:text-6xl">Rental info</h1>
         <p className="mt-4 text-sf-muted">
-          Everything to know before you reserve. You accept these terms (version {policy.version}) when you send a request.
+          Everything to know before you reserve. You accept these terms when you send a request.
         </p>
       </header>
 
