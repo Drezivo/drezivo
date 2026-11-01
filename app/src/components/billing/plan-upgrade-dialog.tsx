@@ -12,6 +12,7 @@ import type {
   PublicPlanCatalogResponse,
   SubscriptionSummary,
 } from "@drezivo/contracts";
+import { READ_ONLY_ACCESS_DAYS } from "@drezivo/contracts";
 
 import { SubscribeDialog } from "@/components/billing/subscribe-dialog";
 import { Button } from "@/components/ui/button";
@@ -278,7 +279,7 @@ function FreeOwnerActions({
 
   const name = plan?.name ?? "the plan";
   const note = billing.can_start_trial
-    ? `No payment now. Pay before the 14 days end to keep ${name}; otherwise the workspace becomes view-only for 30 days and then locks. Your data is kept either way.`
+    ? `No payment now. Pay before the 14 days end to keep ${name}; otherwise the workspace becomes view-only for ${READ_ONLY_ACCESS_DAYS} days and then locks. Your data is kept either way.`
     : `You have already used your free trial, so ${name} opens once Drezivo approves your payment.`;
 
   return (

@@ -148,7 +148,7 @@ export async function resolvePublishedStore(slug: string, preview: PreviewGrant 
     .where(and(eq(storefront.slug, slug), eq(storefront.status, 'published')))
     .limit(1);
   if (!row) return null;
-  // Pilot billing (billing/access.ts): a lapsed shop stays online, without bookings, for 3 days,
+  // Pilot billing (billing/access.ts): a lapsed shop stays online, without bookings, for STOREFRONT_GRACE_DAYS,
   // then its storefront is offline like an unpublished one.
   const access = await withTenantTransaction(row.tenantId, 'anonymous:public', (client) => readTenantAccess(client, row.tenantId));
   if (!access?.storefront_online) return null;

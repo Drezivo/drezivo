@@ -208,9 +208,9 @@ Plan and entitlement rows remain migration-owned: `0018_entitlement_runtime_priv
 leaves runtime roles read-only for those tables.
 
 Bootstrap starts a fourteen-day lifetime trial for the first eligible verified person. After the
-trial or a paid period ends, request-time policy provides read-only access for up to 30 days; the
-storefront remains online without bookings or fittings for the first three days and is then offline.
-The workspace locks after day 30 except for subscribing. One current subscription exists per tenant;
+trial or a paid period ends, request-time policy provides read-only access for up to 7 days; the
+storefront remains online without bookings or fittings for the first day and is then offline.
+The workspace locks after day 7 except for subscribing (ADR 0017). One current subscription exists per tenant;
 manual payment approval starts the paid period, and no period is silently repriced.
 
 `file_object` stores purpose, ownership, content metadata, accepted version/checksum and retention. An available evidence object needs frozen bytes: exact version or immutable final-key strategy. A reusable upload URL must not change accepted evidence. Private evidence cannot become public through an arbitrary boolean change. Retention/deletion includes versions and derivatives; legal holds are explicit.
