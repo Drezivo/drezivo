@@ -3,6 +3,8 @@ import { config } from './config/index.js';
 import { closePool } from './db/client.js';
 import { logger } from './shared/logger.js';
 import { resolveWorkerEntry, startEmbeddedWorker, type EmbeddedWorkerHandle } from './worker/embedded.js';
+import { changeTenantPlan } from './modules/internal-operator/operator-plan-change.service.js';
+import { createOperatorPlanAssertionVerifier } from './modules/internal-operator/operator-plan-assertion.js';
 
 /**
  * HTTP entrypoint. Does NOT run migrations and does NOT poll the outbox — those are the
@@ -15,7 +17,19 @@ import { resolveWorkerEntry, startEmbeddedWorker, type EmbeddedWorkerHandle } fr
  * the same worker entrypoint as a child process under its own database role. Run ONE API instance
  * in that mode; outbox leases keep extra instances safe but wasteful.
  */
-const app = createApp();
+const internalOperatorPlanCommands = config.INTERNAL_SERVICE_AUTH && config.INTERNAL_OPERATOR_ASSERTION_SECRET
+  ? {
+      verifyPlanAssertion: createOperatorPlanAssertionVerifier({
+        serviceAuth: config.INTERNAL_SERVICE_AUTH,
+        assertionSecret: config.INTERNAL_OPERATOR_ASSERTION_SECRET,
+      }),
+      changePlan: changeTenantPlan,
+    }
+  : undefined;
+
+const app = createApp({
+  ...(internalOperatorPlanCommands ? { internalOperator: internalOperatorPlanCommands } : {}),
+});
 
 const server = app.listen(config.PORT, () => {
   logger.info({ port: config.PORT, env: config.NODE_ENV }, 'api server listening');

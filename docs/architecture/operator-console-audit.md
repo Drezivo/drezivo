@@ -48,6 +48,16 @@ Job retries accept only terminal dead jobs. Notification retry rejects ambiguous
 and queues only a known failed delivery. State changes and audit records share the winning
 transaction. The existing durable outbox remains the only delivery path.
 
+## Narrow trial plan change
+
+The signed `POST /internal/operator/v1/tenants/:tenantId/plan` command is a separate billing
+operation, not workspace access. It is authorized with `tenant.admin.manage`, binds a short-lived
+assertion to one tenant and one idempotent request, and runs only in the Business API. It can move
+an active, unexpired trial among Starter, Standard, Growth, and Scale after pending-payment and
+capacity checks. Free upgrades and paid activation remain payment-gated. The command, subscription
+event, and tenant audit event commit together; an omitted internal reason is stored as `NULL`.
+Migration 0093 relaxes the reason column; 0085 already provides the request fingerprint.
+
 Local verification uses the operator repository's Docker stack and a separate temporary test
 PostgreSQL service with the full business migrations. It sends no hosted email, reads no hosted
 database and changes no Clerk organization. Release and hosted-provider configuration require a

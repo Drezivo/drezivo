@@ -7,9 +7,9 @@ import { idColumn, timestamps } from './_shared.js';
  * Governed by TRD §2 (Operator/audit row) and §3 (platform support); Data-Model §4.
  *
  * `audit_event` never stores a full before/after payload of sensitive data — only a
- * `redactedSummary` safe to display to the tenant owner. `support_grant` is the ONLY path by
- * which a Drezivo operator identity (not a tenant member) can touch tenant data, and it is
- * reason-coded, time-limited, and separately permissioned for private evidence access.
+ * `redactedSummary` safe to display to the tenant owner. Support grants are the only operator
+ * path for workspace access; a separate signed command can change a trial plan without browsing
+ * or impersonating the tenant.
  */
 
 export const auditEvent = pgTable('audit_event', {
@@ -47,7 +47,7 @@ export const operatorCommand = pgTable('operator_command', {
   resourceId: uuid('resource_id').notNull(),
   intentKey: text('intent_key').notNull(),
   requestFingerprint: text('request_fingerprint'),
-  reason: text('reason').notNull(),
+  reason: text('reason'),
   status: operatorCommandStatusEnum('status').notNull(),
   requestId: text('request_id').notNull(),
   acceptedAt: timestamp('accepted_at', { withTimezone: true }).notNull(),
