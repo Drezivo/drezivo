@@ -10,10 +10,24 @@ import {
   supportGrantParams,
   supportGrantResponse,
 } from '@drezivo/contracts';
+import { isAppError } from '../../shared/errors.js';
 import { sendError, sendSuccess } from '../../shared/response.js';
+import { operatorPlanRequest, type OperatorPlanCode } from './operator-plan.schema.js';
 
 export type OperatorPrincipal = { subject: string };
 export type OperatorScope = { tenantId: string; permissions: string[] };
+export type PlanAssertionInput = {
+  tenantId: string;
+  planCode: OperatorPlanCode;
+  reason?: string;
+  idempotencyKey: string;
+  requestId: string;
+};
+export type PlanChangeCommandInput = Omit<PlanAssertionInput, 'reason'> & {
+  operatorSubject: string;
+  reason: string | null;
+};
+export type VerifiedPlanAssertion = { principal: OperatorPrincipal; scope: OperatorScope };
 
 export interface InternalOperatorService {
   activity(input: { query: unknown; principal: OperatorPrincipal; scope: OperatorScope }): Promise<unknown>;
@@ -27,6 +41,11 @@ export interface InternalOperatorRouteOptions {
   verifyServiceAuth?: (req: Request) => Promise<OperatorPrincipal | null>;
   resolveAuthorization?: (principal: OperatorPrincipal, req: Request) => Promise<OperatorScope | null>;
   service?: InternalOperatorService;
+  verifyPlanAssertion?: (
+    req: Request,
+    input: PlanAssertionInput,
+  ) => VerifiedPlanAssertion | null | Promise<VerifiedPlanAssertion | null>;
+  changePlan?: (input: PlanChangeCommandInput) => Promise<unknown>;
 }
 
 const genericUnavailable = 'This operator service is temporarily unavailable.';
@@ -64,6 +83,57 @@ export function createInternalOperatorRouter(options: InternalOperatorRouteOptio
   const resolver = options.resolveAuthorization;
   const business = options.service;
   const getBusiness = (): InternalOperatorService => business ?? (() => { throw new Error('operator service unavailable'); })();
+
+  // Plan changes use a short-lived manage assertion and never inherit support access.
+  router.post('/tenants/:tenantId/plan', (req, res) => {
+    const tenantId = req.params.tenantId;
+    const key = requireKey(req);
+    const parsed = operatorPlanRequest.safeParse(req.body);
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(tenantId) || !key || !parsed.success) {
+      sendError(res, 422, 'VALIDATION_FAILED', malformed, req.requestId);
+      return;
+    }
+    const verifyPlanAssertion = options.verifyPlanAssertion;
+    const changePlan = options.changePlan;
+    if (!verifyPlanAssertion || !changePlan) {
+      sendError(res, 503, 'DEPENDENCY_UNAVAILABLE', genericUnavailable, req.requestId);
+      return;
+    }
+    const input: PlanAssertionInput = {
+      tenantId,
+      planCode: parsed.data.plan_code,
+      ...(parsed.data.reason ? { reason: parsed.data.reason } : {}),
+      idempotencyKey: key,
+      requestId: req.requestId,
+    };
+    void Promise.resolve(verifyPlanAssertion(req, input)).then(async (verified) => {
+      if (!verified) {
+        sendError(res, 401, 'UNAUTHENTICATED', unauthorized, req.requestId);
+        return;
+      }
+      if (verified.scope.tenantId !== tenantId) {
+        sendError(res, 404, 'NOT_FOUND', 'Resource not found.', req.requestId);
+        return;
+      }
+      if (!hasPermission(verified.scope, 'tenant.admin.manage')) {
+        sendError(res, 403, 'FORBIDDEN', unauthorized, req.requestId);
+        return;
+      }
+      const result = await changePlan({
+        ...input,
+        operatorSubject: verified.principal.subject,
+        reason: parsed.data.reason ?? null,
+      });
+      sendSuccess(req, res, result);
+    }).catch((error: unknown) => {
+      if (isAppError(error)) {
+        sendError(res, error.status, error.code, error.message, req.requestId, error.fields);
+        return;
+      }
+      sendError(res, 503, 'DEPENDENCY_UNAVAILABLE', genericUnavailable, req.requestId);
+    });
+  });
+
   const guard: RequestHandler = (req, res, next) => {
     if (!verifier || !resolver || !business) {
       sendError(res, 503, 'DEPENDENCY_UNAVAILABLE', genericUnavailable, req.requestId);

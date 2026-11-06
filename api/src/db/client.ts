@@ -76,6 +76,21 @@ export async function withSystemTenantTransaction<T>(
   });
 }
 
+/** Runs one explicitly authorized operator command in tenant scope with an operator actor. */
+export async function withOperatorTenantTransaction<T>(
+  tenantId: string,
+  operatorSubject: string,
+  fn: (client: PoolClient) => Promise<T>,
+): Promise<T> {
+  if (!operatorSubject) {
+    throw new Error('withOperatorTenantTransaction: operatorSubject is required');
+  }
+  return withTenantTransaction(tenantId, `operator:${operatorSubject}`, async (client) => {
+    await client.query('SELECT set_config($1, $2, true)', ['app.actor_kind', 'operator']);
+    return fn(client);
+  });
+}
+
 /**
  * Runs `fn` inside a transaction with the authenticated account's `app.principal_id` and
  * `app.actor_kind = 'account'` set — the default pre-tenant execution context for global

@@ -1,4 +1,4 @@
-import { readdirSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -84,6 +84,28 @@ describe('migration history inspection', () => {
       appliedFiles,
       pendingFiles,
     });
+  });
+
+  it('keeps the operator plan migration after staging 0094 and reuses the fingerprint added in 0085', () => {
+    const migrationFilesOnDisk = readdirSync(new URL('../../src/db/migrations/', import.meta.url))
+      .filter((fileName) => /^\d{4}_.*\.sql$/.test(fileName))
+      .sort();
+    const stagingMigrationIndex = migrationFilesOnDisk.indexOf('0094_operator_announcements.sql');
+    const planCommandIndex = migrationFilesOnDisk.indexOf('0095_operator_plan_change_support.sql');
+    const operatorProjection = readFileSync(
+      new URL('../../src/db/migrations/0085_operator_console_projection.sql', import.meta.url),
+      'utf8',
+    );
+    const planCommand = readFileSync(
+      new URL('../../src/db/migrations/0095_operator_plan_change_support.sql', import.meta.url),
+      'utf8',
+    );
+
+    expect(stagingMigrationIndex).toBeGreaterThanOrEqual(0);
+    expect(planCommandIndex).toBeGreaterThan(stagingMigrationIndex);
+    expect(operatorProjection).toMatch(/ADD COLUMN IF NOT EXISTS request_fingerprint/);
+    expect(planCommand).toMatch(/ALTER TABLE operator_command ALTER COLUMN reason DROP NOT NULL/);
+    expect(planCommand).not.toMatch(/ADD COLUMN.*request_fingerprint/i);
   });
 
   it('orders shared renter steps after the existing payment and fitting migrations', () => {

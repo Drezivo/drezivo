@@ -14,6 +14,10 @@ export const envSchema = z
     NODE_ENV: z.enum(['development', 'test', 'staging', 'production']).default('development'),
     PORT: z.coerce.number().int().min(1).max(65535).default(3000),
 
+    // This pair enables the narrowly scoped operator plan command. Keep both unset to leave it unavailable.
+    INTERNAL_SERVICE_AUTH: z.string().min(32).max(500).optional(),
+    INTERNAL_OPERATOR_ASSERTION_SECRET: z.string().min(32).max(200).optional(),
+
     DATABASE_URL: z.string().url('DATABASE_URL must be a valid postgres connection string'),
     DATABASE_POOL_MAX: z.coerce.number().int().min(1).max(100).default(10),
 
@@ -120,6 +124,14 @@ export const envSchema = z
     CLOUDFLARE_MEDIA_PURGE_TOKEN: z.string().min(20).max(500).optional(),
   })
   .superRefine((env, ctx) => {
+    if (Boolean(env.INTERNAL_SERVICE_AUTH) !== Boolean(env.INTERNAL_OPERATOR_ASSERTION_SECRET)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['INTERNAL_SERVICE_AUTH'],
+        message: 'Operator plan commands require INTERNAL_SERVICE_AUTH and INTERNAL_OPERATOR_ASSERTION_SECRET together.',
+      });
+    }
+
     const deployed = env.NODE_ENV === 'staging' || env.NODE_ENV === 'production';
     if (deployed && !env.MEDIA_READ_GRANT_SECRET) {
       ctx.addIssue({
