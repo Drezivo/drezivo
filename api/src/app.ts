@@ -126,6 +126,10 @@ export function createApp(options: AppOptions = {}): Express {
 
   app.use(clerkContext);
   app.use(clerkWebhookRouter);
+  const operatorPaymentJson = express.json({ limit: '768kb', type: 'application/json' });
+  app.use('/internal/operator/v1/platform-payment-methods', (req, res, next) => {
+    operatorPaymentJson(req, res, (error: unknown) => mapJsonBodyError(error, next));
+  });
   const globalJson = express.json({ limit: '256kb' });
   app.use((req, res, next) => {
     if (

@@ -5,9 +5,8 @@ import type { SubscriptionPaymentStatus, SubscriptionStatus } from '@drezivo/con
 /**
  * Pilot billing reads and the one business-side write (submitting a payment proof).
  *
- * `platform_payment_method` is a GLOBAL table that operators manage; the business API only reads
- * it (see migration 0063 for why the role can technically write). QR bytes are selected only by
- * the dedicated QR read, never in list queries.
+ * `platform_payment_method` is global. Billing reads active methods; the signed operator command
+ * owns edits. QR bytes and object metadata are selected only by the dedicated QR read.
  */
 
 export interface AccessRow {
@@ -84,7 +83,8 @@ export interface PlatformPaymentMethodRow {
 
 export async function listActivePlatformPaymentMethods(client: PoolClient): Promise<PlatformPaymentMethodRow[]> {
   const result = await client.query<PlatformPaymentMethodRow>(
-    `SELECT id, label, account_name, account_number, instructions, qr_image IS NOT NULL AS has_qr
+    `SELECT id, label, account_name, account_number, instructions,
+            (qr_image IS NOT NULL OR qr_object_key IS NOT NULL) AS has_qr
        FROM platform_payment_method
       WHERE active
       ORDER BY sort_order, id
@@ -107,11 +107,11 @@ export async function readActivePlatformPaymentMethod(
 export async function readActivePlatformQr(
   client: PoolClient,
   id: string,
-): Promise<{ qr_image: Buffer; qr_mime: string } | null> {
-  const result = await client.query<{ qr_image: Buffer; qr_mime: string }>(
-    `SELECT qr_image, qr_mime
+): Promise<{ qr_image: Buffer | null; qr_mime: string; qr_object_key: string | null; qr_size_bytes: number | null; qr_sha256: string | null } | null> {
+  const result = await client.query<{ qr_image: Buffer | null; qr_mime: string; qr_object_key: string | null; qr_size_bytes: number | null; qr_sha256: string | null }>(
+    `SELECT qr_image, qr_mime, qr_object_key, qr_size_bytes, qr_sha256
        FROM platform_payment_method
-      WHERE id = $1 AND active AND qr_image IS NOT NULL AND qr_mime IS NOT NULL
+      WHERE id = $1 AND active AND (qr_image IS NOT NULL OR qr_object_key IS NOT NULL) AND qr_mime IS NOT NULL
       LIMIT 1`,
     [id],
   );

@@ -44,14 +44,15 @@ export interface ObjectStorage {
   readObject(input: {
     storageKey: string;
     versionId?: string | null;
+    signal?: AbortSignal;
   }): Promise<StoredObjectRead | null>;
   headObject?(storageKey: string): Promise<StoredObjectMetadata | null>;
-  putObject?(input: { storageKey: string; contentType: string; body: Uint8Array }): Promise<void>;
+  putObject?(input: { storageKey: string; contentType: string; body: Uint8Array; signal?: AbortSignal }): Promise<void>;
   inspectUploadedObject(
     storageKey: string,
     maxByteSize: number,
   ): Promise<UploadedObjectMetadata | null>;
-  deleteObject?(storageKey: string): Promise<void>;
+  deleteObject?(storageKey: string, signal?: AbortSignal): Promise<void>;
 }
 
 export const MAX_STORED_OBJECT_READ_BYTES = 10 * 1024 * 1024;

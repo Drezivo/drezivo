@@ -5,6 +5,7 @@ import { logger } from './shared/logger.js';
 import { resolveWorkerEntry, startEmbeddedWorker, type EmbeddedWorkerHandle } from './worker/embedded.js';
 import { changeTenantPlan } from './modules/internal-operator/operator-plan-change.service.js';
 import { createOperatorPlanAssertionVerifier } from './modules/internal-operator/operator-plan-assertion.js';
+import { createPlatformPaymentAssertionVerifier } from './modules/internal-operator/platform-payment-assertion.js';
 
 /**
  * HTTP entrypoint. Does NOT run migrations and does NOT poll the outbox — those are the
@@ -24,6 +25,10 @@ const internalOperatorPlanCommands = config.INTERNAL_SERVICE_AUTH && config.INTE
         assertionSecret: config.INTERNAL_OPERATOR_ASSERTION_SECRET,
       }),
       changePlan: changeTenantPlan,
+      verifyPlatformPaymentAssertion: createPlatformPaymentAssertionVerifier({
+        serviceAuth: config.INTERNAL_SERVICE_AUTH,
+        assertionSecret: config.INTERNAL_OPERATOR_ASSERTION_SECRET,
+      }),
     }
   : undefined;
 
