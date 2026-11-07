@@ -29,6 +29,7 @@ import { runIdempotentCommand, type CommandResult } from '../../shared/idempoten
 import { countActivePhysicalAssets, countReservedFrontdeskSeats } from '../entitlements/entitlements.repository.js';
 import { resolvePlanEntitlements, resolveTenantEntitlements } from '../entitlements/entitlements.service.js';
 import { accessOf } from './access.js';
+import { readPlatformQrBytes } from './platform-qr-read.js';
 import { TRIAL_DURATION_DAYS } from './billing.constants.js';
 import {
   appendBillingAuditEvent,
@@ -245,13 +246,16 @@ export function submitSubscriptionPayment(
 export async function readPlatformQr(
   actor: BillingActor,
   methodId: string,
+  storage: ObjectStorage = objectStorage,
 ): Promise<{ bytes: Buffer; contentType: string }> {
   const qr = await withTenantTransaction(actor.tenantId, actor.principalId, (client) =>
     readActivePlatformQr(client, methodId),
   );
-  if (!qr || !matchesImageSignature(qr.qr_image, qr.qr_mime))
+  if (!qr) throw new NotFoundError('This QR code is not available.');
+  const bytes = await readPlatformQrBytes(qr, storage);
+  if (!matchesImageSignature(bytes, qr.qr_mime))
     throw new NotFoundError('This QR code is not available.');
-  return { bytes: qr.qr_image, contentType: qr.qr_mime };
+  return { bytes, contentType: qr.qr_mime };
 }
 
 /** Operator-only: stream an accepted payment proof without exposing its R2 location. */

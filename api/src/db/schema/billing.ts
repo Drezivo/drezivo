@@ -128,8 +128,8 @@ const bytea = customType<{ data: Buffer }>({ dataType: () => 'bytea' });
 
 /**
  * Drezivo's OWN ways to receive the subscription fee. Global (no tenant), operator-managed: the
- * business API only reads it. QR bytes live here (<= 512 KB, PNG/JPEG/WebP) and are served by
- * GET /billing/payment-methods/{id}/qr, never in list responses.
+ * QR object metadata lives here. Legacy bytes remain readable until verified migration; images
+ * are served by GET /billing/payment-methods/{id}/qr and never included in list responses.
  */
 export const platformPaymentMethod = pgTable('platform_payment_method', {
   ...idColumn,
@@ -139,10 +139,22 @@ export const platformPaymentMethod = pgTable('platform_payment_method', {
   instructions: text('instructions'),
   qrImage: bytea('qr_image'),
   qrMime: text('qr_mime'),
+  qrObjectKey: text('qr_object_key'),
+  qrSizeBytes: integer('qr_size_bytes'),
+  qrSha256: text('qr_sha256'),
   active: boolean('active').notNull().default(true),
   sortOrder: integer('sort_order').notNull().default(0),
   version: integer('version').notNull().default(1),
   ...updatableTimestamps,
+});
+
+/** Crash-safe tracking of uploaded and obsolete platform-owned QR objects. */
+export const platformPaymentQrObject = pgTable('platform_payment_qr_object', {
+  storageKey: text('storage_key').primaryKey(),
+  state: text('state').notNull(),
+  availableAt: timestamp('available_at', { withTimezone: true }).notNull(),
+  attempts: integer('attempts').notNull().default(0),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
 /** Operator audit + idempotency log for platform payment method writes (append-only). */

@@ -21,6 +21,7 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx scripts/migrate.ts",
     "db:migrate:status": "tsx scripts/migrate.ts --status",
+    "platform-qr:migrate": "tsx scripts/migrate-platform-payment-qrs.ts",
     "seed:clothing:local": "tsx scripts/seed-local-clothing.ts",
     "db:studio": "drizzle-kit studio",
     "prepare": "husky"

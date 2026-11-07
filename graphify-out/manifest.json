@@ -198,9 +198,9 @@
     "semantic_hash": ""
   },
   "api/package.json": {
-    "mtime": 1793457711.3417568,
-    "seen": 1793459652.125838,
-    "ast_hash": "a178103d177592680f2962ebc839a99a",
+    "mtime": 1794043176.4413998,
+    "seen": 1794043936.4118688,
+    "ast_hash": "565e65a65fbb762dc95d07ddfdb00590",
     "semantic_hash": ""
   },
   "api/scripts/branch-protection.sh": {
@@ -276,9 +276,9 @@
     "semantic_hash": ""
   },
   "api/src/app.ts": {
-    "mtime": 1793457711.343755,
-    "seen": 1793459652.126833,
-    "ast_hash": "a81c9786b90536755d5e1c639b0fedd7",
+    "mtime": 1794042574.4397757,
+    "seen": 1794043936.4138691,
+    "ast_hash": "8a4e98528e63b582ac5b54e6ed0473de",
     "semantic_hash": ""
   },
   "api/src/config/__tests__/cors-origins.test.ts": {
@@ -366,9 +366,9 @@
     "semantic_hash": ""
   },
   "api/src/db/schema/billing.ts": {
-    "mtime": 1793457711.3597538,
-    "seen": 1793459652.127831,
-    "ast_hash": "fe4ca2bb0f6ce54cd1174959446c87d8",
+    "mtime": 1794044426.6384254,
+    "seen": 1794044497.9143956,
+    "ast_hash": "09e9a44fe8aeb2359d9d03b71af9a64e",
     "semantic_hash": ""
   },
   "api/src/db/schema/bootstrap.ts": {
@@ -480,15 +480,15 @@
     "semantic_hash": ""
   },
   "api/src/integrations/storage/object-storage.ts": {
-    "mtime": 1793457711.437528,
-    "seen": 1793459652.128835,
-    "ast_hash": "069dc3d1be55bb2b317629b5d5c5b155",
+    "mtime": 1794043441.31535,
+    "seen": 1794043936.4148211,
+    "ast_hash": "c45bf4497b26c0eae362448fc7363271",
     "semantic_hash": ""
   },
   "api/src/integrations/storage/s3-compatible-object-storage.ts": {
-    "mtime": 1793457711.4385326,
-    "seen": 1793459652.128835,
-    "ast_hash": "0bd6ff228b2b0b57ec4e965bc2d27511",
+    "mtime": 1794043441.94314,
+    "seen": 1794043936.4148211,
+    "ast_hash": "797fb810b62a0b7a61f7883c40012418",
     "semantic_hash": ""
   },
   "api/src/integrations/turnstile/__tests__/turnstile.test.ts": {
@@ -660,15 +660,15 @@
     "semantic_hash": ""
   },
   "api/src/modules/billing/billing-payments.repository.ts": {
-    "mtime": 1793457711.4465303,
-    "seen": 1793459652.131835,
-    "ast_hash": "94e0beaa54630a2c0c7bc502ef536876",
+    "mtime": 1794044428.1478689,
+    "seen": 1794044497.9143956,
+    "ast_hash": "432fa6a486290cdbce5295bff8af9c2f",
     "semantic_hash": ""
   },
   "api/src/modules/billing/billing-payments.service.ts": {
-    "mtime": 1793457711.448529,
-    "seen": 1793459652.131835,
-    "ast_hash": "d06769e8d1de9011df55cb874dbfe711",
+    "mtime": 1794042450.4801931,
+    "seen": 1794043936.4148211,
+    "ast_hash": "04729086800caffea0a13ec1efdc6bbe",
     "semantic_hash": ""
   },
   "api/src/modules/billing/billing.constants.ts": {
@@ -1224,9 +1224,9 @@
     "semantic_hash": ""
   },
   "api/src/modules/internal-operator/internal-operator.routes.ts": {
-    "mtime": 1793458276.2163928,
-    "seen": 1793459652.1378355,
-    "ast_hash": "a171b4c2d97624e06840c2b06c97f1d4",
+    "mtime": 1794043365.0700114,
+    "seen": 1794043936.434352,
+    "ast_hash": "f085e06d971007ef8dafc1b8e0014aec",
     "semantic_hash": ""
   },
   "api/src/modules/members/members.controller.ts": {
@@ -1848,9 +1848,9 @@
     "semantic_hash": ""
   },
   "api/src/server.ts": {
-    "mtime": 1793458225.82017,
-    "seen": 1793459652.1458347,
-    "ast_hash": "1b02756356ffbdf0ac2e45fa33557da1",
+    "mtime": 1794042573.8142407,
+    "seen": 1794043936.4475381,
+    "ast_hash": "9e16947f7619844491c057449aed37df",
     "semantic_hash": ""
   },
   "api/src/shared/__tests__/idempotent-command.test.ts": {
@@ -1938,9 +1938,9 @@
     "semantic_hash": ""
   },
   "api/src/worker.ts": {
-    "mtime": 1793955946.7103999,
-    "seen": 1793956263.4723275,
-    "ast_hash": "1b7dde2781fb348eb918be5192d4c71e",
+    "mtime": 1794042381.1661265,
+    "seen": 1794043936.4495392,
+    "ast_hash": "a76ae12cb657c1185fcf28a79f4f407a",
     "semantic_hash": ""
   },
   "api/src/worker/__tests__/embedded.test.ts": {
@@ -8823,6 +8823,72 @@
     "mtime": 1793956081.8761072,
     "seen": 1793956263.5866978,
     "ast_hash": "c172f5828e6531d5316096eab8e8161f",
+    "semantic_hash": ""
+  },
+  "api/scripts/migrate-platform-payment-qrs.ts": {
+    "mtime": 1794044145.1815913,
+    "seen": 1794044236.949965,
+    "ast_hash": "c95379f3ffe1ed69599dd8f217275975",
+    "semantic_hash": ""
+  },
+  "api/src/modules/billing/__tests__/platform-qr-storage.test.ts": {
+    "mtime": 1794042866.865396,
+    "seen": 1794043936.4148211,
+    "ast_hash": "24cf0c85660bdc47def14bdfcdfdcc2e",
+    "semantic_hash": ""
+  },
+  "api/src/modules/billing/platform-qr-cleanup.ts": {
+    "mtime": 1794044144.5811825,
+    "seen": 1794044236.9759192,
+    "ast_hash": "fe8e53306127c0af32365156c87f6e43",
+    "semantic_hash": ""
+  },
+  "api/src/modules/billing/platform-qr-migration.ts": {
+    "mtime": 1794043730.7235,
+    "seen": 1794043936.4148211,
+    "ast_hash": "b34cef93f7093cdc82247426811b659e",
+    "semantic_hash": ""
+  },
+  "api/src/modules/billing/platform-qr-read.ts": {
+    "mtime": 1794043442.5823452,
+    "seen": 1794043936.4148211,
+    "ast_hash": "d2bb3d2e26fe2e3bf386796fecccf1a6",
+    "semantic_hash": ""
+  },
+  "api/src/modules/internal-operator/__tests__/platform-payment-assertion.test.ts": {
+    "mtime": 1794042913.5109675,
+    "seen": 1794043936.4333506,
+    "ast_hash": "a2b7447d2b255d4d1662a2d3da5f61b7",
+    "semantic_hash": ""
+  },
+  "api/src/modules/internal-operator/platform-payment-assertion.ts": {
+    "mtime": 1794042540.4771247,
+    "seen": 1794043936.434352,
+    "ast_hash": "cee34310c727d9035852001e55d4d0e6",
+    "semantic_hash": ""
+  },
+  "api/src/modules/internal-operator/platform-payment-methods.schema.ts": {
+    "mtime": 1794042868.1001065,
+    "seen": 1794043936.434352,
+    "ast_hash": "a2495900bac99c9ffd6928a16c28d1d7",
+    "semantic_hash": ""
+  },
+  "api/src/modules/internal-operator/platform-payment-methods.service.ts": {
+    "mtime": 1794043731.3484926,
+    "seen": 1794043936.434352,
+    "ast_hash": "ce0aff7271581d97f1556eb65b9704c3",
+    "semantic_hash": ""
+  },
+  "api/tests/integration/platform-payment-qr.test.ts": {
+    "mtime": 1794044525.168807,
+    "seen": 1794044582.241498,
+    "ast_hash": "e7504382ddfba1abe94eb684a114d4ad",
+    "semantic_hash": ""
+  },
+  "docs/runbooks/platform-payment-qr-storage.md": {
+    "mtime": 1794044145.7985573,
+    "seen": 1794044237.4692726,
+    "ast_hash": "fd08b2b9df8af0c213a1e5457af57d83",
     "semantic_hash": ""
   }
 }
