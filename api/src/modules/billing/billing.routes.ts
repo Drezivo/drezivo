@@ -20,6 +20,7 @@ import { requireTenantAction } from '../tenancy/tenancy.service.js';
 import { getBillingOverview, readPlatformQr, readPaymentProof, submitSubscriptionPayment, type BillingActor } from './billing-payments.service.js';
 import { verifyProofLink } from './operator-proof-link.js';
 import { streamFileResponse } from '../files/file-stream.js';
+import { logger } from '../../shared/logger.js';
 
 const methodParams = z.object({ methodId: z.string().uuid() }).strict();
 
@@ -86,10 +87,12 @@ billingRouter.get(
     try {
     const token = (req.params as { token?: unknown }).token;
     const grant = typeof token === 'string' ? verifyProofLink(token) : null;
-    const file = grant ? await readPaymentProof(grant.tenantId, grant.paymentId, 'proof-link') : null;
+    if (!grant) logger.warn({ event: 'billing.payment_proof.unavailable', request_id: req.requestId, reason: 'invalid_or_expired_link' }, 'Payment proof unavailable');
+    const file = grant ? await readPaymentProof(grant.tenantId, grant.paymentId, 'proof-link', undefined, req.requestId) : null;
     res.setHeader('Cache-Control', 'no-store');
     res.setHeader('Referrer-Policy', 'no-referrer');
     if (!file) {
+      res.setHeader('X-Drezivo-Proof-Route', 'v1');
       res.status(404).type('text/plain').send('This proof link is not valid or has expired. Open it again from the operator console.');
       return;
     }

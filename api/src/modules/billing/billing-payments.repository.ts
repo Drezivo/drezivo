@@ -235,19 +235,23 @@ export async function appendBillingAuditEvent(
   );
 }
 
+interface PaymentProofFile {
+  storage_key: string; version_id: string | null; mime_type: string; byte_size: number;
+  purpose: string; lifecycle_status: string; is_frozen: boolean; has_checksum: boolean;
+}
+
 /** Operator read: the proof file of one payment in the operator's tenant scope. */
 export async function readPaymentProofFile(
   client: PoolClient,
   tenantId: string,
   paymentId: string,
-): Promise<{ storage_key: string; version_id: string | null; mime_type: string; byte_size: number } | null> {
-  const result = await client.query<{ storage_key: string; version_id: string | null; mime_type: string; byte_size: number }>(
-    `SELECT f.storage_key, f.version_id, f.mime_type, f.byte_size
+): Promise<PaymentProofFile | null> {
+  const result = await client.query<PaymentProofFile>(
+    `SELECT f.storage_key, f.version_id, f.mime_type, f.byte_size, f.purpose, f.lifecycle_status,
+            (f.frozen_at IS NOT NULL) AS is_frozen, (f.sha256 IS NOT NULL) AS has_checksum
        FROM subscription_payment sp
        JOIN file_object f ON f.tenant_id = sp.tenant_id AND f.id = sp.proof_file_id
-      WHERE sp.tenant_id = $1 AND sp.id = $2
-        AND f.purpose = 'subscription_payment_proof' AND f.lifecycle_status = 'accepted'
-        AND f.frozen_at IS NOT NULL AND (f.version_id IS NOT NULL OR f.sha256 IS NOT NULL)`,
+      WHERE sp.tenant_id = $1 AND sp.id = $2`,
     [tenantId, paymentId],
   );
   return result.rows[0] ?? null;
