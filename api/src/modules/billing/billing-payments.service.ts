@@ -213,7 +213,7 @@ export function submitSubscriptionPayment(
             amountMinor: targetPlan.monthlyMinor,
             currency: targetPlan.currency,
             paymentMethodId: method.id,
-            reference: request.reference,
+            reference: request.reference ?? null,
             proofFileId: request.proof_file_id,
             membershipId: actor.membershipId,
           });

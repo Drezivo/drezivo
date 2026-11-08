@@ -189,7 +189,7 @@ export async function insertPendingSubscriptionPayment(
     amountMinor: number;
     currency: string;
     paymentMethodId: string;
-    reference: string;
+    reference: string | null;
     proofFileId: string;
     membershipId: string;
   },
