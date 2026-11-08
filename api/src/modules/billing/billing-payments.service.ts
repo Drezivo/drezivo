@@ -1,5 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
+import { logger } from '../../shared/logger.js';
+
 import type { PoolClient } from 'pg';
 
 import {
@@ -264,17 +266,24 @@ export async function readPaymentProof(
   paymentId: string,
   operatorSubject: string,
   storage: ObjectStorage = objectStorage,
+  requestId = 'unknown',
 ): Promise<FileStreamResponse | null> {
+  const unavailable = (reason: string): null => {
+    logger.warn({ event: 'billing.payment_proof.unavailable', request_id: requestId, reason }, 'Payment proof unavailable');
+    return null;
+  };
   const file = await withTenantTransaction(tenantId, `operator:${operatorSubject}`, (client) =>
     readPaymentProofFile(client, tenantId, paymentId),
   );
-  if (!file) return null;
-  if (!['image/jpeg', 'image/png', 'image/webp', 'application/pdf'].includes(file.mime_type)) return null;
+  if (!file) return unavailable('payment_or_file_not_found');
+  if (file.purpose !== 'subscription_payment_proof' || file.lifecycle_status !== 'accepted' || !file.is_frozen || (!file.version_id && !file.has_checksum)) return unavailable('proof_not_accepted');
+  if (!['image/jpeg', 'image/png', 'image/webp', 'application/pdf'].includes(file.mime_type)) return unavailable('unsupported_content_type');
   const read = await storage.readObject({
     storageKey: file.storage_key,
     versionId: file.version_id,
   });
-  if (!read || read.contentLength !== file.byte_size) return null;
+  if (!read) return unavailable('object_not_found');
+  if (read.contentLength !== file.byte_size) return unavailable('object_size_mismatch');
   return { body: read.body, byteSize: file.byte_size, mimeType: file.mime_type as FileStreamResponse['mimeType'] };
 }
 

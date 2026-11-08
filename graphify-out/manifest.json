@@ -660,15 +660,15 @@
     "semantic_hash": ""
   },
   "api/src/modules/billing/billing-payments.repository.ts": {
-    "mtime": 1794044428.1478689,
-    "seen": 1794044497.9143956,
-    "ast_hash": "432fa6a486290cdbce5295bff8af9c2f",
+    "mtime": 1794067334.7153027,
+    "seen": 1794067677.193398,
+    "ast_hash": "34d066b7ded79c364707787971935fca",
     "semantic_hash": ""
   },
   "api/src/modules/billing/billing-payments.service.ts": {
-    "mtime": 1794042450.4801931,
-    "seen": 1794043936.4148211,
-    "ast_hash": "04729086800caffea0a13ec1efdc6bbe",
+    "mtime": 1794067334.7153027,
+    "seen": 1794067677.193398,
+    "ast_hash": "6f91ab1025aa9d148c61942911e30721",
     "semantic_hash": ""
   },
   "api/src/modules/billing/billing.constants.ts": {
@@ -696,9 +696,9 @@
     "semantic_hash": ""
   },
   "api/src/modules/billing/billing.routes.ts": {
-    "mtime": 1793457711.448529,
-    "seen": 1793459652.131835,
-    "ast_hash": "efa369fb1805e0510817216378b35f6b",
+    "mtime": 1794067334.7163074,
+    "seen": 1794067677.193398,
+    "ast_hash": "c577ead517e438e71706512902750c25",
     "semantic_hash": ""
   },
   "api/src/modules/billing/billing.schemas.ts": {
@@ -8886,9 +8886,21 @@
     "semantic_hash": ""
   },
   "docs/runbooks/platform-payment-qr-storage.md": {
-    "mtime": 1794044145.7985573,
-    "seen": 1794044237.4692726,
-    "ast_hash": "fd08b2b9df8af0c213a1e5457af57d83",
+    "mtime": 1794044669.2020204,
+    "seen": 1794067677.3780873,
+    "ast_hash": "8bb58e0acccb6f2b77f0bbdb1055bbcc",
+    "semantic_hash": ""
+  },
+  "api/src/modules/billing/__tests__/operator-payment-proof.test.ts": {
+    "mtime": 1794067676.471849,
+    "seen": 1794067927.4066463,
+    "ast_hash": "f0a94c830db0ed04b83475fa05bc8481",
+    "semantic_hash": ""
+  },
+  "api/src/modules/billing/__tests__/operator-payment-proof-route.test.ts": {
+    "mtime": 1794067809.150321,
+    "seen": 1794067927.4066463,
+    "ast_hash": "acfea0060f8b56bc969ed8381072e57c",
     "semantic_hash": ""
   }
 }
