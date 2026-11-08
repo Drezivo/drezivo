@@ -25,6 +25,7 @@ import type {
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { ImageLightbox } from "@/components/ui/image-lightbox";
 import { createDrezivoApiClient, DrezivoApiError } from "@/lib/drezivo-api";
 import {
   storefrontImageProblem,
@@ -66,7 +67,7 @@ function payablePlanCode(billing: BillingOverview, requested: PlanCode | null | 
 
 /**
  * Pay Drezivo for one month of the selected plan: pick a payment method, pay by QR or
- * transfer, then send the reference number and a screenshot or PDF of the receipt. An operator
+ * transfer, then send a screenshot or PDF of the receipt and an optional reference number. An operator
  * checks it; full access returns on approval. One payment can wait for review at a time.
  */
 export function SubscribeDialog({
@@ -267,7 +268,6 @@ function PaymentForm({
     event.preventDefault();
     if (busy) return;
     if (!method) return setMessage("Choose how you paid.");
-    if (!reference.trim()) return setMessage("Enter the reference number from your receipt.");
     if (!proof) return setMessage("Attach a screenshot or PDF of your receipt.");
     setMessage(null);
     try {
@@ -289,7 +289,7 @@ function PaymentForm({
       const fileId = proofId;
       const result = await guard.submit((idempotencyKey) =>
         createDrezivoApiClient(getToken).submitSubscriptionPayment(
-          { plan_code: targetPlan.code, payment_method_id: method.id, reference: reference.trim(), proof_file_id: fileId },
+          { plan_code: targetPlan.code, payment_method_id: method.id, ...(reference.trim() ? { reference: reference.trim() } : {}), proof_file_id: fileId },
           idempotencyKey
         )
       );
@@ -323,14 +323,14 @@ function PaymentForm({
           ))}
         </div>
         {method ? (
-          <MethodDetails method={method} amount={peso(targetPlan.monthly_price_minor)} />
+          <MethodDetails key={method.id} method={method} amount={peso(targetPlan.monthly_price_minor)} />
         ) : null}
       </fieldset>
 
       <fieldset className="grid gap-3">
         <legend className="text-sm font-semibold">2. Send your receipt</legend>
         <label className="grid gap-1 text-sm">
-          <span className="font-medium">Reference number</span>
+          <span className="font-medium">Reference number (optional)</span>
           <Input
             value={reference}
             maxLength={64}
@@ -408,6 +408,7 @@ function MethodDetails({ method, amount }: { method: PlatformPaymentMethod; amou
   const { getToken } = useAuth();
   const [qrUrl, setQrUrl] = useState<string | null>(null);
   const [qrFailed, setQrFailed] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
 
   useEffect(() => {
     if (!method.has_qr) return;
@@ -434,12 +435,18 @@ function MethodDetails({ method, amount }: { method: PlatformPaymentMethod; amou
       {method.has_qr ? (
         <div className="flex aspect-square items-center justify-center overflow-hidden rounded-lg bg-white">
           {qrUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element -- authorized object URL
-            <img
-              src={qrUrl}
-              alt={`${method.label} QR code`}
-              className="h-full w-full object-contain"
-            />
+            <button
+              type="button"
+              aria-label={`Enlarge ${method.label} QR code`}
+              onClick={() => setPreviewOpen(true)}
+              className="relative h-full w-full cursor-zoom-in focus-visible:outline focus-visible:outline-2 focus-visible:outline-dashboard-accent"
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element -- authorized object URL */}
+              <img src={qrUrl} alt={`${method.label} QR code`} className="h-full w-full object-contain" />
+              <span aria-hidden="true" className="absolute bottom-2 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-black/70 px-2 py-1 text-xs text-white">
+                Click to zoom
+              </span>
+            </button>
           ) : qrFailed ? (
             <span className="p-3 text-center text-xs text-neutral-600">
               QR could not load. Use the account details.
@@ -449,6 +456,13 @@ function MethodDetails({ method, amount }: { method: PlatformPaymentMethod; amou
           )}
         </div>
       ) : null}
+      <ImageLightbox
+        images={qrUrl ? [{ src: qrUrl, alt: `${method.label} QR code` }] : []}
+        open={previewOpen}
+        onOpenChange={setPreviewOpen}
+        activeIndex={0}
+        onActiveIndexChange={() => {}}
+      />
       <dl className="grid content-start gap-2 text-sm">
         <div>
           <dt className="text-xs text-dashboard-muted">Amount</dt>

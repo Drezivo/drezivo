@@ -1,6 +1,19 @@
 import { describe, expect, it } from 'vitest';
 
-import { billingOverview } from '../src/tenancy/billing';
+import { billingOverview, submitSubscriptionPaymentRequest } from '../src/tenancy/billing';
+
+describe('subscription payment reference', () => {
+  it('accepts an omitted reference while requiring a receipt and validating supplied references', () => {
+    const payment = {
+      payment_method_id: '11111111-1111-4111-8111-111111111111',
+      proof_file_id: '22222222-2222-4222-8222-222222222222',
+    };
+    expect(submitSubscriptionPaymentRequest.safeParse(payment).success).toBe(true);
+    expect(submitSubscriptionPaymentRequest.safeParse({ ...payment, reference: '12345' }).success).toBe(true);
+    expect(submitSubscriptionPaymentRequest.safeParse({ ...payment, reference: '  ' }).success).toBe(false);
+    expect(submitSubscriptionPaymentRequest.safeParse({ ...payment, proof_file_id: undefined }).success).toBe(false);
+  });
+});
 
 describe('billing overview plan contract', () => {
   it('accepts Free and paid plan identities and rejects mismatched names', () => {

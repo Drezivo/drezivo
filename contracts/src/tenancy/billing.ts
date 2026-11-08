@@ -200,7 +200,7 @@ export const submitSubscriptionPaymentRequest = z
      */
     plan_code: planCode.optional(),
     payment_method_id: z.string().uuid(),
-    reference: subscriptionPaymentReference,
+    reference: subscriptionPaymentReference.optional(),
     proof_file_id: fileObjectId,
   })
   .strict();
