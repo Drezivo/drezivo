@@ -15,7 +15,6 @@ import { AuthBrand } from "@/components/auth/auth-brand";
 import { AuthSplitLayout } from "@/components/auth/auth-split-layout";
 import { ExitOnboardingDialog } from "@/components/onboarding/exit-onboarding-dialog";
 import { OnboardingProgress } from "@/components/onboarding/onboarding-progress";
-import { RestartOnboardingDialog } from "@/components/onboarding/restart-onboarding-dialog";
 import { OnboardingStatusPage } from "@/components/onboarding/onboarding-status-page";
 import { createDrezivoApiClient, DrezivoApiError } from "@/lib/drezivo-api";
 import { publicTermsUrl } from "@/lib/public-terms";
@@ -40,11 +39,17 @@ export function OnboardingEntry() {
     try {
       const api = createDrezivoApiClient(getToken);
       const result = await api.getCurrentOnboarding();
+      // Setup already started: go straight to its next step (the plan page also offers Start over)
+      // instead of stopping on a "Continue setup" card.
+      if (result.data.onboarding?.status === "incomplete" && !result.data.has_current_owned_tenant) {
+        router.replace("/onboarding/plan");
+        return;
+      }
       setState({ kind: "ready", context: result.data });
     } catch (caughtError) {
       setState({ kind: "error", error: toDrezivoApiError(caughtError) });
     }
-  }, [getToken, isLoaded, isSignedIn]);
+  }, [getToken, isLoaded, isSignedIn, router]);
 
   useEffect(() => {
     if (isLoaded && !isSignedIn) {
@@ -106,34 +111,6 @@ export function OnboardingEntry() {
           }
           description="Our operator team is verifying your payment. Return here to check for the next onboarding update."
           title="Payment verification and operator handoff pending"
-        />
-      </OnboardingFrame>
-    );
-  }
-
-  if (onboarding?.status === "incomplete") {
-    return (
-      <OnboardingFrame getToken={getToken} onboarding={onboarding}>
-        <StatusCard
-          action={
-            <div className="space-y-3">
-              <Link href="/onboarding/plan" className={primaryButtonClass}>
-                Continue setup
-              </Link>
-              <RestartOnboardingDialog
-                getToken={getToken}
-                onboarding={onboarding}
-                onRestarted={loadCurrent}
-                triggerClassName={secondaryButtonClass}
-              />
-            </div>
-          }
-          description={
-            onboarding.selected_plan_code
-              ? "Your organization is saved and ready for the next setup step."
-              : "Your organization is saved. Plan selection will be the next step."
-          }
-          title={`Continue setting up ${onboarding.organization_name}`}
         />
       </OnboardingFrame>
     );
@@ -427,5 +404,3 @@ const inputClass =
   "mt-2 h-10 w-full rounded-lg border border-auth-line bg-transparent px-3.5 text-sm text-auth-text outline-none transition placeholder:text-auth-dark-muted focus:border-auth-gold focus:ring-2 focus:ring-auth-gold/20";
 const primaryButtonClass =
   "inline-flex min-h-10 w-full items-center justify-center rounded-full bg-auth-button px-5 text-sm font-semibold text-auth-button-ink transition hover:bg-auth-button-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-auth-focus focus-visible:ring-offset-2 focus-visible:ring-offset-auth-panel disabled:cursor-not-allowed disabled:opacity-60";
-const secondaryButtonClass =
-  "inline-flex min-h-12 w-full items-center justify-center rounded-full border border-auth-line bg-transparent px-6 text-sm font-semibold text-auth-text transition hover:border-auth-gold hover:text-auth-gold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-auth-focus focus-visible:ring-offset-2 focus-visible:ring-offset-auth-panel disabled:cursor-not-allowed disabled:opacity-60";

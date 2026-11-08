@@ -14,8 +14,8 @@ import {
  * "End" is the trial end while trialing, otherwise the paid-through date (`current_period_end`):
  *   now < end                      full       (last SUBSCRIPTION_REMINDER_DAYS carry a reminder)
  *   operator extension > now       read_only  (storefront online until the extension ends)
- *   end <= now < end + 30 days     read_only  (storefront online for the first 3 days only)
- *   end + 30 days <= now           locked     (only subscribing is possible)
+ *   end <= now < end + 7 days      read_only  (storefront online for the first day only)
+ *   end + 7 days <= now            locked     (only subscribing is possible)
  *   cancelled                      locked
  * `grace_ends_at` is repurposed as the operator-granted "read-only until" extension.
  */

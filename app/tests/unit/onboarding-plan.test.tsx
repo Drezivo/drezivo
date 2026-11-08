@@ -7,6 +7,7 @@ import { OnboardingPlan } from "@/components/onboarding/onboarding-plan";
 const clerk = vi.hoisted(() => ({
   getToken: vi.fn(),
   setActive: vi.fn(),
+  signOut: vi.fn(),
   useAuth: vi.fn(),
   useClerk: vi.fn(),
 }));
@@ -14,6 +15,7 @@ const clerk = vi.hoisted(() => ({
 const api = vi.hoisted(() => ({
   getActorContext: vi.fn(),
   acceptAccountTerms: vi.fn(),
+  abandonOnboarding: vi.fn(),
   getCurrentOnboarding: vi.fn(),
   getPublicPlanCatalog: vi.fn(),
   getWorkspaces: vi.fn(),
@@ -101,7 +103,7 @@ const workspace = {
 
 function renderPlan() {
   clerk.useAuth.mockReturnValue({ getToken: clerk.getToken, isLoaded: true, isSignedIn: true });
-  clerk.useClerk.mockReturnValue({ setActive: clerk.setActive });
+  clerk.useClerk.mockReturnValue({ setActive: clerk.setActive, signOut: clerk.signOut });
   return render(<OnboardingPlan />);
 }
 
@@ -388,6 +390,37 @@ describe("OnboardingPlan", () => {
       { plan_code: "starter" },
       expect.any(String)
     );
+  });
+
+  it("lets the owner leave a started setup, abandoning it once before signing out", async () => {
+    api.abandonOnboarding.mockResolvedValue({ data: { ...onboarding, status: "abandoned" }, requestId: "req-abandon" });
+    renderPlan();
+    await screen.findByRole("radiogroup", { name: "Subscription plan" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Leave setup" }));
+    const leaveButtons = screen.getAllByRole("button", { name: "Leave setup" });
+    fireEvent.click(leaveButtons[leaveButtons.length - 1]!);
+    fireEvent.click(leaveButtons[leaveButtons.length - 1]!);
+
+    await waitFor(() => expect(api.abandonOnboarding).toHaveBeenCalledTimes(1));
+    expect(api.abandonOnboarding).toHaveBeenCalledWith(onboarding.id, { reason_code: "not_now" }, expect.any(String));
+    await waitFor(() => expect(clerk.signOut).toHaveBeenCalledWith({ redirectUrl: "/sign-in" }));
+  });
+
+  it("restarts a started setup from the business row and returns to organization setup", async () => {
+    api.abandonOnboarding.mockResolvedValue({ data: { ...onboarding, status: "abandoned" }, requestId: "req-abandon" });
+    renderPlan();
+    await choosePlan();
+    fireEvent.click(screen.getByRole("button", { name: "Not yet" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+
+    fireEvent.click(screen.getByRole("button", { name: "Change" }));
+    const restartButtons = await screen.findAllByRole("button", { name: "Restart setup" });
+    fireEvent.click(restartButtons[restartButtons.length - 1]!);
+
+    await waitFor(() => expect(api.abandonOnboarding).toHaveBeenCalledTimes(1));
+    expect(clerk.setActive).toHaveBeenCalledWith({ organization: null });
+    await waitFor(() => expect(router.replace).toHaveBeenCalledWith("/onboarding"));
   });
 
   it("closes on Not yet without starting anything, and the trial button reopens it", async () => {

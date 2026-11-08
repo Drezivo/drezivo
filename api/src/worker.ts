@@ -12,6 +12,7 @@ import { promoteElapsedRecoveryReadinessForAllTenants } from './worker/handlers/
 import { WorkerRunner, type EventHandler } from './worker/runner.js';
 import { createEmailDeliveryHandler } from './worker/handlers/email-delivery.js';
 import { createSubscriptionPaymentReviewedHandler, PAYMENT_REVIEWED_EVENT_TYPE } from './worker/handlers/subscription-payment-reviewed.js';
+import { createOperatorAnnouncementHandler, OPERATOR_ANNOUNCEMENT_EVENT_TYPE } from './worker/handlers/operator-announcement.js';
 import { FILE_OBJECT_CLEANUP_EVENT_TYPE, handleFileObjectCleanup } from './modules/files/file-object-cleanup.js';
 import { FILE_IMAGE_VARIANTS_EVENT_TYPE } from './modules/files/file-image-variants.js';
 import { handleFileImageVariants } from './worker/handlers/file-image-variants.js';
@@ -22,6 +23,7 @@ import {
 import { EMAIL_EVENT_TYPE } from './modules/notifications/email-notifications.js';
 import { logger } from './shared/logger.js';
 import { SUBSCRIPTION_LIFECYCLE_SWEEP_ENABLED } from './modules/billing/billing.constants.js';
+import { sweepPlatformQrObject } from './modules/billing/platform-qr-cleanup.js';
 import {
   CATALOGUE_BACKUP_EXPORT_EVENT,
   createCatalogueBackupExportHandler,
@@ -47,6 +49,7 @@ const handlers: Record<string, EventHandler> = {
   'tenant.bootstrapped': handleTenantBootstrapped,
   [EMAIL_EVENT_TYPE]: createEmailDeliveryHandler(),
   [PAYMENT_REVIEWED_EVENT_TYPE]: createSubscriptionPaymentReviewedHandler(),
+  [OPERATOR_ANNOUNCEMENT_EVENT_TYPE]: createOperatorAnnouncementHandler(),
   [FILE_OBJECT_CLEANUP_EVENT_TYPE]: handleFileObjectCleanup,
   [FILE_IMAGE_VARIANTS_EVENT_TYPE]: handleFileImageVariants,
   [CATALOGUE_BACKUP_EXPORT_EVENT]: createCatalogueBackupExportHandler(),
@@ -67,6 +70,7 @@ interface Sweep {
 }
 
 const SWEEPS: readonly Sweep[] = [
+  { name: 'platform QR cleanup', run: sweepPlatformQrObject, intervalMs: Math.max(config.WORKER_POLL_INTERVAL_MS, 60_000) },
   { name: 'hold expiry', run: expireDueHoldsForAllTenants, intervalMs: config.WORKER_POLL_INTERVAL_MS, fast: true },
   // Off for the pilot: access is derived per request (modules/billing/access.ts). See the constant.
   ...(SUBSCRIPTION_LIFECYCLE_SWEEP_ENABLED

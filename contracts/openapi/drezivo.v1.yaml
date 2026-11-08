@@ -33728,7 +33728,6 @@ paths:
                   format: uuid
               required:
                 - payment_method_id
-                - reference
                 - proof_file_id
               additionalProperties: false
       responses:

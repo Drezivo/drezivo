@@ -1,10 +1,10 @@
-/** Standard v1 catalog values for the current temporary 400-garment offer. */
+/** Standard v1 catalog values: 300 active garments since migration 0093. */
 export const STANDARD_PLAN = {
   code: 'standard',
   version: 1,
   monthlyMinor: 29900,
   currency: 'PHP',
-  physicalAssetsMax: 400,
+  physicalAssetsMax: 300,
   frontdeskSeatsMax: 3,
 } as const;
 

@@ -107,7 +107,7 @@ describe('TBF-033 subscription lifecycle and gates', async () => {
     const ownerId = 'user_tbf033_context';
     const membershipId = await createTestMembership(tenant.id, ownerId, 'owner');
     await seedWorkspaceBranch(tenant.id, membershipId, ownerId);
-    await seedSubscription(tenant.id, 'standard', "now() - interval '15 days'");
+    await seedSubscription(tenant.id, 'standard', "now() - interval '3 days'");
 
     const result = await resolveActorContext({
       principalId: ownerId,

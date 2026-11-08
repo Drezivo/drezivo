@@ -98,9 +98,9 @@ Access is derived at request time, where the "end" is the trial end or the paid-
 | Time | Business app | Storefront |
 | --- | --- | --- |
 | Before the end (the last 3 days show a countdown) | Full | Online, taking bookings |
-| From the end, first 3 days | View-only, with a Subscribe prompt | Online, but not taking bookings or fittings |
-| From the end, days 4 to 30 | View-only, with a Subscribe prompt | Offline |
-| More than 30 days after the end | Locked: only Subscribe | Offline |
+| From the end, first day | View-only, with a Subscribe prompt | Online, but not taking bookings or fittings |
+| From the end, days 2 to 7 | View-only, with a Subscribe prompt | Offline |
+| More than 7 days after the end | Locked: only Subscribe | Offline |
 
 An operator can give a **view-only extension** until a chosen date. The business stays view-only
 and the storefront stays online without bookings until then.

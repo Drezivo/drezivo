@@ -100,7 +100,7 @@ export default function TermsPage() {
       <p>
         If a trial or paid subscription period expires without renewal, the workspace becomes
         read-only for up to <strong>{READ_ONLY_ACCESS_DAYS} days</strong>. The public storefront may
-        remain online for the first <strong>{STOREFRONT_GRACE_DAYS} days</strong> of that period
+        remain online for the first <strong>{STOREFRONT_GRACE_DAYS === 1 ? 'day' : `${STOREFRONT_GRACE_DAYS} days`}</strong> of that period
         with new bookings paused, after which the storefront goes offline. At the end of the
         read-only period, the workspace is locked until a valid subscription is restored. An
         explicitly cancelled subscription may be locked sooner.

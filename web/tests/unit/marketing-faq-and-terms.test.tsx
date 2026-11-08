@@ -115,7 +115,7 @@ describe('marketing FAQ, pricing, and terms', () => {
       'What happens when my paid-plan trial ends? Will I lose my data?',
     );
     expect(trialAnswer).toContain('Free has no trial or expiry');
-    expect(trialAnswer).toContain('read-only for up to 30 days');
+    expect(trialAnswer).toContain('read-only for up to 7 days');
   });
 
   it('keeps the terms aligned with the current pilot subscription lifecycle', () => {
@@ -123,8 +123,8 @@ describe('marketing FAQ, pricing, and terms', () => {
 
     expect(screen.getByText('Last updated: October 20, 2026')).toBeTruthy();
     expect(screen.getByText(/14-day free trial/)).toBeTruthy();
-    expect(screen.getByText(/read-only for up to/).textContent).toContain('30 days');
-    expect(screen.getByText(/public storefront may remain online/).textContent).toContain('3 days');
+    expect(screen.getByText(/read-only for up to/).textContent).toContain('7 days');
+    expect(screen.getByText(/public storefront may remain online/).textContent).toContain('the first day');
     expect(screen.getByText(/30-day retention period/)).toBeTruthy();
   });
 

@@ -1,3 +1,5 @@
+import { READ_ONLY_ACCESS_DAYS } from '@drezivo/contracts';
+
 export interface MarketingFaq {
   readonly question: string;
   readonly answer: string;
@@ -77,12 +79,12 @@ export const MARKETING_FAQ_GROUPS: readonly MarketingFaqGroup[] = [
     faqs: [
       {
         question: 'What happens when my paid-plan trial ends? Will I lose my data?',
-        answer: `The Starter and Standard trial lasts ${MARKETING_TRIAL_DAYS} days. Free has no trial or expiry. If a paid-plan trial ends without an approved payment, the workspace becomes read-only for up to 30 days. The public storefront stays online for the first 3 days with new bookings paused, then goes offline. After 30 days the workspace locks.`,
+        answer: `The Starter and Standard trial lasts ${MARKETING_TRIAL_DAYS} days. Free has no trial or expiry. If a paid-plan trial ends without an approved payment, the workspace becomes read-only for up to ${READ_ONLY_ACCESS_DAYS} days. The public storefront stays online for the first day with new bookings paused, then goes offline. After ${READ_ONLY_ACCESS_DAYS} days the workspace locks.`,
       },
       {
         question: 'Can I still see or export my records after cancelling?',
         answer:
-          'If a trial or paid month simply expires without renewal, the workspace can remain read-only for up to 30 days. An explicit cancellation may lock access sooner. Drezivo retains the workspace data for 30 days after the subscription is no longer active; contact support for any available recovery or export option during that period.',
+          `If a trial or paid month simply expires without renewal, the workspace can remain read-only for up to ${READ_ONLY_ACCESS_DAYS} days. An explicit cancellation may lock access sooner. Drezivo retains the workspace data for 30 days after the subscription is no longer active; contact support for any available recovery or export option during that period.`,
       },
       {
         question: 'Do I need a credit card to start?',
@@ -96,7 +98,7 @@ export const MARKETING_FAQ_GROUPS: readonly MarketingFaqGroup[] = [
       {
         question: 'What happens if I do not renew after the trial or a paid month?',
         answer:
-          'Your workspace becomes read-only for up to 30 days and then locks. Drezivo retains the workspace data for 30 days after the subscription is no longer active, subject to limited legal, accounting, security, backup, or dispute-retention exceptions.',
+          `Your workspace becomes read-only for up to ${READ_ONLY_ACCESS_DAYS} days and then locks. Drezivo retains the workspace data for 30 days after the subscription is no longer active, subject to limited legal, accounting, security, backup, or dispute-retention exceptions.`,
       },
     ],
   },

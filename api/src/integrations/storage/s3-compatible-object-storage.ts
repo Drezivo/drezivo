@@ -127,7 +127,7 @@ export class S3CompatibleObjectStorage implements ObjectStorage {
   }
 
   /** Reads bytes through the API process after its caller has checked tenant and file access. */
-  async readObject(input: { storageKey: string; versionId?: string | null }): Promise<StoredObjectRead | null> {
+  async readObject(input: { storageKey: string; versionId?: string | null; signal?: AbortSignal }): Promise<StoredObjectRead | null> {
     if (input.versionId && isR2Endpoint(this.storageConfig.OBJECT_STORAGE_ENDPOINT)) {
       throw new DependencyUnavailableError(
         'Legacy versioned objects must be reconciled before they can be read from Cloudflare R2.',
@@ -142,6 +142,7 @@ export class S3CompatibleObjectStorage implements ObjectStorage {
           Key: input.storageKey,
           ...(input.versionId ? { VersionId: input.versionId } : {}),
         }),
+        ...(input.signal ? [{ abortSignal: input.signal }] : []),
       );
     } catch (error) {
       if (isMissingObject(error)) return null;
@@ -177,7 +178,7 @@ export class S3CompatibleObjectStorage implements ObjectStorage {
     }
   }
 
-  async putObject(input: { storageKey: string; contentType: string; body: Uint8Array }): Promise<void> {
+  async putObject(input: { storageKey: string; contentType: string; body: Uint8Array; signal?: AbortSignal }): Promise<void> {
     try {
       await this.client.send(
         new PutObjectCommand({
@@ -187,6 +188,7 @@ export class S3CompatibleObjectStorage implements ObjectStorage {
           ContentLength: input.body.byteLength,
           Body: input.body,
         }),
+        ...(input.signal ? [{ abortSignal: input.signal }] : []),
       );
     } catch (error) {
       throw mapStorageFailure(error, 'put_object');
@@ -260,13 +262,14 @@ export class S3CompatibleObjectStorage implements ObjectStorage {
     };
   }
 
-  async deleteObject(storageKey: string): Promise<void> {
+  async deleteObject(storageKey: string, signal?: AbortSignal): Promise<void> {
     try {
       await this.client.send(
         new DeleteObjectCommand({
           Bucket: this.storageConfig.OBJECT_STORAGE_BUCKET_PRIVATE,
           Key: storageKey,
         }),
+        ...(signal ? [{ abortSignal: signal }] : []),
       );
     } catch (error) {
       if (isMissingObject(error)) return;

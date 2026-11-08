@@ -1,5 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
+import { logger } from '../../shared/logger.js';
+
 import type { PoolClient } from 'pg';
 
 import {
@@ -29,6 +31,7 @@ import { runIdempotentCommand, type CommandResult } from '../../shared/idempoten
 import { countActivePhysicalAssets, countReservedFrontdeskSeats } from '../entitlements/entitlements.repository.js';
 import { resolvePlanEntitlements, resolveTenantEntitlements } from '../entitlements/entitlements.service.js';
 import { accessOf } from './access.js';
+import { readPlatformQrBytes } from './platform-qr-read.js';
 import { TRIAL_DURATION_DAYS } from './billing.constants.js';
 import {
   appendBillingAuditEvent,
@@ -210,7 +213,7 @@ export function submitSubscriptionPayment(
             amountMinor: targetPlan.monthlyMinor,
             currency: targetPlan.currency,
             paymentMethodId: method.id,
-            reference: request.reference,
+            reference: request.reference ?? null,
             proofFileId: request.proof_file_id,
             membershipId: actor.membershipId,
           });
@@ -245,13 +248,16 @@ export function submitSubscriptionPayment(
 export async function readPlatformQr(
   actor: BillingActor,
   methodId: string,
+  storage: ObjectStorage = objectStorage,
 ): Promise<{ bytes: Buffer; contentType: string }> {
   const qr = await withTenantTransaction(actor.tenantId, actor.principalId, (client) =>
     readActivePlatformQr(client, methodId),
   );
-  if (!qr || !matchesImageSignature(qr.qr_image, qr.qr_mime))
+  if (!qr) throw new NotFoundError('This QR code is not available.');
+  const bytes = await readPlatformQrBytes(qr, storage);
+  if (!matchesImageSignature(bytes, qr.qr_mime))
     throw new NotFoundError('This QR code is not available.');
-  return { bytes: qr.qr_image, contentType: qr.qr_mime };
+  return { bytes, contentType: qr.qr_mime };
 }
 
 /** Operator-only: stream an accepted payment proof without exposing its R2 location. */
@@ -260,17 +266,24 @@ export async function readPaymentProof(
   paymentId: string,
   operatorSubject: string,
   storage: ObjectStorage = objectStorage,
+  requestId = 'unknown',
 ): Promise<FileStreamResponse | null> {
+  const unavailable = (reason: string): null => {
+    logger.warn({ event: 'billing.payment_proof.unavailable', request_id: requestId, reason }, 'Payment proof unavailable');
+    return null;
+  };
   const file = await withTenantTransaction(tenantId, `operator:${operatorSubject}`, (client) =>
     readPaymentProofFile(client, tenantId, paymentId),
   );
-  if (!file) return null;
-  if (!['image/jpeg', 'image/png', 'image/webp', 'application/pdf'].includes(file.mime_type)) return null;
+  if (!file) return unavailable('payment_or_file_not_found');
+  if (file.purpose !== 'subscription_payment_proof' || file.lifecycle_status !== 'accepted' || !file.is_frozen || (!file.version_id && !file.has_checksum)) return unavailable('proof_not_accepted');
+  if (!['image/jpeg', 'image/png', 'image/webp', 'application/pdf'].includes(file.mime_type)) return unavailable('unsupported_content_type');
   const read = await storage.readObject({
     storageKey: file.storage_key,
     versionId: file.version_id,
   });
-  if (!read || read.contentLength !== file.byte_size) return null;
+  if (!read) return unavailable('object_not_found');
+  if (read.contentLength !== file.byte_size) return unavailable('object_size_mismatch');
   return { body: read.body, byteSize: file.byte_size, mimeType: file.mime_type as FileStreamResponse['mimeType'] };
 }
 
