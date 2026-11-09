@@ -61,22 +61,29 @@ export class DeferredOutboxError extends Error {
  */
 export class WorkerRunner {
   private stopped = false;
+  private idleTimer: ReturnType<typeof setTimeout> | undefined;
+  private wakeIdle: (() => void) | undefined;
 
   constructor(
     private readonly handlers: Record<string, EventHandler>,
     private readonly pollIntervalMs = config.WORKER_POLL_INTERVAL_MS,
     private readonly leaseSeconds = config.WORKER_LEASE_SECONDS,
     private readonly db: Pool = pool,
+    private readonly idleMaxMs = config.WORKER_OUTBOX_IDLE_MAX_MS,
   ) {}
 
   async start(): Promise<void> {
-    logger.info({ pollIntervalMs: this.pollIntervalMs }, 'worker runner starting');
+    const idleMaxMs = Math.max(this.pollIntervalMs, this.idleMaxMs);
+    let idleDelayMs = this.pollIntervalMs;
+    logger.info({ pollIntervalMs: this.pollIntervalMs, idleMaxMs }, 'worker runner starting');
     while (!this.stopped) {
       const claimed = await this.claimBatch(BATCH_SIZE);
       if (claimed.length === 0) {
-        await sleep(this.pollIntervalMs);
+        await this.waitForNextPoll(idleDelayMs);
+        idleDelayMs = Math.min(idleDelayMs * 2, idleMaxMs);
         continue;
       }
+      idleDelayMs = this.pollIntervalMs;
       for (const row of claimed) {
         await this.processOne(row);
       }
@@ -106,6 +113,21 @@ export class WorkerRunner {
 
   stop(): void {
     this.stopped = true;
+    if (this.idleTimer) clearTimeout(this.idleTimer);
+    this.wakeIdle?.();
+  }
+
+  private waitForNextPoll(delayMs: number): Promise<void> {
+    if (this.stopped) return Promise.resolve();
+    return new Promise((resolve) => {
+      const finish = (): void => {
+        this.idleTimer = undefined;
+        this.wakeIdle = undefined;
+        resolve();
+      };
+      this.wakeIdle = finish;
+      this.idleTimer = setTimeout(finish, delayMs);
+    });
   }
 
   private async claimBatch(limit: number, eventTypes?: readonly string[]): Promise<OutboxRow[]> {
@@ -216,8 +238,4 @@ export class WorkerRunner {
       [row.id, row._leaseToken, row.attempts + 1, safeMessage],
     );
   }
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }
