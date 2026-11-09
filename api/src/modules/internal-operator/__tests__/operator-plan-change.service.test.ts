@@ -10,26 +10,33 @@ import { operatorPlanCode } from '../operator-plan.schema.js';
 const now = new Date('2026-10-31T00:00:00.000Z');
 
 describe('operator plan change policy', () => {
-  it('allows only an active tenant with an unexpired trial and no pending payment', () => {
-    expect(() => assertOperatorPlanChangeEligible({
-      tenantStatus: 'active', subscriptionStatus: 'trialing',
-      trialEndsAt: new Date('2026-11-01T00:00:00.000Z'), now, pendingPayment: false,
-    })).not.toThrow();
+  const eligible = {
+    tenantStatus: 'active', subscriptionStatus: 'trialing', currentPlanCode: 'starter',
+    trialEndsAt: new Date('2026-11-01T00:00:00.000Z'),
+    currentPeriodEnd: new Date('2026-11-30T00:00:00.000Z'), now, pendingPayment: false,
+  };
+
+  it('allows current trials and paid periods for an active business', () => {
+    expect(() => assertOperatorPlanChangeEligible(eligible)).not.toThrow();
+    expect(() => assertOperatorPlanChangeEligible({ ...eligible, subscriptionStatus: 'active' })).not.toThrow();
   });
 
   it.each([
-    { tenantStatus: 'restricted', subscriptionStatus: 'trialing', trialEndsAt: new Date('2026-11-01T00:00:00.000Z'), pendingPayment: false },
-    { tenantStatus: 'active', subscriptionStatus: 'active', trialEndsAt: new Date('2026-11-01T00:00:00.000Z'), pendingPayment: false },
-    { tenantStatus: 'active', subscriptionStatus: 'trialing', trialEndsAt: new Date('2026-10-30T00:00:00.000Z'), pendingPayment: false },
-  ])('rejects an ineligible tenant or subscription state', (input) => {
-    expect(() => assertOperatorPlanChangeEligible({ ...input, now })).toThrow();
+    { tenantStatus: 'restricted' },
+    { tenantStatus: 'cancelled' },
+    { subscriptionStatus: 'restricted' },
+    { subscriptionStatus: 'cancelled' },
+    { currentPlanCode: 'free', subscriptionStatus: 'active' },
+    { trialEndsAt: new Date('2026-10-30T00:00:00.000Z') },
+    { subscriptionStatus: 'active', currentPeriodEnd: new Date('2026-10-30T00:00:00.000Z') },
+    { subscriptionStatus: 'active', currentPeriodEnd: null },
+  ])('rejects ineligible state %o', (input) => {
+    expect(() => assertOperatorPlanChangeEligible({ ...eligible, ...input })).toThrow();
   });
 
-  it('blocks plan changes while a payment is waiting for review', () => {
-    expect(() => assertOperatorPlanChangeEligible({
-      tenantStatus: 'active', subscriptionStatus: 'trialing',
-      trialEndsAt: new Date('2026-11-01T00:00:00.000Z'), now, pendingPayment: true,
-    })).toThrow('Resolve the pending subscription payment');
+  it.each(['trialing', 'active'])('blocks a pending payment for %s subscriptions', (subscriptionStatus) => {
+    expect(() => assertOperatorPlanChangeEligible({ ...eligible, subscriptionStatus, pendingPayment: true }))
+      .toThrow('Resolve the pending subscription payment');
   });
 
   it('limits the operator selector contract to the four paid catalog tiers', () => {

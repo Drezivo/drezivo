@@ -32,6 +32,7 @@ export function useRefreshVerifiedActor(): () => void {
 }
 
 const noop = () => undefined;
+const ACTOR_REFRESH_INTERVAL_MS = 30_000;
 
 export function DashboardAccessGate({ children }: { children: React.ReactNode }) {
   const { getToken, isLoaded, isSignedIn, orgId } = useAuth();
@@ -44,6 +45,11 @@ export function DashboardAccessGate({ children }: { children: React.ReactNode })
   const getTokenRef = useRef(getToken);
   const setActiveRef = useRef(setActive);
   const userRef = useRef(user);
+  const identityRef = useRef({ orgId, isSignedIn });
+  const refreshVersion = useRef(0);
+  identityRef.current = { orgId, isSignedIn };
+
+  useEffect(() => () => { refreshVersion.current += 1; }, [orgId, isSignedIn]);
 
   useEffect(() => {
     getTokenRef.current = getToken;
@@ -104,11 +110,38 @@ export function DashboardAccessGate({ children }: { children: React.ReactNode })
   }, [verifyAccess]);
 
   const refreshActor = useCallback(() => {
-    void createDrezivoApiClient(() => getTokenRef.current())
+    const identity = identityRef.current;
+    if (!identity.isSignedIn) return Promise.resolve();
+    const version = ++refreshVersion.current;
+    return createDrezivoApiClient(() => getTokenRef.current())
       .getActorContext()
-      .then((result) => setState({ kind: "ready", actor: result.data }))
+      .then((result) => {
+        if (version !== refreshVersion.current || !identityRef.current.isSignedIn || identityRef.current.orgId !== identity.orgId) return;
+        setState((current) => current.kind === "ready" && current.actor?.tenant.id === result.data.tenant.id
+          ? { kind: "ready", actor: result.data }
+          : current);
+      })
       .catch(() => undefined);
   }, []);
+
+  const ready = state.kind === "ready";
+  useEffect(() => {
+    if (!ready || !isSignedIn) return;
+    let refreshPending = false;
+    const refreshIfVisible = () => {
+      if (document.visibilityState !== "visible" || refreshPending) return;
+      refreshPending = true;
+      void refreshActor().finally(() => { refreshPending = false; });
+    };
+    const timer = window.setInterval(refreshIfVisible, ACTOR_REFRESH_INTERVAL_MS);
+    window.addEventListener("focus", refreshIfVisible);
+    document.addEventListener("visibilitychange", refreshIfVisible);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", refreshIfVisible);
+      document.removeEventListener("visibilitychange", refreshIfVisible);
+    };
+  }, [ready, isSignedIn, refreshActor]);
 
   const handleSignOut = useCallback(async () => {
     if (signOutInFlight.current) return;

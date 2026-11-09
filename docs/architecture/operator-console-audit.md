@@ -48,13 +48,15 @@ Job retries accept only terminal dead jobs. Notification retry rejects ambiguous
 and queues only a known failed delivery. State changes and audit records share the winning
 transaction. The existing durable outbox remains the only delivery path.
 
-## Narrow trial plan change
+## Narrow operator plan change
 
 The signed `POST /internal/operator/v1/tenants/:tenantId/plan` command is a separate billing
 operation, not workspace access. It is authorized with `tenant.admin.manage`, binds a short-lived
 assertion to one tenant and one idempotent request, and runs only in the Business API. It can move
-an active, unexpired trial among Starter, Standard, Growth, and Scale after pending-payment and
-capacity checks. Free upgrades and paid activation remain payment-gated. The command, subscription
+an active, unexpired trial or current paid period among Starter, Standard, Growth, and Scale after
+pending-payment and capacity checks. Paid changes apply immediately without changing the billing
+period or sending a plan-change email; the next renewal uses the selected plan's price. Free upgrades
+and paid activation remain payment-gated. The command, subscription
 event, and tenant audit event commit together; an omitted internal reason is stored as `NULL`.
 Migration 0093 relaxes the reason column; 0085 already provides the request fingerprint.
 
