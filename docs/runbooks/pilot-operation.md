@@ -23,6 +23,10 @@ service. The API starts it as a supervised child process when `EMBEDDED_WORKER=t
   through `WORKER_DATABASE_URL`.
 - If the child exits, the API restarts it with a growing delay. When the API stops, the child stops
   too.
+- The API starts the child with `WORKER_ENABLED=true`, even if its own `WORKER_ENABLED` is false.
+  Set `EMBEDDED_WORKER=false` only when another worker has been configured or the effects of stopping
+  background work are accepted. Check `embedded worker started` and `worker runner starting` in
+  service logs; check separate worker services and API replicas before attributing database traffic.
 - Render's free plan sleeps after 15 minutes without requests, and the worker sleeps with it. That
   is fine: only requests create work, and a request wakes both.
 
@@ -30,10 +34,28 @@ What each former worker job does now:
 
 | Job | During the pilot |
 | --- | --- |
-| Emails: business/owner reservation and fitting notices, staff invitations, operator billing notices | Sent by the embedded worker within about a second, with retries. Guest customers receive no verification, receipt, reservation, fitting, or lifecycle email. |
+| Emails: business/owner reservation and fitting notices, staff invitations, operator billing notices | Sent by the embedded worker with retries. An idle worker checks for work at intervals that grow up to 60 seconds by default; backlog, failures, or host sleep can add delay. Guest customers receive no verification, receipt, reservation, fitting, or lifecycle email. |
 | Releasing expired holds | Embedded worker. New bookings also release expired holds themselves, and staff cannot close a live hold (next section) |
 | Staff invitations, Clerk webhook retries, abandoned sign-up cleanup | Embedded worker |
 | Trial and subscription ending | No job needed. Access is worked out on every request from the subscription dates (next sections) |
+
+Continuous-worker defaults check expired holds every 10 seconds, Clerk reconciliation every
+60 seconds, and abandoned-organization cleanup every five minutes. See
+[environment settings](environments.md) for overrides and five-minute sweep activity logs. After
+changing settings, compare a full day's Shared Pooler egress and worker activity with the baseline.
+The free quota is not reset by reducing traffic; egress already used remains until the billing cycle
+resets. Verify hold-release latency on staging before production rollout.
+
+For the staging check, create test holds for more than one tenant, let them expire, and measure
+from each expiry time until the garment becomes available again. The target is within 30 seconds
+under normal conditions; investigate slow sweeps, skipped intervals, queue backlog, or host sleep
+before promotion. Confirm an invitation and an uploaded image are processed as well.
+
+If the new timings cause unacceptable delays, restore the earlier two-second polling behavior by
+setting `WORKER_OUTBOX_IDLE_MAX_MS`, `WORKER_HOLD_SWEEP_INTERVAL_MS`,
+`WORKER_CLERK_RECONCILE_INTERVAL_MS`, and `WORKER_ORG_CLEANUP_INTERVAL_MS` to `2000` for the
+affected worker, then restart it. `WORKER_POLL_INTERVAL_MS` must also be `2000` for that rollback.
+These settings increase database traffic; review the service's actual prior values first.
 
 ## Staff holds cannot be forgotten
 

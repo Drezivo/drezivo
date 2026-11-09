@@ -12,6 +12,22 @@ function issuePaths(env: Record<string, string | undefined>): string[] {
 }
 
 describe('worker configuration', () => {
+  it('defaults to separate sweep intervals and a bounded idle outbox delay', () => {
+    const parsed = parse({
+      WORKER_OUTBOX_IDLE_MAX_MS: undefined,
+      WORKER_HOLD_SWEEP_INTERVAL_MS: undefined,
+      WORKER_CLERK_RECONCILE_INTERVAL_MS: undefined,
+      WORKER_ORG_CLEANUP_INTERVAL_MS: undefined,
+    });
+    expect(parsed.success && [
+      parsed.data.WORKER_OUTBOX_IDLE_MAX_MS,
+      parsed.data.WORKER_HOLD_SWEEP_INTERVAL_MS,
+      parsed.data.WORKER_CLERK_RECONCILE_INTERVAL_MS,
+      parsed.data.WORKER_ORG_CLEANUP_INTERVAL_MS,
+    ]).toEqual([60_000, 10_000, 60_000, 300_000]);
+    expect(issuePaths({ WORKER_HOLD_SWEEP_INTERVAL_MS: '0' })).toContain('WORKER_HOLD_SWEEP_INTERVAL_MS');
+    expect(issuePaths({ WORKER_OUTBOX_IDLE_MAX_MS: '3600001' })).toContain('WORKER_OUTBOX_IDLE_MAX_MS');
+  });
   it('defaults to a long-running worker that drains everything within ten minutes', () => {
     const parsed = parse({ WORKER_MODE: undefined, WORKER_DRAIN_SCOPE: undefined, WORKER_DRAIN_BUDGET_MS: undefined });
     expect(parsed.success && [parsed.data.WORKER_MODE, parsed.data.WORKER_DRAIN_SCOPE, parsed.data.WORKER_DRAIN_BUDGET_MS]).toEqual([
