@@ -110,6 +110,24 @@ describe('operator plan change transaction', () => {
     },
   );
 
+  it('changes a paid plan without modifying its billing period', async () => {
+    const currentPeriodEnd = new Date('2026-11-30T00:00:00.000Z');
+    doubles.lockTenantSubscription.mockResolvedValue({ ...subscription, status: 'active', current_period_end: currentPeriodEnd });
+
+    await expect(changeTenantPlan(command('growth'))).resolves.toMatchObject({ plan_code: 'growth', changed: true });
+    expect(doubles.updateSubscriptionPlan).toHaveBeenCalledWith(doubles.client, {
+      tenantId, subscriptionId: subscription.subscription_id, planId: 'plan-growth',
+    });
+    expect(doubles.appendSubscriptionEvent).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not upgrade a Free subscription through the operator command', async () => {
+    doubles.lockTenantSubscription.mockResolvedValue({ ...subscription, status: 'active', current_period_end: new Date('2026-11-30T00:00:00.000Z') });
+    doubles.resolveTenantEntitlements.mockResolvedValue({ planId: 'plan-starter', planCode: 'free' });
+    await expect(changeTenantPlan(command('growth'))).rejects.toThrow('current paid period');
+    expect(doubles.updateSubscriptionPlan).not.toHaveBeenCalled();
+  });
+
   it('blocks a pending payment before changing the subscription', async () => {
     doubles.client.query.mockImplementation((statement: string) => {
       if (statement.includes('SELECT id, resource_id, request_fingerprint')) return { rows: [] };
