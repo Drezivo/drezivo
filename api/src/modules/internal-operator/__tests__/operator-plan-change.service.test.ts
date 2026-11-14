@@ -22,19 +22,25 @@ describe('operator plan change policy', () => {
   });
 
   it.each([
+    { subscriptionStatus: 'trialing', trialEndsAt: new Date('2026-10-30T00:00:00.000Z') },
+    { subscriptionStatus: 'active', currentPeriodEnd: new Date('2026-10-30T00:00:00.000Z') },
+    { subscriptionStatus: 'past_due' },
+    { subscriptionStatus: 'restricted' },
+  ])('allows an overdue subscription without extending its period: %o', (input) => {
+    expect(() => assertOperatorPlanChangeEligible({ ...eligible, ...input })).not.toThrow();
+  });
+
+  it.each([
     { tenantStatus: 'restricted' },
     { tenantStatus: 'cancelled' },
-    { subscriptionStatus: 'restricted' },
     { subscriptionStatus: 'cancelled' },
+    { subscriptionStatus: 'unknown' },
     { currentPlanCode: 'free', subscriptionStatus: 'active' },
-    { trialEndsAt: new Date('2026-10-30T00:00:00.000Z') },
-    { subscriptionStatus: 'active', currentPeriodEnd: new Date('2026-10-30T00:00:00.000Z') },
-    { subscriptionStatus: 'active', currentPeriodEnd: null },
   ])('rejects ineligible state %o', (input) => {
     expect(() => assertOperatorPlanChangeEligible({ ...eligible, ...input })).toThrow();
   });
 
-  it.each(['trialing', 'active'])('blocks a pending payment for %s subscriptions', (subscriptionStatus) => {
+  it.each(['trialing', 'active', 'past_due', 'restricted'])('blocks a pending payment for %s subscriptions', (subscriptionStatus) => {
     expect(() => assertOperatorPlanChangeEligible({ ...eligible, subscriptionStatus, pendingPayment: true }))
       .toThrow('Resolve the pending subscription payment');
   });

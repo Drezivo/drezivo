@@ -8,7 +8,7 @@ import {
   updateSubscriptionPlan,
 } from '../billing/billing.repository.js';
 import {
-  assertPlanCapacity,
+  assertOperatorPlanCapacity,
   resolvePlanEntitlements,
   resolveTenantEntitlements,
 } from '../entitlements/entitlements.service.js';
@@ -63,14 +63,11 @@ export function operatorPlanReplayStatus(
   return 'replay';
 }
 
-/** A plan change never grants access beyond the current trial or paid period. */
+/** Changing the plan does not grant access or change the existing billing period. */
 export function assertOperatorPlanChangeEligible(input: Eligibility): void {
-  const currentTrial = input.subscriptionStatus === 'trialing' && input.trialEndsAt !== null
-    && input.trialEndsAt.getTime() > input.now.getTime();
-  const currentPaidPeriod = input.subscriptionStatus === 'active' && input.currentPeriodEnd !== null
-    && input.currentPeriodEnd.getTime() > input.now.getTime();
-  if (input.tenantStatus !== 'active' || input.currentPlanCode === 'free' || (!currentTrial && !currentPaidPeriod)) {
-    throw new StateConflictError('A plan can only be changed for an active business during its trial or current paid period.');
+  const eligibleStatus = ['trialing', 'active', 'past_due', 'restricted'].includes(input.subscriptionStatus);
+  if (input.tenantStatus !== 'active' || input.currentPlanCode === 'free' || !eligibleStatus) {
+    throw new StateConflictError('Plan changes require an active business with a non-cancelled paid subscription.');
   }
   if (input.pendingPayment) {
     throw new PaymentAlreadyPendingError('Resolve the pending subscription payment before changing the plan.');
@@ -151,7 +148,7 @@ export async function changeTenantPlan(input: OperatorPlanChangeInput): Promise<
     const targetPlan = await resolvePlanEntitlements(client, input.planCode);
     const changed = targetPlan.planId !== current.plan_id;
     if (changed) {
-      await assertPlanCapacity(client, input.tenantId, targetPlan);
+      await assertOperatorPlanCapacity(client, input.tenantId, targetPlan);
       const updated = await updateSubscriptionPlan(client, {
         tenantId: input.tenantId,
         subscriptionId: current.subscription_id,

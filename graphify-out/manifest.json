@@ -690,9 +690,9 @@
     "semantic_hash": ""
   },
   "api/src/modules/billing/billing.repository.ts": {
-    "mtime": 1794201295.7950652,
-    "seen": 1794201426.7785678,
-    "ast_hash": "49f5e28b8948505895584737199efa25",
+    "mtime": 1794641042.1099021,
+    "seen": 1794642084.8778782,
+    "ast_hash": "bdc5daba52872cbd2027b1a5151becdd",
     "semantic_hash": ""
   },
   "api/src/modules/billing/billing.routes.ts": {
@@ -924,9 +924,9 @@
     "semantic_hash": ""
   },
   "api/src/modules/entitlements/entitlements.service.ts": {
-    "mtime": 1793457711.541708,
-    "seen": 1793459652.1348348,
-    "ast_hash": "fbb7b810f52e1306997c4e7c2192d40e",
+    "mtime": 1794641089.292356,
+    "seen": 1794642084.8943021,
+    "ast_hash": "9390bb90608cda3cd9086d209e514154",
     "semantic_hash": ""
   },
   "api/src/modules/entitlements/index.ts": {
@@ -7410,9 +7410,9 @@
     "semantic_hash": ""
   },
   "docs/architecture/operator-console-audit.md": {
-    "mtime": 1794201295.8283575,
-    "seen": 1794201426.959157,
-    "ast_hash": "2327c8dfea95c1f5f3baa2b2ecd64950",
+    "mtime": 1794641379.3145165,
+    "seen": 1794642085.122647,
+    "ast_hash": "4172a2a66b1db2e84cbea6c772f1ca51",
     "semantic_hash": ""
   },
   "docs/architecture/operator-workspace-repair.md": {
@@ -7572,9 +7572,9 @@
     "semantic_hash": ""
   },
   "docs/product/Drezivo-PRD.md": {
-    "mtime": 1794201295.8283575,
-    "seen": 1794201426.9678214,
-    "ast_hash": "24ea24a2bdea22e372af7000496e4cd4",
+    "mtime": 1794641390.4937358,
+    "seen": 1794642085.12761,
+    "ast_hash": "2b80c9f7438142c6fde70a741e33e182",
     "semantic_hash": ""
   },
   "docs/product/Notes.md": {
@@ -8766,15 +8766,15 @@
     "semantic_hash": ""
   },
   "api/src/modules/internal-operator/__tests__/operator-plan-change.persistence.test.ts": {
-    "mtime": 1794201295.8118665,
-    "seen": 1794201426.803822,
-    "ast_hash": "46b060569311d097c3b5e513640fdb20",
+    "mtime": 1794641042.1265488,
+    "seen": 1794642084.8991046,
+    "ast_hash": "34386368e4dc9de13fbfbd9efa120b69",
     "semantic_hash": ""
   },
   "api/src/modules/internal-operator/__tests__/operator-plan-change.service.test.ts": {
-    "mtime": 1794201295.8128705,
-    "seen": 1794201426.803822,
-    "ast_hash": "0e05bab25844c2410d9db95f65e09842",
+    "mtime": 1794641089.292356,
+    "seen": 1794642084.8991046,
+    "ast_hash": "b75dcd26ffbef5f3af6f1e02e3de2e8e",
     "semantic_hash": ""
   },
   "api/src/modules/internal-operator/operator-plan-assertion.ts": {
@@ -8784,9 +8784,9 @@
     "semantic_hash": ""
   },
   "api/src/modules/internal-operator/operator-plan-change.service.ts": {
-    "mtime": 1794201295.8128705,
-    "seen": 1794201426.8056397,
-    "ast_hash": "ef3047c3cf64f1b38981d99d56f06980",
+    "mtime": 1794641042.0932603,
+    "seen": 1794642084.8991046,
+    "ast_hash": "96ece3405b4529347e276e363a0a0df9",
     "semantic_hash": ""
   },
   "api/src/modules/internal-operator/operator-plan.schema.ts": {
@@ -8820,9 +8820,9 @@
     "semantic_hash": ""
   },
   "docs/decisions/0018-operator-trial-plan-change-command.md": {
-    "mtime": 1794201295.8283575,
-    "seen": 1794201426.9668233,
-    "ast_hash": "1b48fa994df9e99354f6f429d5772273",
+    "mtime": 1794641379.4245186,
+    "seen": 1794642085.12761,
+    "ast_hash": "f1835b224cd0b572d966ec1329fbdf29",
     "semantic_hash": ""
   },
   "api/scripts/migrate-platform-payment-qrs.ts": {
@@ -8904,9 +8904,9 @@
     "semantic_hash": ""
   },
   "api/tests/integration/operator-paid-plan.test.ts": {
-    "mtime": 1794201295.8238845,
-    "seen": 1794201426.8396604,
-    "ast_hash": "8c558e130279395bef202dcfc0c44c27",
+    "mtime": 1794641909.0336833,
+    "seen": 1794642084.9590938,
+    "ast_hash": "2b40a429d8b9e0415b3f757787e49660",
     "semantic_hash": ""
   },
   "api/src/worker/__tests__/sweep-scheduler.test.ts": {
@@ -8919,6 +8919,12 @@
     "mtime": 1794198760.1760855,
     "seen": 1794201426.8295622,
     "ast_hash": "8625de398352d778f80617f37e8add28",
+    "semantic_hash": ""
+  },
+  "api/src/modules/entitlements/__tests__/operator-plan-capacity.test.ts": {
+    "mtime": 1794641909.0336833,
+    "seen": 1794642084.8943021,
+    "ast_hash": "3959facd880af9cbcde1b3b2eb4cfaea",
     "semantic_hash": ""
   }
 }
