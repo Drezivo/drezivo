@@ -30,7 +30,7 @@ publicMediaEdgeRouter.get(
         throw new NotFoundError('This store image is not available.');
       }
       res.setHeader('Cache-Tag', `tenant-${media.tenantId},media-${media.fileId}`);
-      streamFileResponse(req, res, next, media, 'public, max-age=0, s-maxage=45');
+      streamFileResponse(req, res, next, media, 'private, no-store');
     } catch (error) {
       next(error);
     }

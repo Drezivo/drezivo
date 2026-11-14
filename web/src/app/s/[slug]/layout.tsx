@@ -17,6 +17,9 @@ import { buildStorefrontMetadata } from '@/lib/seo';
 
 const MOTION_BOOT = "if(!matchMedia('(prefers-reduced-motion: reduce)').matches)document.documentElement.classList.add('sf-motion')";
 
+// Storefront pages must recheck publication and product visibility on every request.
+export const dynamic = 'force-dynamic';
+
 interface Props {
   children: React.ReactNode;
   params: Promise<{ slug: string }>;

@@ -1,3 +1,5 @@
+import { handlePublicContent } from './public-cache.mjs';
+
 const UUID = /^[0-9a-f-]{36}$/i;
 const SLUG = /^[a-z0-9-]{1,80}$/;
 const WIDTHS = new Set(['320', '960', '1600']);
@@ -72,6 +74,7 @@ async function fallbackToApi(network, apiOrigin, slug, fileId, width, request, c
   try {
     const response = await network(directApiRequest(apiOrigin, slug, fileId, width, request));
     const headers = new Headers(response.headers);
+    headers.set('Cache-Control', 'private, no-store');
     headers.set('X-Media-Cache', cacheStatus);
     return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
   } catch {
@@ -80,6 +83,8 @@ async function fallbackToApi(network, apiOrigin, slug, fileId, width, request, c
 }
 
 export async function handleMedia(request, env, ctx, dependencies = {}) {
+  const content = await handlePublicContent(request, env, ctx, dependencies);
+  if (content) return content;
   const url = new URL(request.url);
   const match = PUBLIC_PATH.exec(url.pathname);
   if (!match) return (dependencies.fetch ?? fetch)(request);
@@ -98,13 +103,6 @@ export async function handleMedia(request, env, ctx, dependencies = {}) {
   const network = dependencies.fetch ?? fetch;
   const cache = dependencies.cache ?? caches.default;
   const cacheKey = cacheKeyFor(apiOrigin, slug, fileId, width);
-  try {
-    const hit = await cache.match(cacheKey);
-    if (hit) return browserResponse(hit, 'HIT');
-  } catch {
-    // A cache outage should still allow the API/R2 origin read.
-  }
-
   const grantUrl = new URL(`/internal/media/v1/public/stores/${slug}/files/${fileId}/grant`, apiOrigin);
   grantUrl.searchParams.set('w', width);
   let grantResponse;
@@ -134,6 +132,15 @@ export async function handleMedia(request, env, ctx, dependencies = {}) {
   }
   const grant = publicGrant(grantPayload);
   if (!grant) return fallbackToApi(network, apiOrigin, slug, fileId, width, request);
+
+  // A cached object is usable only after the API confirms current public visibility.
+  try {
+    const hit = await cache.match(cacheKey);
+    if (hit && hit.headers.get('content-type') === grant.content_type &&
+      hit.headers.get('content-length') === String(grant.byte_size)) return browserResponse(hit, 'HIT');
+  } catch {
+    // A cache outage should still allow the authorized R2 origin read.
+  }
 
   let object;
   try {
@@ -170,7 +177,7 @@ export async function handleMedia(request, env, ctx, dependencies = {}) {
 function browserResponse(source, cacheStatus) {
   const headers = new Headers(source.headers);
   headers.delete('Cache-Tag');
-  headers.set('Cache-Control', 'public, max-age=0, must-revalidate');
+  headers.set('Cache-Control', 'private, no-store');
   headers.set('X-Media-Cache', cacheStatus);
   return new Response(source.body, { status: source.status, statusText: source.statusText, headers });
 }

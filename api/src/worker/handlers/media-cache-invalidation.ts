@@ -35,6 +35,7 @@ export const handleMediaCacheInvalidation: EventHandler = async (event) => {
   } catch {
     throw new Error('Cloudflare media cache purge request failed.');
   }
+  if (response.status === 429) throw new Error('Cloudflare cache purge is rate limited.');
   const parsed = purgeResponse.safeParse(await response.json().catch(() => null));
   if (!response.ok || !parsed.success || !parsed.data.success) {
     throw new Error('Cloudflare rejected the media cache purge request.');

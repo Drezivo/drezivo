@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { CatalogueVariant, ItemDetail, PublicStorefront } from '@drezivo/contracts';
 
-import { createReservation } from '@/lib/storefront-api';
+import { createReservation, getGuestQuote, StorefrontApiError } from '@/lib/storefront-api';
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }) }));
 vi.mock('next/link', () => ({
@@ -21,7 +21,10 @@ vi.mock('next/link', () => ({
 }));
 vi.mock('@/lib/storefront-api', () => ({
   createReservation: vi.fn(),
-  StorefrontApiError: class StorefrontApiError extends Error {},
+  getGuestQuote: vi.fn(),
+  StorefrontApiError: class StorefrontApiError extends Error {
+    constructor(message: string, readonly status: number, readonly code: string) { super(message); }
+  },
 }));
 vi.mock('@/components/store/motion/scroll', () => ({ lockPageScroll: () => () => undefined }));
 vi.mock('@/components/store/booking/payment-step', () => ({ PaymentStep: () => null }));
@@ -85,6 +88,8 @@ describe('reservation details validation', () => {
   beforeEach(() => {
     vi.mocked(createReservation).mockReset();
     vi.mocked(createReservation).mockResolvedValue({ reservation: {} as never } as never);
+    vi.mocked(getGuestQuote).mockReset();
+    vi.mocked(getGuestQuote).mockResolvedValue({ rental_total_minor: '60000', security_required_minor: '50000', delivery_total_minor: '0', due_now_minor: '110000', currency: 'PHP' });
   });
 
   it('shows an invalid email beside the field, focuses it into view, and clears it when corrected', async () => {
@@ -173,6 +178,7 @@ describe('reservation details validation', () => {
 
     expect(await screen.findByText(/Nov 11, 2026 · 11:30 AM/)).not.toBeNull();
     expect(screen.getByText(/Nov 12, 2026 · 11:30 AM/)).not.toBeNull();
+    expect(await screen.findByText('₱1,100')).not.toBeNull();
     fireEvent.click(screen.getByRole('checkbox'));
     fireEvent.click(screen.getByRole('button', { name: 'Hold my size and pay' }));
 
@@ -233,7 +239,7 @@ describe('reservation details validation', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Review request' }));
 
     expect(await screen.findByText('Arranged separately with the shop')).not.toBeNull();
-    expect(screen.getByText('₱1,100')).not.toBeNull();
+    expect(await screen.findByText('₱1,100')).not.toBeNull();
     expect(screen.queryByText('₱1,250')).toBeNull();
     fireEvent.click(screen.getByRole('checkbox'));
     fireEvent.click(screen.getByRole('button', { name: 'Hold my size and pay' }));
@@ -245,5 +251,29 @@ describe('reservation details validation', () => {
       },
       fulfillment_method: 'delivery',
     });
+  });
+
+  it('requires confirmation again after a price conflict and preserves the dates', async () => {
+    vi.mocked(createReservation).mockRejectedValueOnce(new StorefrontApiError('Price changed.', 409, 'PRICE_CHANGE_NOT_ACCEPTED'));
+    vi.mocked(getGuestQuote).mockResolvedValueOnce({ rental_total_minor: '60000', security_required_minor: '50000', delivery_total_minor: '0', due_now_minor: '110000', currency: 'PHP' })
+      .mockResolvedValueOnce({ rental_total_minor: '70000', security_required_minor: '50000', delivery_total_minor: '0', due_now_minor: '120000', currency: 'PHP' });
+    openDetails();
+    fireEvent.change(screen.getByLabelText('Email address'), { target: { value: 'qa@example.com' } });
+    fireEvent.change(screen.getByLabelText('Full name'), { target: { value: 'QA Customer' } });
+    fireEvent.change(screen.getByLabelText('Address'), { target: { value: '12 Test Street' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Review request' }));
+    await screen.findByText('₱1,100');
+    fireEvent.click(screen.getByRole('checkbox'));
+    fireEvent.click(screen.getByRole('button', { name: 'Hold my size and pay' }));
+    await screen.findByText('Price changed.');
+    await screen.findByText('₱1,200');
+    expect((screen.getByRole('checkbox') as HTMLInputElement).checked).toBe(false);
+    expect(screen.getAllByText(/Nov 11, 2026/).length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole('checkbox'));
+    fireEvent.click(screen.getByRole('button', { name: 'Hold my size and pay' }));
+    await waitFor(() => expect(createReservation).toHaveBeenCalledTimes(2));
+    const calls = vi.mocked(createReservation).mock.calls;
+    expect(calls[0]?.[2]).not.toBe(calls[1]?.[2]);
+    expect(calls[1]?.[1].expected_quote?.due_now_minor).toBe('120000');
   });
 });
