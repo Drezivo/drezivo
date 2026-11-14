@@ -161,7 +161,7 @@ export async function updateSubscriptionPlan(
   const result = await client.query(
     `UPDATE subscription
         SET plan_id = $3
-      WHERE tenant_id = $1 AND id = $2 AND status IN ('trialing', 'active')`,
+      WHERE tenant_id = $1 AND id = $2 AND status IN ('trialing', 'active', 'past_due', 'restricted')`,
     [input.tenantId, input.subscriptionId, input.planId],
   );
   return result.rowCount === 1;

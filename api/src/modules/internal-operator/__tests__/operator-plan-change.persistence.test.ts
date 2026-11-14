@@ -14,7 +14,7 @@ const doubles = vi.hoisted(() => ({
   readSubscriptionProjection: vi.fn(),
   updateSubscriptionPlan: vi.fn(),
   appendSubscriptionEvent: vi.fn(),
-  assertPlanCapacity: vi.fn(),
+  assertOperatorPlanCapacity: vi.fn(),
   resolvePlanEntitlements: vi.fn(),
   resolveTenantEntitlements: vi.fn(),
 }));
@@ -43,7 +43,7 @@ vi.mock('../../billing/billing.repository.js', () => ({
   updateSubscriptionPlan: doubles.updateSubscriptionPlan,
 }));
 vi.mock('../../entitlements/entitlements.service.js', () => ({
-  assertPlanCapacity: doubles.assertPlanCapacity,
+  assertOperatorPlanCapacity: doubles.assertOperatorPlanCapacity,
   resolvePlanEntitlements: doubles.resolvePlanEntitlements,
   resolveTenantEntitlements: doubles.resolveTenantEntitlements,
 }));
@@ -81,7 +81,7 @@ describe('operator plan change transaction', () => {
     doubles.readSubscriptionProjection.mockResolvedValue({ id: subscription.subscription_id, plan_code: 'scale', status: 'trialing', trial_ends_at: subscription.trial_ends_at, grace_ends_at: null });
     doubles.updateSubscriptionPlan.mockResolvedValue(true);
     doubles.appendSubscriptionEvent.mockResolvedValue(undefined);
-    doubles.assertPlanCapacity.mockResolvedValue(undefined);
+    doubles.assertOperatorPlanCapacity.mockResolvedValue(undefined);
     doubles.resolveTenantEntitlements.mockResolvedValue({ planId: 'plan-starter', planCode: 'starter' });
     doubles.resolvePlanEntitlements.mockImplementation((_client: unknown, planCode: string) => ({ planId: `plan-${planCode}`, planCode }));
     doubles.client.query.mockImplementation((statement: string) => {
@@ -102,7 +102,7 @@ describe('operator plan change transaction', () => {
 
       expect(result).toMatchObject({ tenant_id: tenantId, plan_code: planCode, replayed: false });
       expect(doubles.resolvePlanEntitlements).toHaveBeenCalledWith(doubles.client, planCode);
-      expect(doubles.assertPlanCapacity).toHaveBeenCalledTimes(planCode === 'starter' ? 0 : 1);
+      expect(doubles.assertOperatorPlanCapacity).toHaveBeenCalledTimes(planCode === 'starter' ? 0 : 1);
       expect(doubles.updateSubscriptionPlan).toHaveBeenCalledTimes(planCode === 'starter' ? 0 : 1);
       expect(commandInsert?.[1]).toContain(null);
       expect(auditInsert?.[0]).toContain("'operator', $2");
@@ -124,7 +124,7 @@ describe('operator plan change transaction', () => {
   it('does not upgrade a Free subscription through the operator command', async () => {
     doubles.lockTenantSubscription.mockResolvedValue({ ...subscription, status: 'active', current_period_end: new Date('2026-11-30T00:00:00.000Z') });
     doubles.resolveTenantEntitlements.mockResolvedValue({ planId: 'plan-starter', planCode: 'free' });
-    await expect(changeTenantPlan(command('growth'))).rejects.toThrow('current paid period');
+    await expect(changeTenantPlan(command('growth'))).rejects.toThrow('non-cancelled paid subscription');
     expect(doubles.updateSubscriptionPlan).not.toHaveBeenCalled();
   });
 
@@ -142,7 +142,7 @@ describe('operator plan change transaction', () => {
   });
 
   it('does not write a plan when capacity does not fit the selected tier', async () => {
-    doubles.assertPlanCapacity.mockRejectedValue(new CapacityConflictError('The workspace plan limit would be exceeded.'));
+    doubles.assertOperatorPlanCapacity.mockRejectedValue(new CapacityConflictError('The workspace plan limit would be exceeded.'));
 
     await expect(changeTenantPlan(command('scale'))).rejects.toBeInstanceOf(CapacityConflictError);
     expect(doubles.updateSubscriptionPlan).not.toHaveBeenCalled();
@@ -161,7 +161,7 @@ describe('operator plan change transaction', () => {
 
     await expect(changeTenantPlan(input)).resolves.toMatchObject({ plan_code: 'scale', changed: false, replayed: true });
     expect(doubles.updateSubscriptionPlan).not.toHaveBeenCalled();
-    expect(doubles.assertPlanCapacity).not.toHaveBeenCalled();
+    expect(doubles.assertOperatorPlanCapacity).not.toHaveBeenCalled();
     expect(doubles.client.query).not.toHaveBeenCalledWith(expect.stringContaining('INSERT INTO audit_event'), expect.anything());
   });
 
