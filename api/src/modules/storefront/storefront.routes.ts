@@ -32,10 +32,10 @@ const publicReadLimit = rateLimit({ windowMs: 60_000, max: 240, keyOf: (req) => 
  * Express 5 recomputes `req.query` on each access, so handlers re-parse it with the same contract
  * `validate()` already enforced; the parse is cheap and yields typed values with defaults.
  *
- * Catalogue data and referenced public media are cached briefly by browsers and longer by the CDN.
+ * Public responses must reach the live publication and visibility checks on each request.
  */
-const CATALOGUE_CACHE = 'public, max-age=60, s-maxage=300, stale-while-revalidate=600';
-const LIVE_CACHE = 'public, max-age=15, s-maxage=30';
+const CATALOGUE_CACHE = 'private, no-store';
+const LIVE_CACHE = 'private, no-store';
 const PREVIEW_HEADER = 'X-Storefront-Preview';
 
 /**

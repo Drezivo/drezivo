@@ -3,12 +3,14 @@ import { z } from 'zod';
 
 import {
   guestFittingRequest,
+  guestQuoteRequest,
   guestReceiptSubmitRequest,
   guestReceiptUploadRequest,
   fileObjectId,
   guestReservationRequest,
   reservationId,
   type GuestFittingRequest,
+  type GuestQuoteRequest,
   type GuestReceiptSubmitRequest,
   type GuestReceiptUploadRequest,
   type GuestReservationRequest,
@@ -71,6 +73,14 @@ function sendCommand<T>(run: (req: Request) => Promise<CommandResult<T>>): Reque
     res.status(result.status).json(result.body);
   };
 }
+
+guestBookingRouter.post(
+  '/public/stores/:slug/quote',
+  noStore,
+  perIp('guest-quote', 60, 1),
+  validate({ params: slugParams, body: guestQuoteRequest }),
+  send((req) => booking.quoteReservation(slugOf(req), req.body as GuestQuoteRequest)),
+);
 
 guestBookingRouter.post(
   '/public/stores/:slug/holds',

@@ -44,7 +44,7 @@ test('a public cache miss gets a server-side R2 grant and the next request is a 
   const first = await handleMedia(new Request(publicUrl()), env, f.ctx, { cache: f.cache, fetch: f.fetch });
   assert.equal(first.status, 200);
   assert.equal(first.headers.get('X-Media-Cache'), 'MISS');
-  assert.equal(first.headers.get('Cache-Control'), 'public, max-age=0, must-revalidate');
+  assert.equal(first.headers.get('Cache-Control'), 'private, no-store');
   assert.equal(first.headers.get('Cache-Tag'), null);
   assert.equal(await first.text(), 'image');
   await Promise.all(f.tasks);
@@ -57,7 +57,25 @@ test('a public cache miss gets a server-side R2 grant and the next request is a 
   assert.equal(second.status, 200);
   assert.equal(second.headers.get('X-Media-Cache'), 'HIT');
   assert.equal(await second.text(), 'image');
-  assert.equal(f.calls.length, 2);
+  assert.equal(f.calls.length, 3);
+  assert.match(f.calls[2][0], /\/internal\/media\/v1\/public\/stores\/shop\/files\//);
+});
+
+test('withdrawal or unavailable visibility denies a previously cached image', async () => {
+  for (const status of [404, 503]) {
+    let visible = true;
+    const f = fixture(async (input) => {
+      if (String(input).includes('/internal/media/')) return visible ? grant() : new Response(null, { status });
+      if (String(input).includes('cloudflarestorage.com')) return new Response('image', { headers: { 'Content-Type': 'image/webp', 'Content-Length': '5' } });
+      return new Response(null, { status: 503 });
+    });
+    assert.equal((await handleMedia(new Request(publicUrl()), env, f.ctx, { cache: f.cache, fetch: f.fetch })).status, 200);
+    await Promise.all(f.tasks);
+    visible = false;
+    const response = await handleMedia(new Request(publicUrl()), env, f.ctx, { cache: f.cache, fetch: f.fetch });
+    assert.equal(response.status, status);
+    assert.equal(response.headers.get('Cache-Control'), 'private, no-store');
+  }
 });
 
 test('a transient Worker grant failure falls back to the direct API stream', async () => {
@@ -70,7 +88,7 @@ test('a transient Worker grant failure falls back to the direct API stream', asy
   const response = await handleMedia(new Request(publicUrl(320)), env, f.ctx, { cache: f.cache, fetch: f.fetch });
   assert.equal(response.status, 200);
   assert.equal(response.headers.get('X-Media-Cache'), 'API-FALLBACK');
-  assert.equal(response.headers.get('Cache-Control'), 'public, max-age=0, s-maxage=45');
+  assert.equal(response.headers.get('Cache-Control'), 'private, no-store');
   assert.equal(await response.text(), 'api image');
   assert.match(f.calls[1][0], /\/api\/media\/public\/stores\/shop\/files\/.*w=320/);
   assert.equal(f.calls[1][1], undefined);

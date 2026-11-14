@@ -3,6 +3,7 @@ import {
   catalogueResponse,
   fittingSlotsResponse,
   guestFittingCreated,
+  guestQuote,
   guestReceiptUploadResponse,
   guestReservationCreated,
   guestReservationView,
@@ -13,6 +14,8 @@ import {
   type FittingSlotsResponse,
   type GuestFittingCreated,
   type GuestFittingRequest,
+  type GuestQuote,
+  type GuestQuoteRequest,
   type GuestReceiptUploadRequest,
   type GuestReceiptUploadResponse,
   type GuestReservationCreated,
@@ -54,8 +57,6 @@ interface CallOptions {
   body?: unknown;
   idempotencyKey?: string;
   credentials?: RequestCredentials;
-  /** Server reads may be cached briefly; guest and write calls never are. */
-  revalidate?: number;
   /** Owner preview token (server reads only). A preview read is never cached. */
   preview?: string | undefined;
 }
@@ -69,7 +70,6 @@ async function call<S extends z.ZodTypeAny>(
   if (options.body !== undefined) headers['Content-Type'] = 'application/json';
   if (options.idempotencyKey) headers['Idempotency-Key'] = options.idempotencyKey;
   if (options.preview) headers['X-Storefront-Preview'] = options.preview;
-  const cacheable = options.revalidate !== undefined && !options.preview;
 
   let response: Response;
   try {
@@ -78,9 +78,7 @@ async function call<S extends z.ZodTypeAny>(
       headers,
       ...(options.credentials ? { credentials: options.credentials } : {}),
       ...(options.body !== undefined ? { body: JSON.stringify(options.body) } : {}),
-      ...(cacheable
-        ? { next: { revalidate: options.revalidate } }
-        : { cache: 'no-store' as const }),
+      cache: 'no-store',
     });
   } catch {
     throw new StorefrontApiError(
@@ -110,7 +108,7 @@ const store = (slug: string) => `/public/stores/${encodeURIComponent(slug)}`;
  * Server-side read for pages. A missing, draft, or suspended store is `null` (the page 404s).
  * Never cached: when a refresh got a 404, Next kept serving the cached published copy, so an
  * unpublished or lapsed store stayed online. The store layout calls this for every page, so it
- * gates the cached catalogue and item reads too. It is one indexed row on the API.
+ * gates the catalogue and item reads too.
  */
 export async function getStore(slug: string, preview?: string): Promise<PublicStorefront | null> {
   try {
@@ -129,7 +127,7 @@ export function getCatalogue(
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(query)) if (value) params.set(key, value);
   const suffix = params.toString() ? `?${params.toString()}` : '';
-  return call(`${store(slug)}/catalogue${suffix}`, catalogueResponse, { revalidate: 60, preview });
+  return call(`${store(slug)}/catalogue${suffix}`, catalogueResponse, { preview });
 }
 
 export async function getItem(
@@ -139,7 +137,6 @@ export async function getItem(
 ): Promise<ItemDetail | null> {
   try {
     return await call(`${store(slug)}/products/${encodeURIComponent(productId)}`, itemDetail, {
-      revalidate: 60,
       preview,
     });
   } catch (error) {
@@ -177,6 +174,11 @@ export function createReservation(
     idempotencyKey,
     credentials: 'include',
   });
+}
+
+/** Fetch current customer-facing amounts without placing a hold. */
+export function getGuestQuote(slug: string, body: GuestQuoteRequest): Promise<GuestQuote> {
+  return call(`${store(slug)}/quote`, guestQuote, { method: 'POST', body });
 }
 
 export function requestFitting(

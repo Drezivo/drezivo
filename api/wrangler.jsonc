@@ -3,11 +3,16 @@
   "main": "edge/media-worker/worker.mjs",
   "compatibility_date": "2026-10-28",
   "vars": {
-    "API_ORIGIN": "https://api-preview.drezivo.shop"
+    "API_ORIGIN": "https://api-preview.drezivo.shop",
+    "PUBLIC_STOREFRONT_CACHE_ENABLED": "false"
   },
   "routes": [
     {
       "pattern": "api-preview.drezivo.shop/api/media/public/*",
+      "zone_name": "drezivo.shop"
+    },
+    {
+      "pattern": "api-preview.drezivo.shop/api/v1/public/stores/*",
       "zone_name": "drezivo.shop"
     }
   ],
