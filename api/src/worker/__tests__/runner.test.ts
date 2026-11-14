@@ -1,5 +1,5 @@
 import type { Pool } from 'pg';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { DeferredOutboxError, WorkerRunner, type OutboxRow } from '../runner.js';
 
@@ -12,6 +12,70 @@ const deferredRow: OutboxRow = {
   attempts: 3,
   max_attempts: 8,
 };
+
+afterEach(() => vi.useRealTimers());
+
+describe('continuous outbox polling', () => {
+  it('limits the default idle wait to 60 seconds and stops without waiting for the timer', async () => {
+    vi.useFakeTimers();
+    let claims = 0;
+    const clientQuery = vi.fn((sql: string) => {
+      if (sql.includes('WITH due AS')) claims += 1;
+      return { rows: [] };
+    });
+    const db = {
+      connect: vi.fn().mockResolvedValue({ query: clientQuery, release: vi.fn() }),
+    } as unknown as Pool;
+    const runner = new WorkerRunner({}, 2000, 60, db, 60_000);
+    const running = runner.start();
+    await vi.advanceTimersByTimeAsync(62_000);
+    expect(claims).toBe(6);
+    await vi.advanceTimersByTimeAsync(59_999);
+    expect(claims).toBe(6);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(claims).toBe(7);
+    runner.stop();
+    await running;
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('backs off while idle, caps the delay, and resets after finding work', async () => {
+    vi.useFakeTimers();
+    let claims = 0;
+    const clientQuery = vi.fn((sql: string) => {
+      if (sql.includes('WITH due AS')) {
+        claims += 1;
+        return { rows: claims === 5 ? [deferredRow] : [] };
+      }
+      return { rows: [] };
+    });
+    const db = {
+      connect: vi.fn().mockResolvedValue({ query: clientQuery, release: vi.fn() }),
+      query: vi.fn().mockResolvedValue({ rows: [], rowCount: 1 }),
+    } as unknown as Pool;
+    const handler = vi.fn().mockResolvedValue(undefined);
+    const runner = new WorkerRunner({ [deferredRow.event_type]: handler }, 2000, 60, db, 8000);
+    const running = runner.start();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(claims).toBe(1);
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(claims).toBe(2);
+    await vi.advanceTimersByTimeAsync(4000);
+    expect(claims).toBe(3);
+    await vi.advanceTimersByTimeAsync(8000);
+    expect(claims).toBe(4);
+    await vi.advanceTimersByTimeAsync(8000);
+    expect(handler).toHaveBeenCalledTimes(1);
+    expect(claims).toBe(6);
+    await vi.advanceTimersByTimeAsync(1999);
+    expect(claims).toBe(6);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(claims).toBe(7);
+    runner.stop();
+    await running;
+    expect(vi.getTimerCount()).toBe(0);
+  });
+});
 
 describe('worker runner deferred events', () => {
   it('releases a deferred event to pending without consuming a failure attempt', async () => {

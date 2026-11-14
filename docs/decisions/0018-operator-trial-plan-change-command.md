@@ -4,6 +4,10 @@
 **Date:** 31 October 2026
 **Owners:** Product and API owners
 
+## Amendment: 9 November 2026
+
+An authorized operator may also change an active business with a current paid period among the four paid plans. The selected plan and its entitlements take effect immediately. The existing paid period is unchanged and the next renewal uses the new catalog price; no additional charge or plan-change email is created. Pending payments and target-plan capacity still block the change. An active tenant with a non-Free subscription may also change plans after expiry, without altering its status, access, or billing dates; recording payment remains separate. Operator capacity checks count active garments and active Front Desk members, excluding owners, inactive members, and pending invitations. Invitations remain pending and their normal reservation and acceptance checks remain in force. Free upgrades remain in the owner payment workflow; manually restricted and cancelled tenants remain ineligible. An open business dashboard refreshes its actor context every 30 seconds while visible and when its tab regains focus; backend entitlements change immediately.
+
 ## Context
 
 The operator console needs a way to correct a business's selected paid tier during an active

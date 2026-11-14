@@ -48,7 +48,7 @@ describe('embedded worker supervisor', () => {
     handle = startEmbeddedWorker({
       entry: script,
       workerDatabaseUrl: WORKER_URL,
-      baseEnv: { ...process.env, DATABASE_URL: 'postgres://drezivo_app:x@127.0.0.1/drezivo', WORKER_DATABASE_URL: WORKER_URL, EMBEDDED_WORKER: 'true' },
+      baseEnv: { ...process.env, DATABASE_URL: 'postgres://drezivo_app:x@127.0.0.1/drezivo', WORKER_DATABASE_URL: WORKER_URL, EMBEDDED_WORKER: 'true', WORKER_ENABLED: 'false' },
     });
     await waitFor(() => existsSync(out) && readFileSync(out, 'utf8').length > 0);
     expect(JSON.parse(readFileSync(out, 'utf8'))).toEqual({

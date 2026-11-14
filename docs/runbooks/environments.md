@@ -97,6 +97,23 @@ naming convention) once TRD §12's "remaining selection" of hosting plans/region
 - `WORKER_ENABLED`: `true` or `false` (the default is `false`). Only these two words are accepted;
   any other value stops startup. `OBJECT_STORAGE_FORCE_PATH_STYLE` and
   `OBJECT_STORAGE_UPLOADS_ENABLED` follow the same strict boolean rule.
+- `EMBEDDED_WORKER`: when `true`, the API starts a child worker using `WORKER_DATABASE_URL` and
+  explicitly sets that child's `WORKER_ENABLED=true` and `WORKER_MODE=continuous`. The API's own
+  `WORKER_ENABLED=false` does not disable that child. Check API logs for `embedded worker started`
+  and `worker runner starting`; check separate worker services and API replicas too. Never print
+  database connection strings when identifying which environment a process uses.
+- `WORKER_POLL_INTERVAL_MS`: initial outbox idle delay, default `2000` ms.
+- `WORKER_OUTBOX_IDLE_MAX_MS`: maximum adaptive idle delay, default `60000` ms. An empty outbox
+  doubles the delay up to this maximum; finding work resets it. If the initial interval exceeds
+  the configured maximum, the initial interval is also the effective maximum. During an outage,
+  backlog, or an asleep host, jobs can take longer than the idle delay.
+- `WORKER_HOLD_SWEEP_INTERVAL_MS`: expired-hold sweep interval, default `10000` ms.
+- `WORKER_CLERK_RECONCILE_INTERVAL_MS`: Clerk webhook reconciliation interval, default `60000` ms.
+- `WORKER_ORG_CLEANUP_INTERVAL_MS`: abandoned-organization cleanup interval, default `300000` ms.
+  These four new intervals accept integers from 250 to 3600000 ms. They apply to continuous mode;
+  drain mode still runs its selected sweeps once. A sweep skips an interval while its previous run
+  is active. Worker logs summarize runs, failures, skipped intervals, and duration every five minutes.
+  Adjust hold timing only after verifying the expired-hold release target and queue backlog.
 - `WORKER_MODE`: `continuous` (the default) or `drain`.
   - `continuous` is a long-lived process.
   - `drain` runs once and exits, for a scheduled job. See `docs/runbooks/worker-cloud-run.md`.

@@ -3,6 +3,7 @@ import type { PoolClient } from 'pg';
 
 import { CapacityConflictError, StateConflictError, ValidationError } from '../../shared/errors.js';
 import {
+  countActiveFrontdeskMemberships,
   countActivePhysicalAssets,
   countReservedFrontdeskSeats,
   lockTenantForQuota,
@@ -151,6 +152,34 @@ export async function assertPlanCapacity(
       0,
       target.frontdeskSeatsMax,
     ),
+  };
+}
+
+/**
+ * Operator plan changes count active staff only. Pending invitations keep their existing
+ * reservation semantics when invitations are created or accepted.
+ * The plan command already holds the tenant row lock used by quota writes.
+ */
+export async function assertOperatorPlanCapacity(
+  client: PoolClient,
+  tenantId: string,
+  target: TenantEntitlementSnapshot,
+): Promise<PlanCapacityCheckResult> {
+  const currentAssets = await countActivePhysicalAssets(client, tenantId);
+  const currentFrontdesk = await countActiveFrontdeskMemberships(client, tenantId);
+  const exceeded: string[] = [];
+  if (currentAssets > target.physicalAssetsMax) {
+    exceeded.push(`active garments: ${currentAssets} used, ${target.physicalAssetsMax} allowed`);
+  }
+  if (currentFrontdesk > target.frontdeskSeatsMax) {
+    exceeded.push(`active Front Desk staff: ${currentFrontdesk} used, ${target.frontdeskSeatsMax} allowed`);
+  }
+  if (exceeded.length > 0) {
+    throw new CapacityConflictError(`The selected plan cannot be applied: ${exceeded.join('; ')}.`);
+  }
+  return {
+    physicalAssets: ensureCapacity('physical_assets', currentAssets, 0, target.physicalAssetsMax),
+    frontdeskSeats: ensureCapacity('frontdesk_seats', currentFrontdesk, 0, target.frontdeskSeatsMax),
   };
 }
 

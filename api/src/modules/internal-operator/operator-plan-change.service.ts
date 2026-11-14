@@ -8,7 +8,7 @@ import {
   updateSubscriptionPlan,
 } from '../billing/billing.repository.js';
 import {
-  assertPlanCapacity,
+  assertOperatorPlanCapacity,
   resolvePlanEntitlements,
   resolveTenantEntitlements,
 } from '../entitlements/entitlements.service.js';
@@ -42,6 +42,8 @@ type Eligibility = {
   tenantStatus: string;
   subscriptionStatus: string;
   trialEndsAt: Date | null;
+  currentPeriodEnd: Date | null;
+  currentPlanCode: string;
   now: Date;
   pendingPayment: boolean;
 };
@@ -61,15 +63,11 @@ export function operatorPlanReplayStatus(
   return 'replay';
 }
 
-/** Apply the same fail-closed trial policy for every operator plan command. */
+/** Changing the plan does not grant access or change the existing billing period. */
 export function assertOperatorPlanChangeEligible(input: Eligibility): void {
-  if (
-    input.tenantStatus !== 'active' ||
-    input.subscriptionStatus !== 'trialing' ||
-    !input.trialEndsAt ||
-    input.trialEndsAt.getTime() <= input.now.getTime()
-  ) {
-    throw new StateConflictError('A plan can only be changed for an active business during its trial.');
+  const eligibleStatus = ['trialing', 'active', 'past_due', 'restricted'].includes(input.subscriptionStatus);
+  if (input.tenantStatus !== 'active' || input.currentPlanCode === 'free' || !eligibleStatus) {
+    throw new StateConflictError('Plan changes require an active business with a non-cancelled paid subscription.');
   }
   if (input.pendingPayment) {
     throw new PaymentAlreadyPendingError('Resolve the pending subscription payment before changing the plan.');
@@ -134,22 +132,23 @@ export async function changeTenantPlan(input: OperatorPlanChangeInput): Promise<
     const pendingRows = pendingPayment.rows;
     const databaseNow = clockRows[0]?.now;
     if (!databaseNow) throw new DependencyUnavailableError('The subscription clock is unavailable.');
-    assertOperatorPlanChangeEligible({
-      tenantStatus: current.tenant_status,
-      subscriptionStatus: current.status,
-      trialEndsAt: current.trial_ends_at,
-      now: databaseNow,
-      pendingPayment: pendingRows[0]?.pending ?? false,
-    });
-
     const currentPlan = await resolveTenantEntitlements(client, input.tenantId);
     if (currentPlan.planId !== current.plan_id) {
       throw new StateConflictError('Workspace entitlement state is inconsistent.');
     }
+    assertOperatorPlanChangeEligible({
+      tenantStatus: current.tenant_status,
+      subscriptionStatus: current.status,
+      trialEndsAt: current.trial_ends_at,
+      currentPeriodEnd: current.current_period_end,
+      currentPlanCode: currentPlan.planCode,
+      now: databaseNow,
+      pendingPayment: pendingRows[0]?.pending ?? false,
+    });
     const targetPlan = await resolvePlanEntitlements(client, input.planCode);
     const changed = targetPlan.planId !== current.plan_id;
     if (changed) {
-      await assertPlanCapacity(client, input.tenantId, targetPlan);
+      await assertOperatorPlanCapacity(client, input.tenantId, targetPlan);
       const updated = await updateSubscriptionPlan(client, {
         tenantId: input.tenantId,
         subscriptionId: current.subscription_id,

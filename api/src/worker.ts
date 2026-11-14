@@ -10,6 +10,7 @@ import { reconcileDueClerkWebhooks } from './worker/handlers/clerk-webhook-recon
 import { cleanupAbandonedClerkOrganizations } from './worker/handlers/clerk-organization-cleanup.js';
 import { promoteElapsedRecoveryReadinessForAllTenants } from './worker/handlers/recovery-readiness.js';
 import { WorkerRunner, type EventHandler } from './worker/runner.js';
+import { startSweepScheduler, type Sweep } from './worker/sweep-scheduler.js';
 import { createEmailDeliveryHandler } from './worker/handlers/email-delivery.js';
 import { createSubscriptionPaymentReviewedHandler, PAYMENT_REVIEWED_EVENT_TYPE } from './worker/handlers/subscription-payment-reviewed.js';
 import { createOperatorAnnouncementHandler, OPERATOR_ANNOUNCEMENT_EVENT_TYPE } from './worker/handlers/operator-announcement.js';
@@ -61,23 +62,15 @@ const handlers: Record<string, EventHandler> = {
 };
 const runner = new WorkerRunner(handlers);
 
-interface Sweep {
-  name: string;
-  run: () => Promise<unknown>;
-  intervalMs: number;
-  /** Included in WORKER_DRAIN_SCOPE=fast: an expired hold keeps blocking its garment until swept. */
-  fast?: true;
-}
-
 const SWEEPS: readonly Sweep[] = [
   { name: 'platform QR cleanup', run: sweepPlatformQrObject, intervalMs: Math.max(config.WORKER_POLL_INTERVAL_MS, 60_000) },
-  { name: 'hold expiry', run: expireDueHoldsForAllTenants, intervalMs: config.WORKER_POLL_INTERVAL_MS, fast: true },
+  { name: 'hold expiry', run: expireDueHoldsForAllTenants, intervalMs: config.WORKER_HOLD_SWEEP_INTERVAL_MS, fast: true },
   // Off for the pilot: access is derived per request (modules/billing/access.ts). See the constant.
   ...(SUBSCRIPTION_LIFECYCLE_SWEEP_ENABLED
     ? [{ name: 'subscription lifecycle', run: reconcileDueSubscriptionsForAllTenants, intervalMs: config.WORKER_POLL_INTERVAL_MS }]
     : []),
-  { name: 'Clerk webhook reconciliation', run: reconcileDueClerkWebhooks, intervalMs: config.WORKER_POLL_INTERVAL_MS },
-  { name: 'Clerk organization cleanup', run: cleanupAbandonedClerkOrganizations, intervalMs: config.WORKER_POLL_INTERVAL_MS },
+  { name: 'Clerk webhook reconciliation', run: reconcileDueClerkWebhooks, intervalMs: config.WORKER_CLERK_RECONCILE_INTERVAL_MS },
+  { name: 'Clerk organization cleanup', run: cleanupAbandonedClerkOrganizations, intervalMs: config.WORKER_ORG_CLEANUP_INTERVAL_MS },
   {
     name: 'recovery readiness',
     run: promoteElapsedRecoveryReadinessForAllTenants,
@@ -91,14 +84,9 @@ const SWEEPS: readonly Sweep[] = [
 ];
 
 function runContinuously(): void {
-  const timers = SWEEPS.map((sweep) =>
-    setInterval(() => {
-      sweep.run().catch((error: unknown) => {
-        logger.error({ err: error, sweep: sweep.name }, 'sweep failed; will retry on next interval');
-      });
-    }, sweep.intervalMs),
-  );
-  runner.start().catch((error: unknown) => {
+  const scheduler = startSweepScheduler(SWEEPS);
+  logger.info({ sweeps: SWEEPS.map(({ name, intervalMs }) => ({ name, intervalMs })) }, 'worker sweep schedule');
+  const runnerTask = runner.start().catch((error: unknown) => {
     logger.error({ err: error }, 'worker runner crashed');
     process.exit(1);
   });
@@ -106,7 +94,7 @@ function runContinuously(): void {
   async function shutdown(signal: string): Promise<void> {
     logger.info({ signal }, 'worker shutting down');
     runner.stop();
-    timers.forEach(clearInterval);
+    await Promise.all([scheduler.stop(), runnerTask]);
     await closePool();
     process.exit(0);
   }

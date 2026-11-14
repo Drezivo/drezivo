@@ -1,7 +1,7 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { DashboardAccessGate } from "@/components/shell/dashboard-access-gate";
+import { DashboardAccessGate, useVerifiedActorContext } from "@/components/shell/dashboard-access-gate";
 import { DrezivoApiError } from "@/lib/drezivo-api";
 import { rememberResolvedWorkspace } from "@/lib/workspace-handoff";
 
@@ -34,6 +34,11 @@ vi.mock("@/lib/drezivo-api", async (importOriginal) => ({
 vi.mock("@/lib/resolve-staff-landing", () => ({
   invitationStateOf: () => undefined, resolveStaffLanding: resolver.resolveStaffLanding,
 }));
+
+function CurrentPlan() {
+  const actor = useVerifiedActorContext();
+  return <p>Plan: {actor?.subscription?.plan_code}</p>;
+}
 
 describe("DashboardAccessGate", () => {
   beforeEach(() => {
@@ -158,6 +163,96 @@ describe("DashboardAccessGate", () => {
 
     expect(await screen.findByText("Private dashboard")).toBeVisible();
     await waitFor(() => expect(resolver.resolveStaffLanding).toHaveBeenCalledTimes(1));
+  });
+
+  it("refreshes the plan when the visible dashboard regains focus", async () => {
+    vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
+    const standard = { tenant: { id: "tenant_123" }, subscription: { plan_code: "standard" } };
+    const growth = { ...standard, subscription: { plan_code: "growth" } };
+    resolver.resolveStaffLanding.mockResolvedValue({ kind: "workspace", actor: standard });
+    api.getActorContext.mockResolvedValue({ data: growth });
+
+    render(<DashboardAccessGate><CurrentPlan /></DashboardAccessGate>);
+    expect(await screen.findByText("Plan: standard")).toBeVisible();
+    fireEvent.focus(window);
+    expect(await screen.findByText("Plan: growth")).toBeVisible();
+    vi.restoreAllMocks();
+  });
+
+  it("periodically refreshes an open, visible dashboard", async () => {
+    vi.useFakeTimers();
+    const visibility = vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
+    const standard = { tenant: { id: "tenant_123" }, subscription: { plan_code: "standard" } };
+    const growth = { ...standard, subscription: { plan_code: "growth" } };
+    resolver.resolveStaffLanding.mockResolvedValue({ kind: "workspace", actor: standard });
+    api.getActorContext.mockResolvedValue({ data: growth });
+    const { unmount } = render(<DashboardAccessGate><CurrentPlan /></DashboardAccessGate>);
+    try {
+      await act(async () => { await Promise.resolve(); });
+      expect(screen.getByText("Plan: standard")).toBeVisible();
+      await act(async () => { await vi.advanceTimersByTimeAsync(30_000); });
+      expect(screen.getByText("Plan: growth")).toBeVisible();
+    } finally {
+      unmount();
+      visibility.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not poll while the dashboard tab is hidden", async () => {
+    vi.useFakeTimers();
+    const visibility = vi.spyOn(document, "visibilityState", "get").mockReturnValue("hidden");
+    const actor = { tenant: { id: "tenant_123" }, subscription: { plan_code: "standard" } };
+    resolver.resolveStaffLanding.mockResolvedValue({ kind: "workspace", actor });
+    const { unmount } = render(<DashboardAccessGate><CurrentPlan /></DashboardAccessGate>);
+    try {
+      await act(async () => { await Promise.resolve(); });
+      expect(screen.getByText("Plan: standard")).toBeVisible();
+      await act(async () => { await vi.advanceTimersByTimeAsync(30_000); });
+      expect(api.getActorContext).not.toHaveBeenCalled();
+    } finally {
+      unmount();
+      visibility.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not overlap automatic refresh requests", async () => {
+    const visibility = vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
+    const actor = { tenant: { id: "tenant_123" }, subscription: { plan_code: "standard" } };
+    resolver.resolveStaffLanding.mockResolvedValue({ kind: "workspace", actor });
+    let resolveRefresh: (value: { data: typeof actor }) => void = () => undefined;
+    api.getActorContext.mockReturnValueOnce(new Promise((resolve) => { resolveRefresh = resolve; }))
+      .mockResolvedValue({ data: actor });
+    render(<DashboardAccessGate><CurrentPlan /></DashboardAccessGate>);
+    expect(await screen.findByText("Plan: standard")).toBeVisible();
+    fireEvent.focus(window);
+    fireEvent.focus(window);
+    expect(api.getActorContext).toHaveBeenCalledTimes(1);
+    await act(async () => { resolveRefresh({ data: actor }); });
+    fireEvent.focus(window);
+    expect(api.getActorContext).toHaveBeenCalledTimes(2);
+    visibility.mockRestore();
+  });
+
+  it("ignores a late refresh from a different workspace", async () => {
+    const visibility = vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
+    const standard = { tenant: { id: "tenant_a" }, subscription: { plan_code: "standard" } };
+    const other = { tenant: { id: "tenant_b" }, subscription: { plan_code: "scale" } };
+    clerk.useAuth.mockReturnValue({ getToken: clerk.getToken, isLoaded: true, isSignedIn: true, orgId: "org_a" });
+    resolver.resolveStaffLanding.mockResolvedValueOnce({ kind: "workspace", actor: standard })
+      .mockResolvedValueOnce({ kind: "workspace", actor: other });
+    let resolveRefresh: (value: { data: typeof standard }) => void = () => undefined;
+    api.getActorContext.mockReturnValue(new Promise((resolve) => { resolveRefresh = resolve; }));
+    const view = render(<DashboardAccessGate><CurrentPlan /></DashboardAccessGate>);
+    expect(await screen.findByText("Plan: standard")).toBeVisible();
+    fireEvent.focus(window);
+    clerk.useAuth.mockReturnValue({ getToken: clerk.getToken, isLoaded: true, isSignedIn: true, orgId: "org_b" });
+    view.rerender(<DashboardAccessGate><CurrentPlan /></DashboardAccessGate>);
+    expect(await screen.findByText("Plan: scale")).toBeVisible();
+    await act(async () => { resolveRefresh({ data: standard }); });
+    expect(screen.getByText("Plan: scale")).toBeVisible();
+    visibility.mockRestore();
   });
 
   it("signs out from the access error page and redirects to sign-in", async () => {
