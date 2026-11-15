@@ -10,12 +10,13 @@ tags: [drezivo, system, second-brain]
 # Drezivo Second Brain
 
 This is the project-only Obsidian vault for Drezivo product, architecture, research, decisions,
-operations, and engineering memory. It links the five code repositories without copying secrets,
+operations, and engineering memory. It links the five monorepo workspaces without copying secrets,
 customer records, or production data.
 
 Start at [[00-Home/Drezivo Home]]. Use `[[wikilinks]]` between vault notes and normal Markdown
-links to source repositories or external research. The vault is a thinking and navigation layer;
-the API/database, current PRD, and accepted ADRs remain authoritative.
+links to source repositories or external research. The PRD, TRD, data model, and accepted ADRs
+in this vault are canonical. Code and migrations document implemented behavior; differences
+from product decisions must be investigated, not silently resolved.
 
 ## Sharing safely
 

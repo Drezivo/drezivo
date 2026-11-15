@@ -5,7 +5,8 @@ description: Maintain the project-only Drezivo Obsidian vault as a linked, sourc
 
 # Drezivo Second Brain
 
-The vault is `docs/second-brain/`. It is a project knowledge base, not an application database
+The vault is `docs/second-brain/`. It contains canonical product and technical specifications,
+accepted decisions, and linked project memory. It is not an application database
 and never a place for credentials or customer PII. Read the root `ROOT-REPOSITORY-ARCHITECTURE.md`
 before creating notes.
 
@@ -34,4 +35,5 @@ before creating notes.
 Read relevant notes, create or edit a small linked change, validate frontmatter, links, and Canvas
 JSON, then update the daily note with what changed and why. If Obsidian CLI is available, use it
 against the explicitly named vault; otherwise edit the open Markdown, JSON Canvas, and YAML files.
-The current PRD/TRD and API/database remain authoritative over graph edges.
+The PRD, TRD, data model, and accepted ADRs in the vault define intended behavior. API and
+database code are evidence of implemented behavior; record unresolved differences explicitly.

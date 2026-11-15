@@ -91,7 +91,7 @@
       "y": 300,
       "width": 420,
       "height": 260,
-      "text": "TBF-033\nPaid trial lifecycle and request-time access\n\nFree is ongoing without a trial. Every paid plan has the same lifetime-eligible 14-day trial. Public marketing shows Free, Starter, and Standard (documented Standard limit: 300 garments). Growth (PHP 499, 500 garments, 5 Front Desk seats) and Scale (PHP 999, 1,000 garments, 8 seats) appear only in onboarding and Settings billing; both share Standard's paid features.\n\nAccess derives from subscription dates: trial, then up to 30 days read-only. The storefront is online without bookings/fittings for the first 3 days, then offline. A dated operator extension is allowed.\n\nPayment proof is reviewed by an operator; there is no recurring payment provider. Existing paid plan changes remain unavailable in-app."
+      "text": "TBF-033\nPaid trial lifecycle and request-time access\n\nFree is ongoing without a trial. Every paid plan has the same lifetime-eligible 14-day trial. Public marketing shows Free, Starter, and Standard (documented Standard limit: 300 garments). Growth (PHP 499, 500 garments, 5 Front Desk seats) and Scale (PHP 999, 1,000 garments, 8 seats) appear only in onboarding and Settings billing; both share Standard's paid features.\n\nAccess derives from subscription dates: trial, then up to 7 days read-only. The storefront is online without bookings/fittings for the first day, then offline. A dated operator extension is allowed.\n\nPayment proof is reviewed by an operator; there is no recurring payment provider. Existing paid plan changes remain unavailable in-app."
     },
     {
       "id": "drezivo-tbf040-invitations-010",

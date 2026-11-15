@@ -1,3 +1,13 @@
+---
+title: "0018. Narrow operator trial plan changes"
+type: decision
+status: reference
+owner: Drezivo team
+source: "Original document and references within; moved into the vault on 2026-11-15"
+updated: 2026-11-15
+tags: [drezivo, decision]
+---
+
 # 0018. Narrow operator trial plan changes
 
 **Status:** Accepted
@@ -32,7 +42,7 @@ operator capability must not grant workspace browsing or general tenant imperson
 6. This command is a narrow billing exception to support-grant workspace access. It does not
    expose tenant reads, general workspace mutation, or impersonation. Support grants remain the
    only path for operator workspace access.
-7. Migration 0093 only relaxes `operator_command.reason`; migration 0085 already added
+7. Migration 0095 only relaxes `operator_command.reason`; migration 0085 already added
    `request_fingerprint`. Apply the additive migration through the normal reviewed migration
    process before enabling the command.
 
@@ -49,5 +59,5 @@ operator capability must not grant workspace browsing or general tenant imperson
 
 ## References
 
-- [Operator console audit projection](../architecture/operator-console-audit.md)
+- [Operator console audit projection](../../02-Architecture/operator-console-audit.md)
 - [ADR 0016: App-only Growth and Scale plans](0016-app-only-growth-scale-plans.md)

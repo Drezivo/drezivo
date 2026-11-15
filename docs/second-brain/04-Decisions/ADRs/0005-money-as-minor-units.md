@@ -1,3 +1,13 @@
+---
+title: "0005. Money is stored as integer minor units, serialized as decimal strings"
+type: decision
+status: reference
+owner: Drezivo team
+source: "Original document and references within; moved into the vault on 2026-11-15"
+updated: 2026-11-15
+tags: [drezivo, decision]
+---
+
 # 0005. Money is stored as integer minor units, serialized as decimal strings
 
 **Status:** Accepted, dated 15 September 2026

@@ -3,7 +3,7 @@ title: Tenancy Checklist - What, Why, and How
 type: architecture
 status: current
 owner: Drezivo platform team
-source: "[Tenancy checklist](../../../api/TENANCY-ONBOARDING-V1-CHECKLIST.md); [Backend checklist](../../../api/V1-BACKEND-CHECKLIST.md); [[02-Architecture/Tenancy, Onboarding, Clerk, Memberships, and Billing Foundation]]; [TRD](../../architecture/Drezivo-TRD.md); [Data Model](../../architecture/Drezivo-Data-Model.md); [ERD](../../architecture/Drezivo-ERD.dbml); [Migration plan](../../architecture/Tenancy-Onboarding-Migration-Plan.md)"
+source: "[Tenancy checklist](../../../api/TENANCY-ONBOARDING-V1-CHECKLIST.md); [Backend checklist](../../../api/V1-BACKEND-CHECKLIST.md); [[02-Architecture/Tenancy, Onboarding, Clerk, Memberships, and Billing Foundation]]; [TRD](Drezivo-TRD.md); [Data Model](Drezivo-Data-Model.md); [ERD](../../architecture/Drezivo-ERD.dbml); [Migration plan](Tenancy-Onboarding-Migration-Plan.md)"
 updated: 2026-10-28
 tags:
   - drezivo
@@ -264,10 +264,10 @@ intentionally deferred to Phase 4.
 
 - **Why:** A delayed worker must not extend a trial or leave an expired tenant unrestricted, and
   restricted/cancelled behavior must be consistent across every endpoint.
-- **What:** Current pilot access is derived from subscription dates as full, read-only for up to 30
+- **What:** Current pilot access is derived from subscription dates as full, read-only for up to 7
   days, then locked; terminal cancellation stays locked.
 - **How:** Request-time checks and the existing cancelled action matrix are authoritative. The
-  storefront stays online without bookings or fittings for the first three days after expiry, then
+  storefront stays online without bookings or fittings for the first day after expiry, then
   goes offline. Existing paid customers cannot switch plans in-app; Free owners may choose a paid tier;
   manual payment approval starts a paid period.
 - **Dependencies:** TBF-030, TBF-032.

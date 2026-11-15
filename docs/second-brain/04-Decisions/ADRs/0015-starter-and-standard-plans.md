@@ -1,3 +1,13 @@
+---
+title: "0015. Starter and Standard subscription plans"
+type: decision
+status: reference
+owner: Drezivo team
+source: "Original document and references within; moved into the vault on 2026-11-15"
+updated: 2026-11-15
+tags: [drezivo, decision]
+---
+
 # 0015. Starter and Standard subscription plans
 
 **Status:** Accepted
@@ -54,5 +64,5 @@ sync with owner onboarding and public pricing.
 - [ADR 0011](0011-single-standard-pilot-plan.md) records the superseded single-plan pilot.
 - [ADR 0013](0013-starter-plan-capacity.md) records the unchanged Standard limits.
 - [ADR 0014](0014-starter-plan-price.md) records the unchanged Standard price.
-- [PRD pricing and entitlements](../product/Drezivo-PRD.md#6-pricing-entitlements-notifications-operator-admin-billing)
+- [PRD pricing and entitlements](../../01-Product/Drezivo-PRD.md#6-pricing-entitlements-notifications-operator-admin-billing)
   defines current customer-facing requirements.

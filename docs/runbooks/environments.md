@@ -208,12 +208,12 @@ naming convention) once TRD §12's "remaining selection" of hosting plans/region
 - `PAYMENT_REVIEW_MAX_HOURS` — proposed 24 hours maximum manual review deadline (TRD §5, PRD
   §11).
 - Trial and subscription access windows are code-owned policy, not environment overrides. The
-  current pilot uses a 14-day trial, 3-day reminder, 30-day read-only period, and 3-day storefront
+  current pilot uses a 14-day trial, 3-day reminder, 7-day read-only period, and 1-day storefront
   online window after a period ends. Do not add `TRIAL_PERIOD_DAYS` or `RENEWAL_GRACE_DAYS`; the API
   does not read them. See `contracts/src/tenancy/billing.ts` and `api/src/modules/billing/access.ts`.
 - `OUTBOX_MAX_ATTEMPTS` — proposed eight attempts before terminal failure (TRD §8).
 - `CONTRACTS_PACKAGE_VERSION` — not an env var but a `package.json` dependency pin on
-  `@drezivo/contracts` (`docs/decisions/0003-shared-contracts-package.md`); listed here as a
+  `@drezivo/contracts` (`docs/second-brain/04-Decisions/ADRs/0003-shared-contracts-package.md`); listed here as a
   reminder that the contract version in use is part of what "which environment is running what"
   means.
 
@@ -268,7 +268,7 @@ See [`private-media-delivery.md`](private-media-delivery.md) and
 ## `contracts` (`@drezivo/contracts`)
 
 - `GITHUB_PACKAGES_TOKEN` (or equivalent) — used only in CI to publish the package to GitHub
-  Packages (`docs/decisions/0003-shared-contracts-package.md`); never needed at runtime by any
+  Packages (`docs/second-brain/04-Decisions/ADRs/0003-shared-contracts-package.md`); never needed at runtime by any
   other repository beyond an ordinary package-registry auth token for `npm install`.
 
 ## `docs` (this repository)

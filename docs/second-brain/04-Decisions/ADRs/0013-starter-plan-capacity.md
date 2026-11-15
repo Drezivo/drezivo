@@ -1,3 +1,13 @@
+---
+title: "0013. Standard plan pilot capacity"
+type: decision
+status: superseded
+owner: Drezivo team
+source: "Original document and references within; moved into the vault on 2026-11-15"
+updated: 2026-11-15
+tags: [drezivo, decision]
+---
+
 # 0013. Standard plan pilot capacity
 
 **Status:** Superseded by [ADR 0015](0015-starter-and-standard-plans.md) for the current catalog; the Standard limits remain unchanged
@@ -37,5 +47,5 @@ The pilot now needs lower, explicit capacity limits.
 - [ADR 0011](0011-single-standard-pilot-plan.md) defines the single Standard offer and all other
   pilot billing/access terms.
 - [ADR 0012](0012-storefront-guest-email-free-bookings.md) is unrelated and remains in force.
-- [Pilot operation runbook](../runbooks/pilot-operation.md) describes current payment and access
+- [Pilot operation runbook](../../../runbooks/pilot-operation.md) describes current payment and access
   operations.

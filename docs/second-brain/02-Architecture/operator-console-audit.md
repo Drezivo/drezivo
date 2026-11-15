@@ -1,7 +1,18 @@
+---
+title: "Operator console audit projection"
+type: architecture
+status: reference
+owner: Drezivo team
+source: "Original document and references within; moved into the vault on 2026-11-15"
+updated: 2026-11-15
+tags: [drezivo, architecture]
+---
+
 # Operator console audit projection
 
-Status: operator application released on 2026-10-16. Preview has migrations 0085 and 0086. The
-first production migration attempt rolled back 0085 after finding duplicate legacy session events;
+Historical release note (2026-10-16): the operator application was released and preview had
+migrations 0085 and 0086. The first production migration attempt rolled back 0085 after finding
+duplicate legacy session events;
 migration 0084_session_audit_uniqueness_repair.sql is the forward correction.
 Owner instruction: two individual Superadmins (the founder and Ryanny) with equal permissions.
 
@@ -61,7 +72,7 @@ limits; owners, inactive members, and pending invitations do not count for this 
 remain pending and normal seat-reservation checks still apply. Free upgrades and paid activation remain
 payment-gated, and manually restricted or cancelled tenants remain ineligible. The command, subscription
 event, and tenant audit event commit together; an omitted internal reason is stored as `NULL`.
-Migration 0093 relaxes the reason column; 0085 already provides the request fingerprint.
+Migration 0095 relaxes the reason column; 0085 already provides the request fingerprint.
 
 Local verification uses the operator repository's Docker stack and a separate temporary test
 PostgreSQL service with the full business migrations. It sends no hosted email, reads no hosted

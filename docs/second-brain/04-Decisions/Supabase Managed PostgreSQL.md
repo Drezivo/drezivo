@@ -3,7 +3,7 @@ title: Supabase Managed PostgreSQL
 type: decision
 status: accepted
 owner: Drezivo product and platform owners
-source: "../../decisions/0009-supabase-managed-postgresql.md"
+source: "ADRs/0009-supabase-managed-postgresql.md"
 updated: 2026-09-30
 tags: [drezivo, decisions, database, supabase, postgresql]
 ---
@@ -32,7 +32,7 @@ operations, not application authority.
   password recovery before production.
 
 See [[02-Architecture/Drezivo Architecture]], [[05-Operations/Operating Model]], and the canonical
-[ADR 0009](../../decisions/0009-supabase-managed-postgresql.md).
+[ADR 0009](ADRs/0009-supabase-managed-postgresql.md).
 
 ## Decision history
 

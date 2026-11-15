@@ -3,7 +3,7 @@ title: Customer Address and Social Profile Fields
 type: architecture-decision
 status: implemented
 owner: Drezivo team
-source: "[PRD](../../product/Drezivo-PRD.md), [Data Model](../../architecture/Drezivo-Data-Model.md), [ERD](../../architecture/Drezivo-ERD.dbml), and [TRD](../../architecture/Drezivo-TRD.md) — 2026-09-28"
+source: "[PRD](../01-Product/Drezivo-PRD.md), [Data Model](Drezivo-Data-Model.md), [ERD](../../architecture/Drezivo-ERD.dbml), and [TRD](Drezivo-TRD.md) — 2026-09-28"
 updated: 2026-10-11
 tags: [drezivo, customer-data, reservations, fittings, privacy]
 ---
@@ -42,8 +42,8 @@ fulfillment/delivery, payment, receipt, allocation, and custody fields. Customer
 remain in Customer management. This is distinct from New Reservation completion, where the selected
 profile can be edited explicitly as part of that new booking flow.
 
-Source: [PRD Operations](../../product/Drezivo-PRD.md) and
-[TRD reservation commands](../../architecture/Drezivo-TRD.md).
+Source: [PRD Operations](../01-Product/Drezivo-PRD.md) and
+[TRD reservation commands](Drezivo-TRD.md).
 
 See [[02-Architecture/Drezivo Architecture]] for the API and tenant boundary, and
 [[99-Archive/Reservations Checklist]] for the reservation lifecycle.

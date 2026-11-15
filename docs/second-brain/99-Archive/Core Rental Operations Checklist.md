@@ -10,7 +10,7 @@ tags: [drezivo, v1, vertical-slice, end-to-end, checklist]
 # Core Rental Operations V1 End-to-End Checklist
 
 **Status:** Planned; this is the integration/release checklist that starts after the individual Clothing, Reservations, Availability, Schedule, and Dashboard slices are implemented.
-**Canonical specifications:** [PRD](../../product/Drezivo-PRD.md), [TRD](../../architecture/Drezivo-TRD.md), [Data Model](../../architecture/Drezivo-Data-Model.md), and [ERD](../../architecture/Drezivo-ERD.dbml).
+**Canonical specifications:** [PRD](../01-Product/Drezivo-PRD.md), [TRD](../02-Architecture/Drezivo-TRD.md), [Data Model](../02-Architecture/Drezivo-Data-Model.md), and [ERD](../../architecture/Drezivo-ERD.dbml).
 **Component checklists:** [[Clothing Checklist]], [[Reservations Checklist]], [[Availability Checklist]], [[Schedule Calendar Checklist]], and [[Dashboard Checklist]].
 **Foundation dependency:** [Tenancy, Owner Onboarding, Clerk, Memberships, and Billing V1 Checklist](../../../api/TENANCY-ONBOARDING-V1-CHECKLIST.md).
 

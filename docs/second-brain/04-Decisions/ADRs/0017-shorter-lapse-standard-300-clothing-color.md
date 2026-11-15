@@ -1,3 +1,13 @@
+---
+title: "0017: Shorter lapse window, Standard back to 300 garments, one color per clothing"
+type: decision
+status: reference
+owner: Drezivo team
+source: "Original document and references within; moved into the vault on 2026-11-15"
+updated: 2026-11-15
+tags: [drezivo, decision]
+---
+
 # 0017: Shorter lapse window, Standard back to 300 garments, one color per clothing
 
 Date: 2026-11-01. Status: accepted (owner QA, 2026-11-01).

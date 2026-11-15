@@ -1,3 +1,13 @@
+---
+title: "0014. Standard plan price"
+type: decision
+status: superseded
+owner: Drezivo team
+source: "Original document and references within; moved into the vault on 2026-11-15"
+updated: 2026-11-15
+tags: [drezivo, decision]
+---
+
 # 0014. Standard plan price
 
 **Status:** Superseded by [ADR 0015](0015-starter-and-standard-plans.md) for plan identity and catalog structure; Standard's price remains unchanged
@@ -34,4 +44,4 @@ row. Its price was PHP 300 per month. The pilot price is changing while its capa
 - [ADR 0011](0011-single-standard-pilot-plan.md) establishes the single Standard pilot offer; this
   decision supersedes only its price.
 - [ADR 0013](0013-starter-plan-capacity.md) sets the current asset and Front Desk limits.
-- [Pilot operation runbook](../runbooks/pilot-operation.md) describes current payment operations.
+- [Pilot operation runbook](../../../runbooks/pilot-operation.md) describes current payment operations.

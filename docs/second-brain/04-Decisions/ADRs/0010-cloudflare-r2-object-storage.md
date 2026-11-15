@@ -1,3 +1,13 @@
+---
+title: "0010. Cloudflare R2 for production object storage"
+type: decision
+status: reference
+owner: Drezivo team
+source: "Original document and references within; moved into the vault on 2026-11-15"
+updated: 2026-11-15
+tags: [drezivo, decision]
+---
+
 # 0010. Cloudflare R2 for production object storage
 
 **Status:** Accepted as the production storage target; production cutover remains gated
@@ -69,6 +79,6 @@ run against production.
 - [Cloudflare R2 S3 API compatibility](https://developers.cloudflare.com/r2/api/s3/api/)
 - [Cloudflare R2 presigned URLs](https://developers.cloudflare.com/r2/api/s3/presigned-urls/)
 - [Cloudflare R2 AWS SDK JavaScript example](https://developers.cloudflare.com/r2/examples/aws/aws-sdk-js-v3/)
-- [Object-storage migration runbook](../runbooks/object-storage-migration.md)
-- [Private media delivery runbook](../runbooks/private-media-delivery.md)
-- [Technical Requirements Document](../architecture/Drezivo-TRD.md)
+- [Object-storage migration runbook](../../../runbooks/object-storage-migration.md)
+- [Private media delivery runbook](../../../runbooks/private-media-delivery.md)
+- [Technical Requirements Document](../../02-Architecture/Drezivo-TRD.md)

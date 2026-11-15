@@ -28,7 +28,7 @@ compatibility, fitting-verification, or guest-email requirements.
 - Cancel queued guest-directed email rows but preserve owner/business rows. Stop old API/worker
   processes before migration 0070; provider-accepted email cannot be recalled.
 
-See [ADR 0012](../../decisions/0012-storefront-guest-email-free-bookings.md), the [TRD](../../architecture/Drezivo-TRD.md),
+See [ADR 0012](../04-Decisions/ADRs/0012-storefront-guest-email-free-bookings.md), the [TRD](../02-Architecture/Drezivo-TRD.md),
 and [pilot runbook](../../runbooks/pilot-operation.md) for canonical behavior. The earlier proposal
 below records prior thinking only.
 
@@ -84,7 +84,7 @@ or a broad parent-domain cookie.
 
 Update the guest reservation contracts and OpenAPI, storefront/privacy wording, and the current
 PRD when implementation is approved and shipped. Add a dated decision record that explicitly
-supersedes item 3 of [ADR 0010](../../decisions/0010-storefront-cms-and-guest-requests.md), which
+supersedes item 3 of [ADR 0010](../04-Decisions/ADRs/0010-storefront-cms-and-guest-requests.md), which
 currently requires email proof before a guest reservation request. Preserve the ADR's historical
 reasoning rather than silently rewriting it. Reconcile that ADR's item 4 fragment-link wording with
 the root architecture rule that guest capability secrets stay out of URLs. Link this plan to

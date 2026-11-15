@@ -10,7 +10,7 @@ tags: [drezivo, v1, clothing, catalogue, inventory, checklist]
 # Clothing V1 End-to-End Checklist
 
 **Status:** Phases 0–2 are complete: catalogue foundations/reads plus the Add Clothing transactional service, API boundary, and canonical clothing file attachment flow are implemented.
-**Canonical specifications:** [PRD](../../product/Drezivo-PRD.md), [TRD](../../architecture/Drezivo-TRD.md), [Data Model](../../architecture/Drezivo-Data-Model.md), and [ERD](../../architecture/Drezivo-ERD.dbml).
+**Canonical specifications:** [PRD](../01-Product/Drezivo-PRD.md), [TRD](../02-Architecture/Drezivo-TRD.md), [Data Model](../02-Architecture/Drezivo-Data-Model.md), and [ERD](../../architecture/Drezivo-ERD.dbml).
 **Foundation dependency:** [Tenancy, Owner Onboarding, Clerk, Memberships, and Billing V1 Checklist](../../../api/TENANCY-ONBOARDING-V1-CHECKLIST.md).
 
 ## How to use this checklist

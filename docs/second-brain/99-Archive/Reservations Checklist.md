@@ -10,7 +10,7 @@ tags: [drezivo, v1, reservations, booking, checklist]
 # Reservations V1 End-to-End Checklist
 
 **Status:** Planned; current `/reservations` UI and Schedule detail drawers are prototype/mock-data driven.
-**Canonical specifications:** [PRD](../../product/Drezivo-PRD.md), [TRD](../../architecture/Drezivo-TRD.md), [Data Model](../../architecture/Drezivo-Data-Model.md), and [ERD](../../architecture/Drezivo-ERD.dbml).
+**Canonical specifications:** [PRD](../01-Product/Drezivo-PRD.md), [TRD](../02-Architecture/Drezivo-TRD.md), [Data Model](../02-Architecture/Drezivo-Data-Model.md), and [ERD](../../architecture/Drezivo-ERD.dbml).
 **Dependencies:** [[Clothing Checklist]] and the tenancy/actor-context foundation.
 
 ## How to use this checklist

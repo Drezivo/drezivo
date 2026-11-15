@@ -1,3 +1,13 @@
+---
+title: "0011. One Standard plan during the pilot"
+type: decision
+status: superseded
+owner: Drezivo team
+source: "Original document and references within; moved into the vault on 2026-11-15"
+updated: 2026-11-15
+tags: [drezivo, decision]
+---
+
 # 0011. One Standard plan during the pilot
 
 **Status:** Superseded by [ADR 0015](0015-starter-and-standard-plans.md); retained as historical context
@@ -47,5 +57,5 @@ would tell product, engineering, and operations to build different behavior.
 
 - [ADR 0005](0005-money-as-minor-units.md) still governs money representation. Its quoted three-tier
   amounts record the offer at the time that ADR was accepted.
-- [Pilot operation runbook](../runbooks/pilot-operation.md) describes current payment and access
+- [Pilot operation runbook](../../../runbooks/pilot-operation.md) describes current payment and access
   operations.

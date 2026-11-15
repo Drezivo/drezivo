@@ -15,7 +15,7 @@ This document freezes the product and domain behavior for the first production i
 
 The approved frontend prototype remains the UX reference, but prototype fixtures and local-only types are not API/database contracts. Where the approved backend behavior intentionally tightens the prototype, the backend decision in this file wins for production integration.
 
-Canonical architecture must remain aligned with the [PRD](../../product/Drezivo-PRD.md), [TRD](../../architecture/Drezivo-TRD.md), [Data Model](../../architecture/Drezivo-Data-Model.md), and [ERD](../../architecture/Drezivo-ERD.dbml).
+Canonical architecture must remain aligned with the [PRD](../01-Product/Drezivo-PRD.md), [TRD](../02-Architecture/Drezivo-TRD.md), [Data Model](../02-Architecture/Drezivo-Data-Model.md), and [ERD](../../architecture/Drezivo-ERD.dbml).
 
 ## Release boundary
 

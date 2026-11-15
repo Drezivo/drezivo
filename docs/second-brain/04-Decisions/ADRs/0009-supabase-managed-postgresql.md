@@ -1,3 +1,13 @@
+---
+title: "0009. Supabase as the managed PostgreSQL provider"
+type: decision
+status: reference
+owner: Drezivo team
+source: "Original document and references within; moved into the vault on 2026-11-15"
+updated: 2026-11-15
+tags: [drezivo, decision]
+---
+
 # 0009. Supabase as the managed PostgreSQL provider
 
 **Status:** accepted
@@ -69,4 +79,4 @@ Use Supabase as managed PostgreSQL only:
 - [Supabase: Postgres extensions](https://supabase.com/docs/guides/database/extensions)
 - [Supabase: database backups](https://supabase.com/docs/guides/platform/backups)
 - [ADR 0002: Drizzle and node-postgres](0002-drizzle-and-node-postgres.md)
-- [Technical Requirements Document](../architecture/Drezivo-TRD.md)
+- [Technical Requirements Document](../../02-Architecture/Drezivo-TRD.md)

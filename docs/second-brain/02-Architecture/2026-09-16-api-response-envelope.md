@@ -1,3 +1,13 @@
+---
+title: "API Response Envelope and Consumer Update"
+type: architecture
+status: reference
+owner: Drezivo team
+source: "Original document and references within; moved into the vault on 2026-11-15"
+updated: 2026-11-15
+tags: [drezivo, architecture]
+---
+
 # API Response Envelope and Consumer Update
 
 **Status:** Implemented in PR [#6](https://github.com/Drezivo/drezivo/pull/6)

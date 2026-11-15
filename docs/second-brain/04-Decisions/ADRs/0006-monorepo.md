@@ -1,3 +1,13 @@
+---
+title: "0006. Consolidate the Drezivo workspaces into one monorepo"
+type: decision
+status: reference
+owner: Drezivo team
+source: "Original document and references within; moved into the vault on 2026-11-15"
+updated: 2026-11-15
+tags: [drezivo, decision]
+---
+
 # 0006. Consolidate the Drezivo workspaces into one monorepo
 
 **Status:** accepted

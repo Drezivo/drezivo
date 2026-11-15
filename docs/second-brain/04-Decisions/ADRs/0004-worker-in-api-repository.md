@@ -1,3 +1,13 @@
+---
+title: "0004. The durable worker lives in the `api` repository, not its own repository"
+type: decision
+status: reference
+owner: Drezivo team
+source: "Original document and references within; moved into the vault on 2026-11-15"
+updated: 2026-11-15
+tags: [drezivo, decision]
+---
+
 # 0004. The durable worker lives in the `api` repository, not its own repository
 
 **Status:** Accepted, dated 15 September 2026
