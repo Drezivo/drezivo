@@ -11,7 +11,7 @@ export type MediaAudience =
 
 /**
  * Maps accepted, same-tenant file ids to application routes. The route rechecks authorization on
- * cache misses and privately fetches from R2; this helper never signs an R2 read URL.
+ * every network request and privately fetches from R2; this helper never signs an R2 read URL.
  */
 export class StorefrontMediaUrlMapper {
   async map(

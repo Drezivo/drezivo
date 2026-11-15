@@ -150,6 +150,85 @@ describe('storefront guest booking', async () => {
     });
   }
 
+  it('requires a new confirmation when the authoritative price changes before a hold', async () => {
+    const ws = await liveStore('gv-quote');
+    const requestBody = holdRequest(ws, 'quote@example.test');
+    const quoteInput = {
+      variant_id: requestBody.variant_id,
+      requested_interval: requestBody.requested_interval,
+      event_date: requestBody.event_date,
+      fulfillment_method: requestBody.fulfillment_method,
+      payment_method_id: requestBody.payment_method_id,
+    };
+    const app = createApp();
+    const before = await request(app).post(`/api/v1/public/stores/${ws.slug}/quote`).send(quoteInput);
+    expect(before.status).toBe(200);
+    expect(before.headers['cache-control']).toBe('no-store');
+    const beforeQuote = (before.body as { data: { rental_total_minor: string; security_required_minor: string; delivery_total_minor: string; due_now_minor: string; currency: string } }).data;
+    expect(beforeQuote).toEqual({ rental_total_minor: '230000', security_required_minor: '200000', delivery_total_minor: '0', due_now_minor: '430000', currency: 'PHP' });
+    await admin.query('UPDATE product_variant SET rental_price_minor = rental_price_minor + 10000 WHERE tenant_id = $1 AND id = $2', [ws.tenantId, ws.variantIds.m]);
+    const rejected = await request(app).post(`/api/v1/public/stores/${ws.slug}/holds`)
+      .set('Idempotency-Key', 'quote-old-0001').send({ ...requestBody, expected_quote: beforeQuote });
+    expect(rejected.status).toBe(409);
+    expect((rejected.body as { error: { code: string } }).error.code).toBe('PRICE_CHANGE_NOT_ACCEPTED');
+    const count = await admin.query<{ n: number }>('SELECT count(*)::int AS n FROM reservation WHERE tenant_id = $1', [ws.tenantId]);
+    expect(count.rows[0]?.n).toBe(0);
+    const after = await request(app).post(`/api/v1/public/stores/${ws.slug}/quote`).send(quoteInput);
+    expect(after.status).toBe(200);
+    const afterQuote = (after.body as { data: typeof beforeQuote }).data;
+    expect(afterQuote.due_now_minor).not.toBe(beforeQuote.due_now_minor);
+    await admin.query('UPDATE product_variant SET rental_price_minor = rental_price_minor + 10000 WHERE tenant_id = $1 AND id = $2', [ws.tenantId, ws.variantIds.m]);
+    const changedAgain = await request(app).post(`/api/v1/public/stores/${ws.slug}/holds`)
+      .set('Idempotency-Key', 'quote-old-0002').send({ ...requestBody, expected_quote: afterQuote });
+    expect(changedAgain.status).toBe(409);
+    expect((changedAgain.body as { error: { code: string } }).error.code).toBe('PRICE_CHANGE_NOT_ACCEPTED');
+    const latest = await request(app).post(`/api/v1/public/stores/${ws.slug}/quote`).send(quoteInput);
+    expect(latest.status).toBe(200);
+    const latestQuote = (latest.body as { data: typeof beforeQuote }).data;
+    expect(latestQuote.due_now_minor).not.toBe(afterQuote.due_now_minor);
+    const accepted = await request(app).post(`/api/v1/public/stores/${ws.slug}/holds`)
+      .set('Idempotency-Key', 'quote-new-0001').send({ ...requestBody, expected_quote: latestQuote });
+    expect(accepted.status).toBe(201);
+  });
+
+  it('rejects a hold if a concurrent price edit commits before its quote is locked', async () => {
+    const ws = await liveStore('gv-quote-race');
+    const body = holdRequest(ws, 'race-quote@example.test');
+    const app = createApp();
+    const quote = await request(app).post(`/api/v1/public/stores/${ws.slug}/quote`).send({
+      variant_id: body.variant_id, requested_interval: body.requested_interval, event_date: body.event_date,
+      fulfillment_method: body.fulfillment_method, payment_method_id: body.payment_method_id,
+    });
+    expect(quote.status).toBe(200);
+    const expectedQuote = (quote.body as { data: object }).data;
+    const editor = await admin.connect();
+    try {
+      await editor.query('BEGIN');
+      await editor.query('UPDATE product_variant SET rental_price_minor = rental_price_minor + 10000 WHERE tenant_id = $1 AND id = $2', [ws.tenantId, ws.variantIds.m]);
+      const pending = request(app).post(`/api/v1/public/stores/${ws.slug}/holds`)
+        .set('Idempotency-Key', 'quote-race-0001').send({ ...body, expected_quote: expectedQuote }).then((response) => response);
+      let waiting = false;
+      for (let attempt = 0; attempt < 100 && !waiting; attempt += 1) {
+        const result = await admin.query<{ waiting: boolean }>(
+          `SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE usename = 'drezivo_app'
+             AND wait_event_type = 'Lock' AND query LIKE '%FROM product_variant%FOR SHARE%') AS waiting`,
+        );
+        waiting = result.rows[0]?.waiting === true;
+        if (!waiting) await new Promise((resolve) => setTimeout(resolve, 25));
+      }
+      expect(waiting).toBe(true);
+      await editor.query('COMMIT');
+      const result = await pending;
+      expect(result.status).toBe(409);
+      expect((result.body as { error: { code: string } }).error.code).toBe('PRICE_CHANGE_NOT_ACCEPTED');
+      const count = await admin.query<{ n: number }>('SELECT count(*)::int AS n FROM reservation WHERE tenant_id = $1', [ws.tenantId]);
+      expect(count.rows[0]?.n).toBe(0);
+    } finally {
+      await editor.query('ROLLBACK');
+      editor.release();
+    }
+  });
+
   it('creates one hold per key without email verification, returns no capability, and isolates cookie access', async () => {
     const ws = await liveStore('gv-hold');
     const body = holdRequest(ws, 'ana@example.test');
