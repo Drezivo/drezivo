@@ -63,6 +63,8 @@ export const envSchema = z
     WORKER_POLL_INTERVAL_MS: z.coerce.number().int().min(250).default(2000),
     WORKER_OUTBOX_IDLE_MAX_MS: z.coerce.number().int().min(250).max(3_600_000).default(60_000),
     WORKER_HOLD_SWEEP_INTERVAL_MS: z.coerce.number().int().min(250).max(3_600_000).default(10_000),
+    // Switch only after 0098 and staging verification; scan remains the rollback path.
+    WORKER_HOLD_EXPIRY_MODE: z.enum(['scan', 'scheduled']).default('scan'),
     WORKER_CLERK_RECONCILE_INTERVAL_MS: z.coerce.number().int().min(250).max(3_600_000).default(60_000),
     WORKER_ORG_CLEANUP_INTERVAL_MS: z.coerce.number().int().min(250).max(3_600_000).default(300_000),
     WORKER_LEASE_SECONDS: z.coerce.number().int().min(5).default(60),

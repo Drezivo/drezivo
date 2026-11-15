@@ -108,6 +108,11 @@ naming convention) once TRD §12's "remaining selection" of hosting plans/region
   the configured maximum, the initial interval is also the effective maximum. During an outage,
   backlog, or an asleep host, jobs can take longer than the idle delay.
 - `WORKER_HOLD_SWEEP_INTERVAL_MS`: expired-hold sweep interval, default `10000` ms.
+- `WORKER_HOLD_EXPIRY_MODE`: `scan` (default/rollback) or `scheduled`. Apply migration
+  `0098_reservation_expiry_schedule.sql` before selecting `scheduled`. The embedded child inherits
+  this setting. Scheduled mode discovers at most ten due businesses per pass, processes at most
+  100 reservations per business, and skips idle business transactions. See the
+  [hold-expiry rollout](worker-hold-expiry.md) for bounds, measurements and rollback.
 - `WORKER_CLERK_RECONCILE_INTERVAL_MS`: Clerk webhook reconciliation interval, default `60000` ms.
 - `WORKER_ORG_CLEANUP_INTERVAL_MS`: abandoned-organization cleanup interval, default `300000` ms.
   These four new intervals accept integers from 250 to 3600000 ms. They apply to continuous mode;
