@@ -5,6 +5,7 @@ export interface Sweep {
   run: () => Promise<unknown>;
   intervalMs: number;
   fast?: true;
+  runOnStart?: boolean;
 }
 
 /** Runs each maintenance sweep without overlapping another run of the same sweep. */
@@ -17,34 +18,50 @@ export function startSweepScheduler(sweeps: readonly Sweep[]): { stop: () => Pro
     skipped: 0,
     durationMs: 0,
   }));
-  const timers = states.map((state) => setInterval(() => {
-    if (state.active) {
-      state.skipped += 1;
-      return;
-    }
-    const startedAt = Date.now();
-    state.runs += 1;
-    state.active = Promise.resolve()
-      .then(() => state.sweep.run())
-      .then(() => undefined)
-      .catch((error: unknown) => {
-        state.failures += 1;
-        const candidate = error instanceof Error ? error.name : 'UnknownError';
-        const errorType = /^[A-Za-z][A-Za-z0-9]{0,60}$/.test(candidate) ? candidate : 'UnknownError';
-        logger.error({ sweep: state.sweep.name, errorType }, 'worker sweep failed; will retry on next interval');
-      })
-      .finally(() => {
-        state.durationMs += Date.now() - startedAt;
-        state.active = null;
-      });
-  }, state.sweep.intervalMs));
+  const timers = states.map((state) => {
+    const run = (): void => {
+      if (state.active) {
+        state.skipped += 1;
+        return;
+      }
+      const startedAt = Date.now();
+      state.runs += 1;
+      state.active = Promise.resolve()
+        .then(() => state.sweep.run())
+        .then(() => undefined)
+        .catch((error: unknown) => {
+          state.failures += 1;
+          const candidate = error instanceof Error ? error.name : 'UnknownError';
+          const errorType = /^[A-Za-z][A-Za-z0-9]{0,60}$/.test(candidate)
+            ? candidate
+            : 'UnknownError';
+          logger.error(
+            { sweep: state.sweep.name, errorType },
+            'worker sweep failed; will retry on next interval',
+          );
+        })
+        .finally(() => {
+          state.durationMs += Date.now() - startedAt;
+          state.active = null;
+        });
+    };
+    if (state.sweep.runOnStart) run();
+    return setInterval(run, state.sweep.intervalMs);
+  });
 
   const reportTimer = setInterval(() => {
-    logger.info({
-      sweeps: states.map(({ sweep, runs, failures, skipped, durationMs }) => ({
-        name: sweep.name, runs, failures, skipped, durationMs,
-      })),
-    }, 'worker sweep activity');
+    logger.info(
+      {
+        sweeps: states.map(({ sweep, runs, failures, skipped, durationMs }) => ({
+          name: sweep.name,
+          runs,
+          failures,
+          skipped,
+          durationMs,
+        })),
+      },
+      'worker sweep activity',
+    );
     for (const state of states) {
       state.runs = 0;
       state.failures = 0;
@@ -57,7 +74,7 @@ export function startSweepScheduler(sweeps: readonly Sweep[]): { stop: () => Pro
     async stop() {
       timers.forEach(clearInterval);
       clearInterval(reportTimer);
-      await Promise.all(states.flatMap((state) => state.active ? [state.active] : []));
+      await Promise.all(states.flatMap((state) => (state.active ? [state.active] : [])));
     },
   };
 }

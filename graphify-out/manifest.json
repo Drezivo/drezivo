@@ -300,9 +300,9 @@
     "semantic_hash": ""
   },
   "api/src/config/__tests__/worker-config.test.ts": {
-    "mtime": 1794198495.8750215,
-    "seen": 1794201426.7707207,
-    "ast_hash": "5ce8d1fe57657a7a5b48b0198351734e",
+    "mtime": 1794683540.3555932,
+    "seen": 1794713606.33263,
+    "ast_hash": "3d5d966443e8c4a1d0cc29d01ce055de",
     "semantic_hash": ""
   },
   "api/src/config/cors-origins.ts": {
@@ -318,9 +318,9 @@
     "semantic_hash": ""
   },
   "api/src/config/index.ts": {
-    "mtime": 1794198426.6994836,
-    "seen": 1794201426.7707207,
-    "ast_hash": "75572668e5b4a94f3ba18717065a0d9d",
+    "mtime": 1794682990.3573449,
+    "seen": 1794713606.33263,
+    "ast_hash": "64e3631aa167ba5f634754e519d70ee4",
     "semantic_hash": ""
   },
   "api/src/config/load-env.ts": {
@@ -330,9 +330,9 @@
     "semantic_hash": ""
   },
   "api/src/db/client.ts": {
-    "mtime": 1794130647.8694565,
-    "seen": 1794160403.4306166,
-    "ast_hash": "73694f546ab72521ffacdd6302a7b30e",
+    "mtime": 1794682989.837874,
+    "seen": 1794713606.33263,
+    "ast_hash": "0263271419b487f1756b2e77359b47c7",
     "semantic_hash": ""
   },
   "api/src/db/schema/_shared.ts": {
@@ -402,9 +402,9 @@
     "semantic_hash": ""
   },
   "api/src/db/schema/index.ts": {
-    "mtime": 1793457711.4295292,
-    "seen": 1793459652.128835,
-    "ast_hash": "d991d7d7dbec0839d71fb266fb6bde91",
+    "mtime": 1794682989.3043344,
+    "seen": 1794713606.3346298,
+    "ast_hash": "25915e801e7e7da7b5a90893f2d6c641",
     "semantic_hash": ""
   },
   "api/src/db/schema/invitations.ts": {
@@ -1188,26 +1188,26 @@
     "semantic_hash": ""
   },
   "api/src/modules/guest-booking/guest-booking.repository.ts": {
-    "mtime": 1793457711.5587134,
-    "seen": 1793459652.1378355,
+    "mtime": 1794682909.7093024,
+    "seen": 1794713606.3526258,
     "ast_hash": "2caec1865ea7561a5ee0e54e56fff673",
     "semantic_hash": ""
   },
   "api/src/modules/guest-booking/guest-booking.routes.ts": {
-    "mtime": 1793457711.5587134,
-    "seen": 1793459652.1378355,
+    "mtime": 1794682909.7103035,
+    "seen": 1794713606.3526258,
     "ast_hash": "07695c2e4a8a001b14b31102cc1592e1",
     "semantic_hash": ""
   },
   "api/src/modules/guest-booking/guest-booking.service.ts": {
-    "mtime": 1793457711.5597136,
-    "seen": 1793459652.1378355,
+    "mtime": 1794682909.7103035,
+    "seen": 1794713606.3526258,
     "ast_hash": "eaffeda4d2eb9c27e5f342d2a38c5a6a",
     "semantic_hash": ""
   },
   "api/src/modules/internal-media/internal-media.routes.ts": {
-    "mtime": 1793457711.5617075,
-    "seen": 1793459652.1378355,
+    "mtime": 1794682909.7169206,
+    "seen": 1794713606.3526258,
     "ast_hash": "4c4afd088ecda6ccaf202d1f5edf7a29",
     "semantic_hash": ""
   },
@@ -1692,8 +1692,8 @@
     "semantic_hash": ""
   },
   "api/src/modules/storefront/storefront-media.ts": {
-    "mtime": 1793457711.6007085,
-    "seen": 1793459652.1428342,
+    "mtime": 1794682909.717915,
+    "seen": 1794713606.3652341,
     "ast_hash": "d22e0511802134c98f73ce964cb902d8",
     "semantic_hash": ""
   },
@@ -1716,8 +1716,8 @@
     "semantic_hash": ""
   },
   "api/src/modules/storefront/storefront.routes.ts": {
-    "mtime": 1793457711.6037092,
-    "seen": 1793459652.1428342,
+    "mtime": 1794682909.717915,
+    "seen": 1794713606.3652341,
     "ast_hash": "70e00c7a35fb0ee6ea0aec36a243b56c",
     "semantic_hash": ""
   },
@@ -1938,9 +1938,9 @@
     "semantic_hash": ""
   },
   "api/src/worker.ts": {
-    "mtime": 1794198571.7810223,
-    "seen": 1794201426.8275187,
-    "ast_hash": "012f2dc033326d85f23c61a027d2046e",
+    "mtime": 1794683132.701852,
+    "seen": 1794713606.3702328,
+    "ast_hash": "b5f14939c653ddc05147e96af09e5b41",
     "semantic_hash": ""
   },
   "api/src/worker/__tests__/embedded.test.ts": {
@@ -2022,14 +2022,14 @@
     "semantic_hash": ""
   },
   "api/src/worker/handlers/hold-expirer.ts": {
-    "mtime": 1790673610.158724,
-    "seen": 1793108177.230493,
-    "ast_hash": "68f988556a3aace5b41675f73d900f84",
+    "mtime": 1794683659.295915,
+    "seen": 1794713606.372233,
+    "ast_hash": "cf6899c15b5ccf80081588d18ee9240b",
     "semantic_hash": ""
   },
   "api/src/worker/handlers/media-cache-invalidation.ts": {
-    "mtime": 1793457711.610706,
-    "seen": 1793459652.1488352,
+    "mtime": 1794682909.7189043,
+    "seen": 1794713606.372233,
     "ast_hash": "73107c7ccbd0126c48a2a59dc08026bf",
     "semantic_hash": ""
   },
@@ -2508,20 +2508,20 @@
     "semantic_hash": ""
   },
   "api/tests/integration/storefront-guest-booking.test.ts": {
-    "mtime": 1793457711.6337085,
-    "seen": 1793459652.154837,
+    "mtime": 1794682909.7586656,
+    "seen": 1794713606.3822372,
     "ast_hash": "cca40bc6d37d968b62f4adcc0bae3cfb",
     "semantic_hash": ""
   },
   "api/tests/integration/storefront-preview.test.ts": {
-    "mtime": 1793457711.6347058,
-    "seen": 1793459652.154837,
+    "mtime": 1794682909.759684,
+    "seen": 1794713606.3822372,
     "ast_hash": "a756cb0b5a38b03d4fbc301d00ad6eec",
     "semantic_hash": ""
   },
   "api/tests/integration/storefront-public-read.test.ts": {
-    "mtime": 1793457711.635708,
-    "seen": 1793459652.154837,
+    "mtime": 1794682909.759684,
+    "seen": 1794713606.3822372,
     "ast_hash": "4c5c398b5cc7d88802bc0152444b730f",
     "semantic_hash": ""
   },
@@ -4542,8 +4542,8 @@
     "semantic_hash": ""
   },
   "contracts/openapi/generate.ts": {
-    "mtime": 1793457716.4523118,
-    "seen": 1793459652.1828346,
+    "mtime": 1794682909.7930176,
+    "seen": 1794713606.4258056,
     "ast_hash": "587a224489c32cad3fb648ef7e103e71",
     "semantic_hash": ""
   },
@@ -4920,8 +4920,8 @@
     "semantic_hash": ""
   },
   "contracts/src/storefront/guest-booking.ts": {
-    "mtime": 1791740550.4074008,
-    "seen": 1793108177.230493,
+    "mtime": 1794682909.7940168,
+    "seen": 1794713606.43381,
     "ast_hash": "4b0afea77e90aff93bb802d049889a39",
     "semantic_hash": ""
   },
@@ -5274,9 +5274,9 @@
     "semantic_hash": ""
   },
   "package.json": {
-    "mtime": 1791637083.323088,
-    "seen": 1793108177.230493,
-    "ast_hash": "9c466a4dd01f97cdff5a32688da4e369",
+    "mtime": 1794646144.0852747,
+    "seen": 1794713606.4408097,
+    "ast_hash": "7c906a572dd094583b55fdfd9f3507a5",
     "semantic_hash": ""
   },
   "skills-lock.json": {
@@ -5532,8 +5532,8 @@
     "semantic_hash": ""
   },
   "web/src/app/s/[slug]/layout.tsx": {
-    "mtime": 1793457740.3123007,
-    "seen": 1793459652.1978347,
+    "mtime": 1794682909.8370156,
+    "seen": 1794713606.4458096,
     "ast_hash": "3eb069b6721e4806942a5ba8b7a88939",
     "semantic_hash": ""
   },
@@ -5736,8 +5736,8 @@
     "semantic_hash": ""
   },
   "web/src/components/store/booking/booking-drawer.tsx": {
-    "mtime": 1794130649.7828312,
-    "seen": 1794160403.5527012,
+    "mtime": 1794682909.8380275,
+    "seen": 1794713606.4508097,
     "ast_hash": "c37305a9e6182143fdc5b23197b6dbd6",
     "semantic_hash": ""
   },
@@ -5922,8 +5922,8 @@
     "semantic_hash": ""
   },
   "web/src/lib/storefront-api.ts": {
-    "mtime": 1793457740.3293014,
-    "seen": 1793459652.2038338,
+    "mtime": 1794682909.8380275,
+    "seen": 1794713606.4551692,
     "ast_hash": "14f4fa2eb430c652c818802d1e9c2d41",
     "semantic_hash": ""
   },
@@ -5934,8 +5934,8 @@
     "semantic_hash": ""
   },
   "web/src/lib/storefront-preview.ts": {
-    "mtime": 1790744335.0632527,
-    "seen": 1793108177.230493,
+    "mtime": 1794682909.8390167,
+    "seen": 1794713606.4551692,
     "ast_hash": "3e12edbc6b644bf3d50211884196b9d6",
     "semantic_hash": ""
   },
@@ -5976,8 +5976,8 @@
     "semantic_hash": ""
   },
   "web/tests/unit/booking-drawer.test.tsx": {
-    "mtime": 1793457740.333297,
-    "seen": 1793459652.2048306,
+    "mtime": 1794682909.8390167,
+    "seen": 1794713606.4561665,
     "ast_hash": "cd46fd70d406af34d6cf00d2e3721116",
     "semantic_hash": ""
   },
@@ -7380,9 +7380,9 @@
     "semantic_hash": ""
   },
   "docs/architecture/Drezivo-Data-Model.md": {
-    "mtime": 1794130648.8020372,
-    "seen": 1794160403.5845857,
-    "ast_hash": "2ea546f82bd051331b13bef19e9a0ea3",
+    "mtime": 1794683505.212231,
+    "seen": 1794713606.4857876,
+    "ast_hash": "4b7c06c6191cc82ebb4c4bcd68799127",
     "semantic_hash": ""
   },
   "docs/architecture/Drezivo-TRD.md": {
@@ -7680,9 +7680,9 @@
     "semantic_hash": ""
   },
   "docs/runbooks/environments.md": {
-    "mtime": 1794198516.530334,
-    "seen": 1794201426.9710646,
-    "ast_hash": "50e23e18f67f4906737b9cf2bf8e8ac0",
+    "mtime": 1794683503.639685,
+    "seen": 1794713606.492784,
+    "ast_hash": "cd0329a447d5d07811f4901d0f5a746f",
     "semantic_hash": ""
   },
   "docs/runbooks/file-object-cleanup.md": {
@@ -7728,9 +7728,9 @@
     "semantic_hash": ""
   },
   "docs/runbooks/pilot-operation.md": {
-    "mtime": 1794198776.6479125,
-    "seen": 1794201426.9721084,
-    "ast_hash": "464295d8ebc45d4ee724e6668268bad0",
+    "mtime": 1794683504.162165,
+    "seen": 1794713606.493784,
+    "ast_hash": "831c7e5f0f0b22d42f41af1cfee578bb",
     "semantic_hash": ""
   },
   "docs/runbooks/private-media-delivery.md": {
@@ -8652,14 +8652,14 @@
     "semantic_hash": ""
   },
   "api/edge/media-worker/worker.mjs": {
-    "mtime": 1793457711.3397534,
-    "seen": 1793459652.125838,
+    "mtime": 1794682909.5813687,
+    "seen": 1794713606.32963,
     "ast_hash": "8cc481b9f8e242783a0adbf78fa52a8e",
     "semantic_hash": ""
   },
   "api/edge/media-worker/worker.test.mjs": {
-    "mtime": 1793457711.3407562,
-    "seen": 1793459652.125838,
+    "mtime": 1794682909.5813687,
+    "seen": 1794713606.32963,
     "ast_hash": "7aee58ebc8231846b3b2d7de15abca3b",
     "semantic_hash": ""
   },
@@ -8676,8 +8676,8 @@
     "semantic_hash": ""
   },
   "api/edge/media-worker/README.md": {
-    "mtime": 1793457711.3397534,
-    "seen": 1793459652.2178304,
+    "mtime": 1794682909.5803633,
+    "seen": 1794713606.4717798,
     "ast_hash": "67c818915029bc58a824b8773746ad53",
     "semantic_hash": ""
   },
@@ -8688,8 +8688,8 @@
     "semantic_hash": ""
   },
   "docs/runbooks/cloudflare-media-worker-setup.md": {
-    "mtime": 1794130616.0192733,
-    "seen": 1794160403.6001978,
+    "mtime": 1794682909.7950132,
+    "seen": 1794713606.492784,
     "ast_hash": "71215933ed556645d0c1d5cd82a63122",
     "semantic_hash": ""
   },
@@ -8712,8 +8712,8 @@
     "semantic_hash": ""
   },
   "api/src/modules/storefront/public-media-edge.routes.ts": {
-    "mtime": 1793457711.5997102,
-    "seen": 1793459652.1428342,
+    "mtime": 1794682909.7169206,
+    "seen": 1794713606.3652341,
     "ast_hash": "e6c9795db8dc787e25348c95f2f7aa35",
     "semantic_hash": ""
   },
@@ -8910,21 +8910,69 @@
     "semantic_hash": ""
   },
   "api/src/worker/__tests__/sweep-scheduler.test.ts": {
-    "mtime": 1794198612.0944495,
-    "seen": 1794201426.8275187,
-    "ast_hash": "8b398c538ee428af1e299c4cb3d5cb42",
+    "mtime": 1794683659.7450845,
+    "seen": 1794713606.3702328,
+    "ast_hash": "cd87fba6a820ee4eaf6bfdb0362f87bf",
     "semantic_hash": ""
   },
   "api/src/worker/sweep-scheduler.ts": {
-    "mtime": 1794198760.1760855,
-    "seen": 1794201426.8295622,
-    "ast_hash": "8625de398352d778f80617f37e8add28",
+    "mtime": 1794683659.7260847,
+    "seen": 1794713606.372233,
+    "ast_hash": "5cd003e8f9de31eaf27b129adf46be5e",
     "semantic_hash": ""
   },
   "api/src/modules/entitlements/__tests__/operator-plan-capacity.test.ts": {
     "mtime": 1794641909.0336833,
     "seen": 1794642084.8943021,
     "ast_hash": "3959facd880af9cbcde1b3b2eb4cfaea",
+    "semantic_hash": ""
+  },
+  ".github/workflows/playwright.yml": {
+    "mtime": 1794646144.083268,
+    "seen": 1794713606.32563,
+    "ast_hash": "8eeea4038250dc5028a9d1bf4da54425",
+    "semantic_hash": ""
+  },
+  "api/src/db/schema/reservation-expiry.ts": {
+    "mtime": 1794683659.7560923,
+    "seen": 1794713606.3346298,
+    "ast_hash": "5e9b795afd4040e61e3dc012303100e0",
+    "semantic_hash": ""
+  },
+  "api/src/worker/handlers/__tests__/scheduled-hold-expirer.test.ts": {
+    "mtime": 1794683659.7022376,
+    "seen": 1794713606.371233,
+    "ast_hash": "ee6c8991cb990d0f7067c4a820b8f220",
+    "semantic_hash": ""
+  },
+  "api/src/worker/handlers/scheduled-hold-expirer.ts": {
+    "mtime": 1794713589.9897745,
+    "seen": 1794713606.372233,
+    "ast_hash": "07ea465c6f2249c1c78d5f40f16d119b",
+    "semantic_hash": ""
+  },
+  "api/tests/integration/reservation-expiry-schedule.test.ts": {
+    "mtime": 1794713548.3468225,
+    "seen": 1794713606.381237,
+    "ast_hash": "d281a3109fcd37bb9b3d5a6bae577399",
+    "semantic_hash": ""
+  },
+  "playwright.config.ts": {
+    "mtime": 1794646144.082266,
+    "seen": 1794713606.4408097,
+    "ast_hash": "aea7147cb8b3e8b7101e91d06a5109c6",
+    "semantic_hash": ""
+  },
+  "tests/example.spec.ts": {
+    "mtime": 1794646144.083268,
+    "seen": 1794713606.4408097,
+    "ast_hash": "68aa5c260169df5934d9ad593ece881e",
+    "semantic_hash": ""
+  },
+  "docs/runbooks/worker-hold-expiry.md": {
+    "mtime": 1794713547.7433877,
+    "seen": 1794713606.494784,
+    "ast_hash": "b907eed01d36ae5b8385566fd1a8de06",
     "semantic_hash": ""
   }
 }

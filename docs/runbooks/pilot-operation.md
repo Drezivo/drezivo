@@ -46,6 +46,11 @@ changing settings, compare a full day's Shared Pooler egress and worker activity
 The free quota is not reset by reducing traffic; egress already used remains until the billing cycle
 resets. Verify hold-release latency on staging before production rollout.
 
+The optional `WORKER_HOLD_EXPIRY_MODE=scheduled` replaces the all-business expiry scan with
+trigger-maintained due-work discovery. It catches up in bounded passes when the host wakes, while
+the embedded worker keeps running other jobs. Migration 0098 is required. The initial default
+remains `scan` until staging validation; use the [rollout and measurement guide](worker-hold-expiry.md).
+
 For the staging check, create test holds for more than one tenant, let them expire, and measure
 from each expiry time until the garment becomes available again. The target is within 30 seconds
 under normal conditions; investigate slow sweeps, skipped intervals, queue backlog, or host sleep

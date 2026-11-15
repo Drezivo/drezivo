@@ -70,10 +70,28 @@ export async function withSystemTenantTransaction<T>(
   systemKey: string,
   fn: (client: PoolClient) => Promise<T>,
 ): Promise<T> {
-  return withTenantTransaction(tenantId, systemKey, async (client) => {
-    await client.query('SELECT set_config($1, $2, true)', ['app.actor_kind', 'system']);
-    return fn(client);
-  });
+  if (!tenantId || !systemKey) {
+    throw new Error('withSystemTenantTransaction: tenantId and systemKey are required');
+  }
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    // One round trip; all context stays local to this transaction on this pooled connection.
+    await client.query(
+      `SELECT set_config('app.tenant_id', $1, true),
+              set_config('app.principal_id', $2, true),
+              set_config('app.actor_kind', 'system', true)`,
+      [tenantId, systemKey],
+    );
+    const result = await fn(client);
+    await client.query('COMMIT');
+    return result;
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 /** Runs one explicitly authorized operator command in tenant scope with an operator actor. */

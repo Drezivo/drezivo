@@ -5,6 +5,22 @@ import { startSweepScheduler } from '../sweep-scheduler.js';
 afterEach(() => vi.useRealTimers());
 
 describe('maintenance sweep scheduler', () => {
+  it('catches up opted-in sweeps immediately and keeps other sweeps on their intervals', async () => {
+    vi.useFakeTimers();
+    const holds = vi.fn().mockResolvedValue(0);
+    const other = vi.fn().mockResolvedValue(0);
+    const scheduler = startSweepScheduler([
+      { name: 'hold expiry', run: holds, intervalMs: 10_000, runOnStart: true },
+      { name: 'other', run: other, intervalMs: 60_000 },
+    ]);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(holds).toHaveBeenCalledTimes(1);
+    expect(other).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(holds).toHaveBeenCalledTimes(2);
+    await scheduler.stop();
+  });
+
   it('runs different sweeps at their configured independent intervals', async () => {
     vi.useFakeTimers();
     const holds = vi.fn().mockResolvedValue(undefined);
@@ -25,12 +41,19 @@ describe('maintenance sweep scheduler', () => {
   it('does not overlap the same sweep and waits for an active run on shutdown', async () => {
     vi.useFakeTimers();
     let finish: (() => void) | undefined;
-    const run = vi.fn(() => new Promise<void>((resolve) => { finish = resolve; }));
+    const run = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          finish = resolve;
+        }),
+    );
     const scheduler = startSweepScheduler([{ name: 'test', run, intervalMs: 1000 }]);
     await vi.advanceTimersByTimeAsync(3000);
     expect(run).toHaveBeenCalledTimes(1);
     let stopped = false;
-    const stop = scheduler.stop().then(() => { stopped = true; });
+    const stop = scheduler.stop().then(() => {
+      stopped = true;
+    });
     await Promise.resolve();
     expect(stopped).toBe(false);
     finish?.();
@@ -41,7 +64,10 @@ describe('maintenance sweep scheduler', () => {
 
   it('retries a failed sweep on the next interval', async () => {
     vi.useFakeTimers();
-    const run = vi.fn().mockRejectedValueOnce(new Error('test failure')).mockResolvedValue(undefined);
+    const run = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('test failure'))
+      .mockResolvedValue(undefined);
     const scheduler = startSweepScheduler([{ name: 'test', run, intervalMs: 1000 }]);
     await vi.advanceTimersByTimeAsync(2000);
     expect(run).toHaveBeenCalledTimes(2);
