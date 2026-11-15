@@ -117,6 +117,8 @@ import {
   dashboardOverviewQuery,
   dashboardOverviewResponse,
   guestReservationRequest,
+  guestQuoteRequest,
+  guestQuote,
   guestReservationCreated,
   guestReceiptUploadRequest,
   guestReceiptUploadResponse,
@@ -765,6 +767,23 @@ registry.registerPath({
 // ---- reservations ---------------------------------------------------------
 registry.registerPath({
   method: 'post',
+  path: '/public/stores/{slug}/quote',
+  tags: ['reservations'],
+  summary: 'Read current guest booking amounts without allocating a garment.',
+  request: {
+    params: z.object({ slug: z.string().min(1) }),
+    body: { content: { 'application/json': { schema: guestQuoteRequest } } },
+  },
+  responses: {
+    200: { description: 'Current advisory quote.', content: { 'application/json': { schema: successEnvelope(guestQuote) } } },
+    404: jsonError('The store or selected item is not available.'),
+    422: jsonError('Validation failed.'),
+    429: jsonError('Too many quote requests.'),
+  },
+});
+
+registry.registerPath({
+  method: 'post',
   path: '/public/stores/{slug}/holds',
   tags: ['reservations'],
   summary: 'Create an exclusive, expiring hold before payment instructions are shown (TRD §5).',
@@ -786,7 +805,7 @@ registry.registerPath({
       content: { 'application/json': { schema: successEnvelope(guestReservationCreated) } },
     },
     403: jsonError('The Turnstile submission check failed.'),
-    409: jsonError('The requested asset/interval is no longer available (CAPACITY_CONFLICT).'),
+    409: jsonError('The requested asset/interval is unavailable, or the confirmed price has changed.'),
     422: jsonError('Validation failed.'),
   },
 });

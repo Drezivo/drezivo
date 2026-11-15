@@ -110,6 +110,8 @@ export const envSchema = z
     // Cloudflare Turnstile secret for storefront guest submissions. Unset (local development)
     // skips the check with one startup warning; when set, missing or rejected tokens are refused.
     TURNSTILE_SECRET_KEY: z.string().min(1).max(200).optional(),
+    // Enable only after the public web app has deployed quote confirmation support.
+    GUEST_QUOTE_CONFIRMATION_REQUIRED: strictBooleanEnv('GUEST_QUOTE_CONFIRMATION_REQUIRED').default(false),
     // Shared with the operator API: signs 5-minute links that open a business's proof of payment
     // (modules/billing/operator-proof-link.ts). Unset = proof links are off.
     OPERATOR_PROOF_LINK_SECRET: z

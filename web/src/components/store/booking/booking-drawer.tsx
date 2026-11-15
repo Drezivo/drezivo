@@ -5,10 +5,10 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useReducer, useRef, useState } from 'react';
 
-import type { CatalogueVariant, FulfillmentMethod, GuestReservationRequest, GuestReservationView, ItemDetail, PublicStorefront } from '@drezivo/contracts';
+import type { CatalogueVariant, FulfillmentMethod, GuestQuote, GuestQuoteRequest, GuestReservationRequest, GuestReservationView, ItemDetail, PublicStorefront } from '@drezivo/contracts';
 
 import { mediaImageSrcSet } from '@/lib/media-image-srcset';
-import { createReservation, StorefrontApiError } from '@/lib/storefront-api';
+import { createReservation, getGuestQuote, StorefrontApiError } from '@/lib/storefront-api';
 import { dateIn, formatDay, formatMinor, formatTime, minimumRentalDays, pickupTimeOptions, rentalDays, zonedInstant } from '@/lib/storefront-format';
 
 import { lockPageScroll } from '../motion/scroll';
@@ -73,12 +73,6 @@ function reducer(state: State, action: Action): State {
   }
 }
 
-/** Display-only estimate before the hold; the exact amount comes back from the server on the pay step. */
-function estimateRentalMinor(variant: CatalogueVariant, days: number): bigint {
-  if (variant.pricing_mode === 'daily') return BigInt(variant.rental_price_minor) * BigInt(days);
-  return BigInt(variant.rental_price_minor) + BigInt(Math.max(0, days - minimumRentalDays(variant))) * BigInt(variant.extra_day_price_minor);
-}
-
 const STEPS: Array<{ key: Step; label: string }> = [
   { key: 'dates', label: 'Dates' },
   { key: 'details', label: 'Details' },
@@ -112,6 +106,9 @@ export function BookingDrawer({ store, item, variant, onClose }: { store: Public
   const robotCheck = useRef<TurnstileHandle>(null);
   const focusRequest = useRef(0);
   const [robotToken, setRobotToken] = useState<string | null>(null);
+  const [quote, setQuote] = useState<GuestQuote | null>(null);
+  const [quoteLoading, setQuoteLoading] = useState(false);
+  const [quoteRevision, setQuoteRevision] = useState(0);
   const [fieldErrors, setFieldErrors] = useState<CustomerFieldErrors>({});
   const [focusTarget, setFocusTarget] = useState<{ field: CustomerField; request: number } | null>(null);
   const [pickupTimeOpen, setPickupTimeOpen] = useState(false);
@@ -119,6 +116,37 @@ export function BookingDrawer({ store, item, variant, onClose }: { store: Public
   const pickupTimeTrigger = useRef<HTMLButtonElement>(null);
   const requirements = store.checkout.requirements;
   const days = state.range ? rentalDays(state.range.start, state.range.end) : 0;
+
+  useEffect(() => {
+    if (state.step !== 'review' || !state.range || !state.paymentMethodId) {
+      setQuote(null);
+      return;
+    }
+    let current = true;
+    const time = state.fulfillment === 'pickup' ? state.pickupTime : store.checkout.handover_time;
+    const request: GuestQuoteRequest = {
+      variant_id: variant.variant_id,
+      requested_interval: {
+        start: zonedInstant(state.range.start, time, store.timezone),
+        end: zonedInstant(state.range.end, time, store.timezone),
+      },
+      event_date: requirements.event_date === 'hidden' || !state.customer.event_date ? null : state.customer.event_date,
+      fulfillment_method: state.fulfillment,
+      payment_method_id: state.paymentMethodId as GuestQuoteRequest['payment_method_id'],
+    };
+    setQuote(null);
+    setQuoteLoading(true);
+    void getGuestQuote(store.slug, request).then((result) => {
+      if (current) setQuote(result);
+    }).catch((error: unknown) => {
+      if (current) dispatch({ type: 'error', message: error instanceof StorefrontApiError ? error.message : 'Could not load the current price. Please try again.' });
+    }).finally(() => {
+      if (current) setQuoteLoading(false);
+    });
+    return () => { current = false; };
+  }, [state.step, state.range?.start, state.range?.end, state.paymentMethodId, state.fulfillment,
+    state.pickupTime, state.customer.event_date, store.checkout.handover_time, store.timezone,
+    store.slug, requirements.event_date, variant.variant_id, quoteRevision]);
 
   useEffect(() => {
     const previous = document.activeElement as HTMLElement | null;
@@ -211,7 +239,7 @@ export function BookingDrawer({ store, item, variant, onClose }: { store: Public
   }
 
   async function placeHold() {
-    if (inFlight.current || !state.range || !state.paymentMethodId || !state.accepted) return;
+    if (inFlight.current || !state.range || !state.paymentMethodId || !state.accepted || !quote) return;
     if (state.fulfillment === 'delivery' && !store.fulfillment.delivery) return;
     if (state.fulfillment === 'pickup' && !pickupTimes.includes(state.pickupTime)) return;
     if (TURNSTILE_SITE_KEY && !robotToken) {
@@ -236,6 +264,7 @@ export function BookingDrawer({ store, item, variant, onClose }: { store: Public
       event_date: requirements.event_date === 'hidden' || !c.event_date ? null : c.event_date,
       fulfillment_method: state.fulfillment,
       payment_method_id: state.paymentMethodId as GuestReservationRequest['payment_method_id'],
+      expected_quote: quote,
     };
     const fingerprint = JSON.stringify({ ...request, turnstile_token: undefined });
     if (intent.current?.fingerprint !== fingerprint) intent.current = { fingerprint, key: crypto.randomUUID() };
@@ -246,7 +275,13 @@ export function BookingDrawer({ store, item, variant, onClose }: { store: Public
       const created = await createReservation(store.slug, request, intent.current.key);
       dispatch({ type: 'held', reservation: created.reservation });
     } catch (caught) {
-      if (caught instanceof StorefrontApiError && caught.status === 409) {
+      if (caught instanceof StorefrontApiError && caught.code === 'PRICE_CHANGE_NOT_ACCEPTED') {
+        intent.current = null;
+        setQuote(null);
+        setQuoteRevision((value) => value + 1);
+        dispatch({ type: 'set', patch: { accepted: false } });
+        dispatch({ type: 'error', message: caught.message });
+      } else if (caught instanceof StorefrontApiError && caught.status === 409) {
         // The server says why the dates were refused (taken meanwhile, minimum length, notice period).
         dispatch({ type: 'range', range: null, notice: { reason: 'other', message: caught.message } });
         dispatch({ type: 'error', message: null, step: 'dates' });
@@ -261,9 +296,7 @@ export function BookingDrawer({ store, item, variant, onClose }: { store: Public
     }
   }
 
-  const rental = state.range ? estimateRentalMinor(variant, days) : 0n;
   const deliveryToArrange = state.fulfillment === 'delivery';
-  const estimate = rental + BigInt(variant.security_deposit_minor);
   const stepIndex = STEPS.findIndex((step) => step.key === state.step);
 
   return (
@@ -461,14 +494,15 @@ export function BookingDrawer({ store, item, variant, onClose }: { store: Public
                 <Row label="Payment" value={store.payment_methods.find((method) => method.id === state.paymentMethodId)?.name ?? ''} />
               </dl>
               <dl className="space-y-2 border-t border-sf-line pt-4 text-sm">
-                <Row label={`Rental · ${days} day${days === 1 ? '' : 's'}`} value={formatMinor(rental.toString())} />
-                <Row label="Refundable deposit" value={formatMinor(variant.security_deposit_minor)} />
+                <Row label={`Rental · ${days} day${days === 1 ? '' : 's'}`} value={quote ? formatMinor(quote.rental_total_minor) : '—'} />
+                <Row label="Refundable deposit" value={quote ? formatMinor(quote.security_required_minor) : '—'} />
                 {deliveryToArrange ? <Row label="Delivery fee" value="Arranged separately with the shop" /> : null}
                 <div className="flex justify-between gap-4 border-t border-sf-line pt-2 font-medium">
-                  <dt>Estimated total</dt>
-                  <dd className="tabular-nums">{formatMinor(estimate.toString())}</dd>
+                  <dt>Current total</dt>
+                  <dd className="tabular-nums">{quote ? formatMinor(quote.due_now_minor) : '—'}</dd>
                 </div>
-                <p className="text-xs text-sf-muted">The exact amount is confirmed on the next step, before you pay.</p>
+                {quoteLoading ? <p className="text-xs text-sf-muted">Checking the current price…</p> : null}
+                {!quoteLoading && !quote ? <button type="button" className="text-xs underline" onClick={() => setQuoteRevision((value) => value + 1)}>Try loading the price again</button> : null}
               </dl>
               <label className="flex items-start gap-3 text-sm">
                 <input type="checkbox" className="mt-1 h-4 w-4 accent-[var(--sf-accent)]" checked={state.accepted} onChange={(event) => dispatch({ type: 'set', patch: { accepted: event.target.checked } })} />
@@ -536,7 +570,7 @@ export function BookingDrawer({ store, item, variant, onClose }: { store: Public
                 Review request
               </button>
             ) : (
-              <button type="button" className="sf-button sf-button-primary flex-1" disabled={!state.accepted || state.pending || (Boolean(TURNSTILE_SITE_KEY) && !robotToken)} onClick={() => void placeHold()}>
+              <button type="button" className="sf-button sf-button-primary flex-1" disabled={!state.accepted || state.pending || !quote || quoteLoading || (Boolean(TURNSTILE_SITE_KEY) && !robotToken)} onClick={() => void placeHold()}>
                 {state.pending ? 'Holding your size…' : 'Hold my size and pay'}
               </button>
             )}

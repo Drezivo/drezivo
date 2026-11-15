@@ -134,12 +134,12 @@ describe('storefront owner preview', async () => {
     expect(response.status).toBe(404);
   });
 
-  it('keeps ordinary public reads cacheable and marked to vary on the preview header', async () => {
+  it('keeps ordinary public reads uncached and marked to vary on the preview header', async () => {
     const ws = await createStorefrontWorkspace('preview-published');
     await admin.query(`UPDATE storefront SET status = 'published', published_at = now() WHERE id = $1`, [ws.storefrontId]);
     const response = await request(createApp()).get(`/api/v1/public/stores/${ws.slug}`);
     expect(response.status).toBe(200);
-    expect(response.headers['cache-control']).toMatch(/^public/);
+    expect(response.headers['cache-control']).toBe('private, no-store');
     expect(response.headers['vary']).toMatch(/X-Storefront-Preview/i);
   });
 });

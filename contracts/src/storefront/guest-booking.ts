@@ -3,7 +3,7 @@ import { z } from 'zod';
 
 import { customerSocialMedia } from '../common/customer';
 import { fileObjectId, fittingId, paymentMethodId, productVariantId, reservationId } from '../common/ids';
-import { moneyString } from '../common/money';
+import { moneyString, nonNegativeMoneyString } from '../common/money';
 import { instantInterval, isoDate, isoInstant } from '../common/time';
 import { fulfillmentMethod, reservationState } from '../reservations';
 import { paymentInstructions } from '../reservations/hold';
@@ -21,6 +21,26 @@ export const guestCustomer = z
   .strict();
 export type GuestCustomer = z.infer<typeof guestCustomer>;
 
+/** Inputs for an advisory, current quote. Availability is confirmed only by creating a hold. */
+export const guestQuoteRequest = z.object({
+  variant_id: productVariantId,
+  requested_interval: instantInterval,
+  event_date: isoDate.nullable(),
+  fulfillment_method: fulfillmentMethod,
+  payment_method_id: paymentMethodId,
+}).strict();
+export type GuestQuoteRequest = z.infer<typeof guestQuoteRequest>;
+
+/** The shopper-confirmed amounts; the server recalculates all of them before creating a hold. */
+export const guestQuote = z.object({
+  rental_total_minor: nonNegativeMoneyString,
+  security_required_minor: nonNegativeMoneyString,
+  delivery_total_minor: nonNegativeMoneyString,
+  due_now_minor: nonNegativeMoneyString,
+  currency: z.literal('PHP'),
+}).strict();
+export type GuestQuote = z.infer<typeof guestQuote>;
+
 /** POST /public/stores/{slug}/holds. Send an `Idempotency-Key` header. */
 export const guestReservationRequest = z
   .object({
@@ -32,6 +52,7 @@ export const guestReservationRequest = z
     event_date: isoDate.nullable(),
     fulfillment_method: fulfillmentMethod,
     payment_method_id: paymentMethodId,
+    expected_quote: guestQuote.optional(),
   })
   .strict();
 export type GuestReservationRequest = z.infer<typeof guestReservationRequest>;
