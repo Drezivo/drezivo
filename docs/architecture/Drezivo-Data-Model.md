@@ -15,6 +15,13 @@ V1 presents one garment per checkout and Owner/Front desk operations. Multiple r
 
 ## 2. Conventions
 
+Reservation expiry also has a derived `reservation_expiry_schedule` table (migration 0098):
+`reservation_id` primary key, `tenant_id`, and `expires_at`, with a same-tenant reservation foreign
+key and cascade deletion. A private trigger maintains eligible held/pending-confirmation rows and
+their deadlines atomically. Only the worker can read this minimal metadata across tenants;
+authoritative reservation access remains tenant-scoped. Runtime roles cannot write the schedule.
+See [scheduled expiry](../runbooks/worker-hold-expiry.md) for rollout, bounds and measurement.
+
 - Tenant-owned primary keys are `(tenant_id,id)`. UUIDs are generated server-side; every tenant-owned row directly references `tenant.id`.
 - Global tables include account lifecycle, account Terms acceptance, onboarding/idempotency/audit,
   tenant, plan, entitlement and webhook records. Every tenant-owned foreign reference includes
