@@ -1,3 +1,13 @@
+---
+title: "0016. App-only Growth and Scale plans"
+type: decision
+status: reference
+owner: Drezivo team
+source: "Original document and references within; moved into the vault on 2026-11-15"
+updated: 2026-11-15
+tags: [drezivo, decision]
+---
+
 # 0016. App-only Growth and Scale plans
 
 **Status:** Accepted
@@ -43,5 +53,5 @@ existing lifetime-eligible fourteen-day trial.
 ## Related decisions
 
 - [ADR 0015](0015-starter-and-standard-plans.md) defines public Starter and Standard plans.
-- [PRD pricing and entitlements](../product/Drezivo-PRD.md#6-pricing-entitlements-notifications-operator-admin-billing)
+- [PRD pricing and entitlements](../../01-Product/Drezivo-PRD.md#6-pricing-entitlements-notifications-operator-admin-billing)
   defines current product-facing requirements.

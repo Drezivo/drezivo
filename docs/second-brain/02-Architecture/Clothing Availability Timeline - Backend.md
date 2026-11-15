@@ -3,7 +3,7 @@ title: Clothing Availability Timeline - Backend
 type: architecture
 status: implemented
 owner: Drezivo platform team
-source: "../../../api/V1-BACKEND-CHECKLIST.md; ../../architecture/Drezivo-TRD.md; ../../architecture/Drezivo-Data-Model.md; ../../../contracts/src/operations/calendar.ts"
+source: "../../../api/V1-BACKEND-CHECKLIST.md; Drezivo-TRD.md; Drezivo-Data-Model.md; ../../../contracts/src/operations/calendar.ts"
 updated: 2026-09-27
 tags:
   - drezivo

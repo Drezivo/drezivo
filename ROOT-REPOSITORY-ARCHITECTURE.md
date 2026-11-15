@@ -134,8 +134,9 @@ product decision changes. Historical documents keep a superseded banner and are 
 | `contracts/src` | schemas, DTOs, enums, OpenAPI source | provider calls and persistence |
 | `app/src` | staff pages, components, typed API client, submit guards | authoritative roles, money, and database access |
 | `web/src` | public pages, storefront, guest flow, SEO, typed API client | private tenant data and server-side business rules |
-| `docs/product` | current product and legal drafts | secrets and runtime code |
-| `docs/architecture` | TRD, data model, ERD source | unverified production claims |
+| `docs/second-brain` | canonical product and technical specifications, decisions, and linked notes | secrets and runtime code |
+| `docs/product` | legal drafts and product assets | secrets and runtime code |
+| `docs/architecture` | ERD sources and architecture index | unverified production claims |
 | `.claude` | editable agent rules, hooks, and skills | project data and secrets |
 | `.codex` | synchronized Codex rules, hooks, and skills | manual divergence from `.claude` |
 | `node_modules`, `dist`, `.next`, coverage | generated local artifacts | commits and manual edits |
@@ -213,6 +214,6 @@ security rules. Never create a second root Git repository or push from a former 
 ## Historical architecture note
 
 The initial scaffold used five independent Git repositories. That decision is retained in
-`docs/decisions/0001-polyrepo-five-repositories.md` as a superseded record. The active decision is
+`docs/second-brain/04-Decisions/ADRs/0001-polyrepo-five-repositories.md` as a superseded record. The active decision is
 one root monorepo with workspace boundaries and one review, license, and release boundary. CI will
 be enabled after the documented scaffold gate is green.

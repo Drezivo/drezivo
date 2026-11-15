@@ -1,10 +1,20 @@
+---
+title: "Tenancy and onboarding migration plan"
+type: architecture
+status: reference
+owner: Drezivo team
+source: "Original document and references within; moved into the vault on 2026-11-15"
+updated: 2026-11-15
+tags: [drezivo, architecture]
+---
+
 # Tenancy and onboarding migration plan
 
 **Status:** approved tenancy/onboarding foundation with additive owner identity and tenant bootstrap migrations applied in code
 **Owner:** API and database maintainers  
 **Source:** `Tenancy, Onboarding, Clerk, Memberships, and Billing Foundation` in the Second Brain, 16 September 2026  
 **Updated:** 1 October 2026
-**Related:** [TRD](Drezivo-TRD.md), [Data Model](Drezivo-Data-Model.md), [ERD](Drezivo-ERD.dbml), [migration runbook](../runbooks/migrations.md)
+**Related:** [TRD](Drezivo-TRD.md), [Data Model](Drezivo-Data-Model.md), [ERD](../../architecture/Drezivo-ERD.dbml), [migration runbook](../../runbooks/migrations.md)
 
 This document defines the forward-only database work for tenancy onboarding. Reviewed SQL
 migrations and service behavior are owned by their corresponding TBF tasks.
@@ -109,12 +119,12 @@ physical-asset and 0/2/10 Front Desk-seat limits. Migration `0063_pilot_billing.
 `starter` v1 active at 30,000 PHP minor units/month, initially setting its limits to 1,000 assets and
 10 Front Desk seats, and deactivates Professional and Business v1. Migration
 `0071_starter_plan_limits.sql` set the Standard limits to 300 active physical clothing items and 3
-Front Desk seats under [ADR 0013](../decisions/0013-starter-plan-capacity.md); migration
-`0072_starter_plan_price.sql` set its price to PHP 299 under [ADR 0014](../decisions/0014-starter-plan-price.md).
+Front Desk seats under [ADR 0013](../04-Decisions/ADRs/0013-starter-plan-capacity.md); migration
+`0072_starter_plan_price.sql` set its price to PHP 299 under [ADR 0014](../04-Decisions/ADRs/0014-starter-plan-price.md).
 Migration `0075_starter_standard_plan_tiers.sql` preserves that Standard row and its subscription
 references while renaming its code from `starter` to `standard`, creates a new `starter` row at PHP
 149 with 125-item/0-seat limits, and normalizes existing onboarding selections to Standard. Both
-plans use the fourteen-day lifetime-eligible trial described in [ADR 0015](../decisions/0015-starter-and-standard-plans.md).
+plans use the fourteen-day lifetime-eligible trial described in [ADR 0015](../04-Decisions/ADRs/0015-starter-and-standard-plans.md).
 The old Professional and Business rows remain for audit history. The winning database transaction
 creates the tenant, `Main Branch`, Owner membership/grant, draft storefront, the selected plan's trial
 subscription, `trial_started` event, both audit records, and a `tenant.bootstrapped` outbox event,
@@ -134,13 +144,10 @@ invitation reservations under the same tenant lock.
 
 TBF-033 completes the Phase 3 lifecycle boundary without adding a new table. The existing
 `subscription` and `subscription_event` records are transitioned by one shared database-time
-service. This was the original seven-day grace design; the pilot replaces it with request-time
-derived full/read-only/locked access based on subscription dates, a 30-day read-only window, and
-an operator-granted read-only extension. The storefront stays online without new intake for the
-first three days after the period ends, then goes offline. The current pilot has no alternate
-sellable plan or owner-facing plan change. The Owner-only `POST /api/v1/subscription/plan` command
-must resolve an active plan and cannot switch to a retired plan; future plan changes require a new
-owner decision and migration.
+service. The current policy derives full/read-only/locked access at request time from subscription
+dates, with a seven-day read-only window and an operator-granted read-only extension. The
+storefront stays online without new intake for the first day, then goes offline. Current plan
+selection and operator changes are documented in the PRD and ADRs 0015 through 0018.
 
 TBF-040 adds `0019_membership_invitations.sql` and four authenticated tenant-context Owner routes
 for local invitation state. Recipient email is normalized, HMAC-digested for exact tenant-local

@@ -1,3 +1,13 @@
+---
+title: "0012. Email-free guest reservation and fitting flow"
+type: decision
+status: reference
+owner: Drezivo team
+source: "Original document and references within; moved into the vault on 2026-11-15"
+updated: 2026-11-15
+tags: [drezivo, decision]
+---
+
 # 0012. Email-free guest reservation and fitting flow
 
 **Status:** Accepted
@@ -62,7 +72,7 @@ worker tests prove queued legacy customer messages are not delivered.
 
 - [ADR 0010](0010-storefront-cms-and-guest-requests.md) remains the source for CMS and original guest
   transaction structure, with superseded email/access provisions marked above.
-- [Drezivo TRD §3](../architecture/Drezivo-TRD.md#3-authentication-authorization-and-tenant-isolation)
+- [Drezivo TRD §3](../../02-Architecture/Drezivo-TRD.md#3-authentication-authorization-and-tenant-isolation)
   defines the current access boundary.
-- [Pilot operation](../runbooks/pilot-operation.md) and [worker deployment](../runbooks/worker-cloud-run.md)
+- [Pilot operation](../../../runbooks/pilot-operation.md) and [worker deployment](../../../runbooks/worker-cloud-run.md)
   define release operations.

@@ -13,7 +13,7 @@ disagrees with it.
 | `app` (staff dashboard) | Managed Next.js host (Vercel is a named candidate) | One Next.js build |
 | `web` (marketing + storefront) | Managed Next.js host (same candidate) | One Next.js build |
 | `api` server | Managed container host | One container image, HTTP server entrypoint |
-| worker | Same managed container host | Same container image, worker entrypoint (`docs/decisions/0004-worker-in-api-repository.md`) |
+| worker | Same managed container host | Same container image, worker entrypoint (`docs/second-brain/04-Decisions/ADRs/0004-worker-in-api-repository.md`) |
 | Database | Supabase PostgreSQL, Data API disabled | N/A — managed |
 | Files | Cloudflare R2 private object storage; public derivatives remain a separate gate | N/A — managed |
 

@@ -1,3 +1,13 @@
+---
+title: "Drezivo — Market Research and Product Review"
+type: product
+status: reference
+owner: Drezivo team
+source: "Original document and references within; moved into the vault on 2026-11-15"
+updated: 2026-11-15
+tags: [drezivo, product]
+---
+
 # Drezivo — Market Research and Product Review
 
 **Research date:** 15 September 2026  
@@ -6,7 +16,7 @@
 
 ## 1. Recommendation
 
-Build a clothing-rental operations product for independent shops first. Lead V1 with reliable booking of a particular garment, clear payment verification, and turnaround management. Validate fittings for V1.1; do not market them as available at launch. Keep the proposed Next.js/TypeScript, Express/TypeScript, PostgreSQL, Clerk, S3-compatible object-storage, and REST architecture. Supabase became the managed PostgreSQL provider on 26 September 2026 and Cloudflare R2 became the production object-storage target on 30 September 2026, with MinIO retained locally; see [ADR 0009](../decisions/0009-supabase-managed-postgresql.md) and [ADR 0010](../decisions/0010-cloudflare-r2-object-storage.md). A modular backend and explicit data invariants matter more at this stage than adding infrastructure.
+Build a clothing-rental operations product for independent shops first. Lead V1 with reliable booking of a particular garment, clear payment verification, and turnaround management. Validate fittings for V1.1; do not market them as available at launch. Keep the proposed Next.js/TypeScript, Express/TypeScript, PostgreSQL, Clerk, S3-compatible object-storage, and REST architecture. Supabase became the managed PostgreSQL provider on 26 September 2026 and Cloudflare R2 became the production object-storage target on 30 September 2026, with MinIO retained locally; see [ADR 0009](../04-Decisions/ADRs/0009-supabase-managed-postgresql.md) and [ADR 0010](../04-Decisions/ADRs/0010-cloudflare-r2-object-storage.md). A modular backend and explicit data invariants matter more at this stage than adding infrastructure.
 
 The opportunity is **a locally usable, clothing-specific workflow**, not the invention of online rental booking. The feature gap and willingness to pay remain hypotheses. Branches are a later operating model, but tenant ownership, physical garment identity, and a default branch belong in the initial model.
 
@@ -106,7 +116,7 @@ These are recommended gates, not calendar commitments. If interviews show fittin
 
 ## 6. Pricing and unit economics
 
-The public marketing snapshot has **Free** at PHP 0/month, **Starter** at PHP 149/month (125 active physical clothing items and no Front Desk seats), and **Standard** at PHP 299/month (300 items and 3 Front Desk seats). The app-only catalog also has **Growth** at PHP 499/month (500 items/5 seats) and **Scale** at PHP 999/month (1,000 items/8 seats); both inherit Standard's paid features and fourteen-day trial. [ADR 0015](../decisions/0015-starter-and-standard-plans.md), [ADR 0016](../decisions/0016-app-only-growth-scale-plans.md), and migrations `0075_starter_standard_plan_tiers.sql` and `0092_growth_scale_plan_tiers.sql` define these owner-set offers. The old Professional/Business rows remain historical. These prices do not establish willingness to pay or unit economics. Do not advertise “Most Popular,” unlimited assets, dedicated support, or unreleased features. Reliability, access control, usable export, and prevention of duplicate bookings are not premium gates.
+The public marketing snapshot has **Free** at PHP 0/month, **Starter** at PHP 149/month (125 active physical clothing items and no Front Desk seats), and **Standard** at PHP 299/month (300 items and 3 Front Desk seats). The app-only catalog also has **Growth** at PHP 499/month (500 items/5 seats) and **Scale** at PHP 999/month (1,000 items/8 seats); both inherit Standard's paid features and fourteen-day trial. [ADR 0015](../04-Decisions/ADRs/0015-starter-and-standard-plans.md), [ADR 0016](../04-Decisions/ADRs/0016-app-only-growth-scale-plans.md), and migrations `0075_starter_standard_plan_tiers.sql` and `0092_growth_scale_plan_tiers.sql` define these owner-set offers. The old Professional/Business rows remain historical. These prices do not establish willingness to pay or unit economics. Do not advertise “Most Popular,” unlimited assets, dedicated support, or unreleased features. Reliability, access control, usable export, and prevention of duplicate bookings are not premium gates.
 
 Booqable's public page separates base plans, billing cadence, and add-ons. Exact checkout currency, regional taxation, billing terms, and add-on totals must be verified when making a purchasing comparison. Drezivo should present its own all-in cost clearly rather than compare an ambiguous foreign headline price against a PHP plan. [Booqable pricing](https://booqable.com/pricing/).
 

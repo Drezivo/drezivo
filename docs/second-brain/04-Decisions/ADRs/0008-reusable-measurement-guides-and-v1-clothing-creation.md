@@ -1,3 +1,13 @@
+---
+title: "0008. Reusable measurement guides and simplified V1 clothing creation"
+type: decision
+status: reference
+owner: Drezivo team
+source: "Original document and references within; moved into the vault on 2026-11-15"
+updated: 2026-11-15
+tags: [drezivo, decision]
+---
+
 # 0008. Reusable measurement guides and simplified V1 clothing creation
 
 **Status:** accepted
@@ -89,7 +99,7 @@ The UI may ask for included days and convert them to canonical minutes. Charging
 
 ## References
 
-- [Product Requirements Document](../product/Drezivo-PRD.md)
-- [Logical Data Model](../architecture/Drezivo-Data-Model.md)
-- [ERD](../architecture/Drezivo-ERD.dbml)
-- [Technical Requirements Document](../architecture/Drezivo-TRD.md)
+- [Product Requirements Document](../../01-Product/Drezivo-PRD.md)
+- [Logical Data Model](../../02-Architecture/Drezivo-Data-Model.md)
+- [ERD](../../../architecture/Drezivo-ERD.dbml)
+- [Technical Requirements Document](../../02-Architecture/Drezivo-TRD.md)

@@ -13,7 +13,7 @@ tags: [drezivo, reservations, pricing, rental-days, availability, storefront, op
 
 **Decision gate:** Confirm the actual rental-day rule with the business owner before starting Phase 1. If the owner confirms that a “3-day rental” means **Day 1 pickup, Day 2 event/use, Day 3 return**, execute this plan. If the owner confirms a true 72-hour rental, close this plan as not required and keep the current elapsed-duration model.
 
-**Canonical specifications affected if verified:** [PRD](../../product/Drezivo-PRD.md), [TRD](../../architecture/Drezivo-TRD.md), [Data Model](../../architecture/Drezivo-Data-Model.md), [ERD](../../architecture/Drezivo-ERD.dbml), [[Reservations Checklist]], [[Availability Checklist]], [[Clothing Checklist]], [[Schedule Calendar Checklist]], and `docs/reservation-checklist.md`.
+**Canonical specifications affected if verified:** [PRD](../01-Product/Drezivo-PRD.md), [TRD](../02-Architecture/Drezivo-TRD.md), [Data Model](../02-Architecture/Drezivo-Data-Model.md), [ERD](../../architecture/Drezivo-ERD.dbml), [[Reservations Checklist]], [[Availability Checklist]], [[Clothing Checklist]], [[Schedule Calendar Checklist]], and `docs/reservation-checklist.md`.
 
 ## 1. Problem statement
 
@@ -53,7 +53,7 @@ If the owner confirms this convention, the current Drezivo rule is a **business-
 
 The current production rule is explicitly documented and implemented as elapsed time:
 
-- `docs/product/Drezivo-PRD.md` FR7–FR8 says a 3-day fixed rental rejects less than 72 hours and accepts exactly 72 hours.
+- `docs/second-brain/01-Product/Drezivo-PRD.md` FR7–FR8 says a 3-day fixed rental rejects less than 72 hours and accepts exactly 72 hours.
 - `docs/reservation-checklist.md` records `included_duration_minutes` as the base-price duration and hard minimum.
 - `api/src/modules/reservations/reservations.quote.ts` calculates included duration and extra days from timestamp differences.
 - `api/src/modules/reservations/reservations.service.ts` exposes `minimum_duration_minutes` and uses `computeRentalTotal(...)` for exact availability checks.
@@ -526,9 +526,9 @@ This is an implementation map, not an exhaustive list.
 
 ### Documentation
 
-- `docs/product/Drezivo-PRD.md`
+- `docs/second-brain/01-Product/Drezivo-PRD.md`
 - `docs/reservation-checklist.md`
-- `docs/architecture/Drezivo-Data-Model.md`
+- `docs/second-brain/02-Architecture/Drezivo-Data-Model.md`
 - `docs/architecture/Drezivo-ERD.dbml`
 - relevant Second Brain Operations checklists
 

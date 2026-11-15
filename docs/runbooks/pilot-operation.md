@@ -106,8 +106,8 @@ message; deploy the updated API/worker/web release together before accepting sto
   to show only Free, Starter, and Standard. The earlier former Professional and Business rows remain
   historical. Applying plan caps does not remove existing items or members; check usage and advise
   businesses above the cap that new additions or invitations are blocked until usage drops below it.
-  See [ADR 0015](../decisions/0015-starter-and-standard-plans.md) and
-  [ADR 0016](../decisions/0016-app-only-growth-scale-plans.md).
+  See [ADR 0015](../second-brain/04-Decisions/ADRs/0015-starter-and-standard-plans.md) and
+  [ADR 0016](../second-brain/04-Decisions/ADRs/0016-app-only-growth-scale-plans.md).
 - **Sign-up:** an owner signs up (for example with Google), names the business, selects Free or any
   paid plan, and confirms the selected plan. Eligible paid plans start the same 14-day trial; Free has
   no trial. Mid-trial paid-plan changes remain unavailable.

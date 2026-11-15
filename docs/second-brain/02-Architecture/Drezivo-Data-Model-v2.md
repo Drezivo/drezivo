@@ -1,9 +1,19 @@
+---
+title: "Drezivo — Logical Database Specification v2"
+type: architecture
+status: proposal
+owner: Drezivo team
+source: "Original document and references within; moved into the vault on 2026-11-15"
+updated: 2026-11-15
+tags: [drezivo, architecture]
+---
+
 # Drezivo — Logical Database Specification v2
 
 **Revision:** 2.2 · **Date:** 1 October 2026
 **Target:** Supabase PostgreSQL. This is an ERD-ready logical specification, not a deployed database or production migration.
 
-The [DBML](Drezivo-ERD-v2.dbml) defines exact types, nullability, keys, indexes and foreign-key relationships. This document specifies business meaning and constraints a diagram cannot enforce. Read with the [PRD](../product/Drezivo-PRD.md) and [TRD](Drezivo-TRD.md). V2 is a reviewed proposal for operator activity and command persistence; it is not an applied migration.
+The [DBML](../../architecture/Drezivo-ERD-v2.dbml) defines exact types, nullability, keys, indexes and foreign-key relationships. This document specifies business meaning and constraints a diagram cannot enforce. Read with the [PRD](../01-Product/Drezivo-PRD.md) and [TRD](Drezivo-TRD.md). V2 is a reviewed proposal for operator activity and command persistence; it is not an applied migration.
 
 ## 1. Design and release boundaries
 
@@ -195,7 +205,7 @@ Partial monetary refunds and damage deductions belong in V1. Partial physical re
 
 ## 8. SaaS billing, files and durable jobs
 
-`plan` is versioned by `(code,version)`. Starter is 14,900 PHP minor units/month with limits 125/0; Standard is 29,900 with published limits 300/3; Growth is 49,900 with limits 500/5; Scale is 99,900 with limits 1,000/8. Migrations `0075_starter_standard_plan_tiers.sql`, `0082_free_plan_entitlements.sql`, and `0092_growth_scale_plan_tiers.sql` own the plan rows and capabilities. The existing Standard row identity remains unchanged. Plan entitlements are global and server-owned; active plan and required entitlement rows must both pass, and a missing or disabled limit fails closed. The API catalog supplies onboarding and billing; the public marketing site uses its own three-plan snapshot. `subscription` is current state, `subscription_event` preserves commercial changes, and `subscription_payment` records Drezivo collections only. They never feed renter-payment balances. Paid-plan access is derived at request time from trial/period dates: a 14-day trial, then up to 30 days read-only, with the storefront online without intake for the first 3 days. No expiry worker changes subscription state. `grace_ends_at` is an operator-granted read-only extension. Mid-trial self-service plan changes remain unavailable.
+`plan` is versioned by `(code,version)`. Starter is 14,900 PHP minor units/month with limits 125/0; Standard is 29,900 with published limits 300/3; Growth is 49,900 with limits 500/5; Scale is 99,900 with limits 1,000/8. Migrations `0075_starter_standard_plan_tiers.sql`, `0082_free_plan_entitlements.sql`, and `0092_growth_scale_plan_tiers.sql` own the plan rows and capabilities. The existing Standard row identity remains unchanged. Plan entitlements are global and server-owned; active plan and required entitlement rows must both pass, and a missing or disabled limit fails closed. The API catalog supplies onboarding and billing; the public marketing site uses its own three-plan snapshot. `subscription` is current state, `subscription_event` preserves commercial changes, and `subscription_payment` records Drezivo collections only. They never feed renter-payment balances. Paid-plan access is derived at request time from trial/period dates: a 14-day trial, then up to 7 days read-only, with the storefront online without intake for the first day. No expiry worker changes subscription state. `grace_ends_at` is an operator-granted read-only extension. Mid-trial self-service plan changes remain unavailable.
 
 The TBF-032 entitlement service is the single runtime resolver for the current active
 version-1 plan. It validates the subscription, plan, and required `physical_assets.max` and

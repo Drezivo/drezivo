@@ -1,3 +1,13 @@
+---
+title: "0003. `@drezivo/contracts` as the single source of truth for request/response shapes"
+type: decision
+status: accepted
+owner: Drezivo team
+source: "Original document and references within; moved into the vault on 2026-11-15"
+updated: 2026-11-15
+tags: [drezivo, decision]
+---
+
 # 0003. `@drezivo/contracts` as the single source of truth for request/response shapes
 
 **Status:** Accepted, dated 15 September 2026

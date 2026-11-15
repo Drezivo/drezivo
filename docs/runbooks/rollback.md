@@ -31,7 +31,7 @@ order."
    is a **forward** migration that restores compatibility (e.g., temporarily relaxing a
    constraint just enforced), not a rollback of the migration itself.
 4. Roll back the worker artifact alongside the server artifact — they come from the same image
-   (`docs/decisions/0004-worker-in-api-repository.md`), so rolling back one without the other
+   (`docs/second-brain/04-Decisions/ADRs/0004-worker-in-api-repository.md`), so rolling back one without the other
    reintroduces the exact version-mismatch problem the shared-image design avoids.
 5. Confirm via the version/health signal (`docs/runbooks/release.md`) that the rollback actually
    took effect on every instance, not just the first one to redeploy.

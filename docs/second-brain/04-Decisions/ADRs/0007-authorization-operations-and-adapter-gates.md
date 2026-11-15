@@ -1,3 +1,13 @@
+---
+title: "0007. Authorization resolution, operational commands, and adapter gates"
+type: decision
+status: reference
+owner: Drezivo team
+source: "Original document and references within; moved into the vault on 2026-11-15"
+updated: 2026-11-15
+tags: [drezivo, decision]
+---
+
 # 0007. Authorization resolution, operational commands, and adapter gates
 
 **Status:** accepted design decisions with implementation gaps
@@ -126,9 +136,9 @@ the system is described as ready for paid traffic.
 
 ## References
 
-- [Technical Requirements Document](../architecture/Drezivo-TRD.md)
-- [Logical data model](../architecture/Drezivo-Data-Model.md)
-- [API response envelope](../architecture/2026-09-16-api-response-envelope.md)
+- [Technical Requirements Document](../../02-Architecture/Drezivo-TRD.md)
+- [Logical data model](../../02-Architecture/Drezivo-Data-Model.md)
+- [API response envelope](../../02-Architecture/2026-09-16-api-response-envelope.md)
 - [Worker ownership decision](0004-worker-in-api-repository.md)
 - [Monorepo ownership decision](0006-monorepo.md)
-- [Security incident runbook](../runbooks/security-incident.md)
+- [Security incident runbook](../../../runbooks/security-incident.md)

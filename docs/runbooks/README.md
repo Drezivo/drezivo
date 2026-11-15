@@ -16,7 +16,7 @@ most.
 
 Reviewers: treat a runbook-affecting change with no runbook update as an incomplete PR, the same
 way a contract-affecting change with no `@drezivo/contracts` PR is incomplete
-(`docs/decisions/0006-monorepo.md`).
+(`docs/second-brain/04-Decisions/ADRs/0006-monorepo.md`).
 
 ## Contents
 

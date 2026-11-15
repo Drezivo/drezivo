@@ -260,5 +260,5 @@ pending implementation. This mirrors `docs/runbooks/README.md`'s rule that a run
 the same PR as the change it describes, applied to product/architecture specs as well.
 
 **Conflict resolution.** When two documents in this repository disagree, `docs/AGENTS.md`'s
-source-priority order decides which one wins: current owner instructions first, then `product/Drezivo-PRD.md`, accepted ADRs and the TRD, then historical product references. If a conflict cannot be resolved from the docs using that order, say so explicitly in
+source-priority order decides which one wins: current owner instructions first, then `second-brain/01-Product/Drezivo-PRD.md`, accepted ADRs and the TRD in the vault, then historical product references. If a conflict cannot be resolved from the docs using that order, say so explicitly in
 the affected document rather than silently picking one side.

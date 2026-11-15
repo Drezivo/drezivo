@@ -3,7 +3,7 @@ title: Cloudflare R2 Object Storage
 type: decision
 status: accepted
 date: 2026-09-30
-source: "../../decisions/0010-cloudflare-r2-object-storage.md"
+source: "ADRs/0010-cloudflare-r2-object-storage.md"
 tags: [drezivo, storage, r2, architecture]
 ---
 

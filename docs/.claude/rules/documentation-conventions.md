@@ -13,7 +13,7 @@ Docs should help future implementation stay aligned with the product:
 * Treat product docs as source-of-truth guidance for product intent.
 * Keep documentation rental-first, not generic ecommerce-first.
 * Preserve the distinction between business-facing SaaS workflows and public customer storefront workflows.
-* Keep V1 single-branch and single-garment; fittings and multi-item UI are V1.1. See product/Drezivo-PRD.md.
+* Keep V1 single-branch and single-garment; fittings and multi-item UI are V1.1. See second-brain/01-Product/Drezivo-PRD.md.
 * Do not casually introduce marketplace behavior, native mobile apps, integrated payment gateways, advanced analytics, AI recommendations, loyalty systems, complex accounting, or enterprise workflows unless explicitly requested.
 * Make tenant isolation explicit when documenting data, backend behavior, permissions, or product flows.
 * Prefer clear product language over implementation jargon unless the doc is specifically technical.
@@ -23,7 +23,7 @@ Docs should help future implementation stay aligned with the product:
 
 When product docs conflict, prefer sources in this order:
 
-1. Current owner instructions, then `product/Drezivo-PRD.md` and accepted ADRs; legacy project context is historical.
+1. Current owner instructions, then `second-brain/01-Product/Drezivo-PRD.md` and accepted ADRs; legacy project context is historical.
 2. Page, flow, architecture, database, and feature-specific docs.
 3. Notes and exploratory documents.
 

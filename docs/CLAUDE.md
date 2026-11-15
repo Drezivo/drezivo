@@ -1,7 +1,7 @@
 # Drezivo docs
 
-Product/architecture/runbooks repository. The nested `second-brain/` folder is a non-authoritative
-Obsidian memory layer. Read AGENTS.md for source precedence.
+Product, architecture, and runbooks workspace. The `second-brain/` vault contains canonical
+specifications and decisions. Read AGENTS.md for source precedence.
 Commands: `npm ci`, `npm run lint:md`, `npm run lint:links`.
 Current PRD and accepted decisions supersede legacy product context.
 V1 single branch/single garment; fittings V1.1; branches V2.

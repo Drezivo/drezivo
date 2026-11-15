@@ -1,3 +1,13 @@
+---
+title: "0001. Five repositories, not one monorepo"
+type: decision
+status: superseded
+owner: Drezivo team
+source: "Original document and references within; moved into the vault on 2026-11-15"
+updated: 2026-11-15
+tags: [drezivo, decision]
+---
+
 # 0001. Five repositories, not one monorepo
 
 > **Superseded 16 September 2026.** See [0006. Consolidate the Drezivo workspaces into one

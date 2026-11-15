@@ -62,7 +62,7 @@ the conditions that should trigger a revisit.
 
 - Never place API keys, Clerk tokens, database URLs, payment data, or customer PII in the vault.
 - Link to source code and external research; copy only durable conclusions and cite the source/date.
-- Treat `docs/product/Drezivo-PRD.md`, `docs/architecture/Drezivo-TRD.md`, and the root architecture guide as authoritative.
+- Treat `docs/second-brain/01-Product/Drezivo-PRD.md`, `docs/second-brain/02-Architecture/Drezivo-TRD.md`, and the root architecture guide as authoritative.
 - Move superseded notes to `99-Archive` and set `status: archived`; do not delete decision history.
 
 ## Update loop

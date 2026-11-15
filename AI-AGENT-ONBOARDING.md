@@ -77,8 +77,9 @@ Open `docs/second-brain/` as a project-only Obsidian vault and begin at
 `00-Home/Drezivo Home.md`. Use vault-relative wikilinks, YAML properties, source/date fields, and
 the numbered folders. Update the Canvas only when relationships change and keep node IDs stable.
 Use private Obsidian Sync or a private Git repository; never sync credentials, customer PII,
-payment evidence, or production exports. The vault is a linked memory layer, not an authority over
-code, migrations, PRD/TRD, or accepted ADRs.
+payment evidence, or production exports. The vault contains the canonical product and technical
+specifications and accepted decisions. Code and migrations are evidence of implemented behavior;
+record discrepancies rather than treating unverified implementation as a product decision.
 
 ## 7. Finish the turn
 

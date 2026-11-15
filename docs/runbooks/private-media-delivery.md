@@ -8,13 +8,12 @@ The source R2 bucket stays private. Browsers never receive R2 object URLs, keys,
 
 Storefront data contains an absolute API-host URL such as `https://api.drezivo.shop/api/media/public/stores/{slug}/files/{fileId}?w=960`.
 
-1. The API-host Cloudflare Worker looks up the URL plus width in its local cache. A fresh entry is served for up to 45 seconds.
-2. On a miss, the Worker requests a private, server-to-server grant from the API. The API rechecks publication, tenant, file state, image purpose, current storefront reference, and the selected 320/960/1600 variant before issuing a 60-second R2 read grant.
-3. The Worker fetches the private object, validates its response, returns the image and caches it. R2 URLs and signatures stay between the Worker and R2.
-4. If grant/R2 delivery fails transiently, the Worker asks the API's direct public stream for the same URL. That stream performs the publication checks again and returns a 45-second edge-cacheable response.
-5. If Worker execution fails or its request quota is reached, the Cloudflare route must be configured **Fail Open**. The request proceeds to the API origin, where an eligible-for-cache rule honors the direct stream's `s-maxage=45` response header. Keep the default query-string cache key so widths stay distinct, and do not override Edge TTL.
+1. On every request, including a cache hit, the Worker requests a private server-to-server grant from the API. The API rechecks publication, tenant, file state, image purpose, current storefront reference, and the selected variant before issuing a 60-second R2 read grant.
+2. The Worker checks its URL-and-width cache. On a miss it fetches and validates the private image, returns it, and caches it for up to 45 seconds. R2 URLs and signatures stay between the Worker and R2.
+3. If grant/R2 delivery fails transiently, the Worker requests the API's direct stream. That stream repeats the publication checks and returns `private, no-store`. Explicit authorization or visibility denials remain denials.
+4. Configure the Cloudflare route **Fail Open**. If Worker execution fails or its quota is reached, the uncached API origin repeats its checks. Do not override `no-store` with a shared Cache Rule.
 
-The Worker route and Cache Rule cover only `/api/media/public/*` on the staging and production API hosts. When both delivery layers and the API/R2 are unavailable and no fresh edge copy exists, the image cannot load; web/app pages should keep their layout usable with an image placeholder and bounded retry.
+The Worker also handles a separate, optionally enabled storefront-content route. See the [Worker guide](../../api/edge/media-worker/README.md) for its live visibility checks and exclusions. When API/R2 delivery is unavailable, pages should remain usable with a placeholder and bounded retry.
 
 ### Staff images
 
@@ -46,12 +45,12 @@ Eligible accepted images receive private WebP variants at widths 320, 960, and 1
 ## Verification and rollout
 
 - Keep `r2.dev` and public bucket domains disabled; scope the R2 token to the private bucket and required object operations.
-- Set the API and Worker environment variables above. Configure the two API-host Worker routes as **Fail Open**, and create the matching Cloudflare Cache Rule with cache eligibility enabled and origin cache-control honored. The API sets the 45-second edge TTL; keep the default cache key's query string so the `w` variants stay distinct.
-- Roll out API routes and configuration first, then app/web URL and image-fetch changes, then Cloudflare routes and cache rules. Do not enable routes before matching code and secrets are live.
-- On staging, verify Worker `MISS`, `HIT`, 45-second expiry, all three widths, and an independent cold-region miss. Bypass the Worker and verify the API response fills the native CDN cache.
+- Set the API and Worker environment variables above. Configure the API-host Worker routes as **Fail Open**. Keep the direct API responses outside shared caches and preserve the query string in the Worker cache key so `w` variants stay distinct.
+- Roll out API routes and configuration first, then app/web URL and image-fetch changes, then Cloudflare routes and cache-bypass rules. Do not enable routes before matching code and secrets are live.
+- On staging, verify Worker `MISS`, `HIT`, 45-second expiry, all three widths, and an independent cold-region miss. Bypass the Worker and verify the API response remains `private, no-store`. Unpublish the shop or remove the image and verify that a later cache hit cannot expose it.
 - Force transient grant/R2 errors and verify the API fallback; confirm authorization/publication errors remain errors. Check staff tenant/branch denial, preview store/file scope and grant refresh, guest reservation/file scope and grant refresh, and `private, no-store` headers.
 - Verify CORS preflights for the authorization and media-grant headers. Inspect requests and logs to confirm no R2 URL, object key, signature, or credential appears in a browser URL or application log.
 - Confirm image requests do not reach a Vercel media endpoint. On API/R2 failure with no cache copy, confirm pages remain usable and image components show a placeholder with bounded retry.
 - Monitor Worker requests/cache hits, API/R2 fallback volume, media failures, Cloudflare purge errors, and Vercel Fast Origin Transfer. R2 image transfer should leave Vercel; page and bundled static asset traffic remain on Vercel.
 
-See [`cloudflare-media-worker-setup.md`](cloudflare-media-worker-setup.md) and the [delivery evolution guide](../architecture/object-storage-image-delivery-evolution.md) for the operational checklist and design history.
+See [`cloudflare-media-worker-setup.md`](cloudflare-media-worker-setup.md) and the [delivery evolution guide](../second-brain/02-Architecture/object-storage-image-delivery-evolution.md) for the operational checklist and design history.

@@ -1,3 +1,13 @@
+---
+title: "Operator workspace repair"
+type: architecture
+status: reference
+owner: Drezivo team
+source: "Original document and references within; moved into the vault on 2026-11-15"
+updated: 2026-11-15
+tags: [drezivo, architecture]
+---
+
 # Operator workspace repair
 
 Migration `0086_operator_workspace_repair.sql` adds scoped operator support alongside the
@@ -20,7 +30,8 @@ and queues the existing file-cleanup outbox event. Retention, legal holds and sh
 remain owned by the existing cleanup worker. Referential constraints, dependency checks and
 row locks preserve reservations, fitting history, custody and financial records.
 
-The operator repository documents the exact supported fields and HTTP/UI behavior in
-`api/docs/adr/0027-scoped-workspace-repair.md`. Its PostgreSQL integration suite applies all real
-business migrations and verifies the boundary using `drezivo_app`. No new operator-owned tables
-or general SQL execution surface are introduced.
+The operator repository is maintained separately and was not available in this checkout. Its
+previously cited ADR path cannot be verified here; consult that repository for the supported
+operator HTTP/UI behavior. The business database functions are defined in
+[`0086_operator_workspace_repair.sql`](../../../api/src/db/migrations/0086_operator_workspace_repair.sql).
+No new operator-owned tables or general SQL execution surface are introduced.

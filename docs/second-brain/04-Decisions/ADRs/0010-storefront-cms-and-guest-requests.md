@@ -1,3 +1,13 @@
+---
+title: "0010. Storefront CMS, guest reservation requests, and public fitting requests"
+type: decision
+status: partially-superseded
+owner: Drezivo team
+source: "Original document and references within; moved into the vault on 2026-11-15"
+updated: 2026-11-15
+tags: [drezivo, decision]
+---
+
 # 0010. Storefront CMS, guest reservation requests, and public fitting requests
 
 **Status:** accepted

@@ -10,7 +10,7 @@ tags: [drezivo, v1, dashboard, operations, checklist]
 # Dashboard V1 End-to-End Checklist
 
 **Status:** Partial implementation. `GET /api/v1/dashboard/overview` now supplies the visible operational metrics, today schedule, upcoming rentals, three-day fitting appointments, and month-over-month business performance. Focused API/PostgreSQL and dashboard component evidence passes. The full API integration run still has unrelated catalogue scale-test timeouts, and the full app suite has unrelated failures, so the dashboard release gate remains open.
-**Canonical specifications:** [PRD](../../product/Drezivo-PRD.md), [TRD](../../architecture/Drezivo-TRD.md), [Data Model](../../architecture/Drezivo-Data-Model.md), and [ERD](../../architecture/Drezivo-ERD.dbml).
+**Canonical specifications:** [PRD](../01-Product/Drezivo-PRD.md), [TRD](../02-Architecture/Drezivo-TRD.md), [Data Model](../02-Architecture/Drezivo-Data-Model.md), and [ERD](../../architecture/Drezivo-ERD.dbml).
 **Dependencies:** [[Reservations Checklist]], [[Availability Checklist]], and [[Schedule Calendar Checklist]].
 
 ## How to use this checklist

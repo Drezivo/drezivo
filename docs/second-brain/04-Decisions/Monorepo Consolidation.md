@@ -15,5 +15,5 @@ workspaces. Former per-workspace Git metadata is archived outside normal operati
 The workspace boundaries still protect ownership and deployment concerns. The shared contracts
 package is imported directly, so one pull request can expose API drift across every consumer.
 
-Engineering authority: `docs/decisions/0006-monorepo.md` and
+Engineering authority: `docs/second-brain/04-Decisions/ADRs/0006-monorepo.md` and
 `ROOT-REPOSITORY-ARCHITECTURE.md` in the root filesystem.
