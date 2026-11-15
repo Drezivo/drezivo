@@ -3,9 +3,19 @@
   "version": "0.1.0",
   "private": true,
   "description": "Drezivo clothing-rental SaaS monorepo",
-  "workspaces": ["contracts", "api", "app", "web", "docs"],
-  "engines": {"node": ">=22 <25"},
+  "workspaces": [
+    "contracts",
+    "api",
+    "app",
+    "web",
+    "docs"
+  ],
+  "engines": {
+    "node": ">=22 <25"
+  },
   "devDependencies": {
+    "@playwright/test": "^1.65.1",
+    "@types/node": "^26.6.6",
     "eslint": "^10.11.0",
     "vitest": "^5.0.3"
   },
