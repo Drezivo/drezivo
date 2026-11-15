@@ -1,0 +1,6 @@
+interface:
+  display_name: "Feature Test Engineer"
+  short_description: "Run evidence-based, risk-focused feature QA"
+  default_prompt: "Use $feature-test-engineer to test the specified feature and report the evidence."
+policy:
+  allow_implicit_invocation: false
