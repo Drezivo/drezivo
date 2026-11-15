@@ -29,6 +29,7 @@ const dataOf = <T>(response: { body: unknown }): T => (response.body as { data: 
 const adminUrl = requireTestDatabaseUrl();
 process.env.NODE_ENV = 'test';
 process.env.DATABASE_URL = buildAppRoleDatabaseUrl(adminUrl);
+process.env.MEDIA_READ_GRANT_SECRET ??= 'g'.repeat(48);
 process.env.INVITATION_EMAIL_DIGEST_KEY ??= Buffer.alloc(32, 2).toString('base64url');
 
 describe('public storefront read API', async () => {
@@ -93,6 +94,47 @@ describe('public storefront read API', async () => {
     expect(result.rowCount).toBe(1);
   }
 
+  it('rechecks cached product and image references against the published tenant', async () => {
+    const ws = await publishedWorkspace('cache-gate');
+    const other = await publishedWorkspace('cache-other');
+    const app = createApp();
+    const path = `/internal/media/v1/public/stores/${ws.slug}/cache-gate`;
+    const references = {
+      scope: 'catalogue', products: [ws.productId],
+      images: [{ product_id: ws.productId, file_id: ws.imageFileId }], variants: [], store_images: [],
+    };
+    expect((await request(app).post(path).send(references)).status).toBe(403);
+    const check = (body: object) => request(app).post(path).set('X-Drezivo-Media-Grant', process.env.MEDIA_READ_GRANT_SECRET ?? '').send(body);
+    const valid = await check(references);
+    expect(valid.status).toBe(200);
+    expect(valid.headers['cache-control']).toBe('private, no-store');
+    expect(dataOf<{ valid: boolean }>(valid).valid).toBe(true);
+    expect(dataOf<{ valid: boolean }>(await check({ ...references, products: [other.productId], images: [] })).valid).toBe(false);
+    await admin.query('DELETE FROM product_image WHERE tenant_id = $1 AND product_id = $2 AND file_id = $3', [ws.tenantId, ws.productId, ws.imageFileId]);
+    expect(dataOf<{ valid: boolean }>(await check(references)).valid).toBe(false);
+    await admin.query("UPDATE product SET status = 'archived' WHERE tenant_id = $1 AND id = $2", [ws.tenantId, ws.productId]);
+    expect(dataOf<{ valid: boolean }>(await check({ ...references, images: [] })).valid).toBe(false);
+    await admin.query("UPDATE storefront SET status = 'draft' WHERE id = $1", [ws.storefrontId]);
+    expect((await check({ ...references, images: [] })).status).toBe(404);
+  });
+
+  it('reads shop booking eligibility live for cached storefronts', async () => {
+    const ws = await publishedWorkspace('cache-live-state');
+    const app = createApp();
+    const references = { scope: 'store', products: [], images: [], variants: [], store_images: [] };
+    const check = () => request(app).post(`/internal/media/v1/public/stores/${ws.slug}/cache-gate`)
+      .set('X-Drezivo-Media-Grant', process.env.MEDIA_READ_GRANT_SECRET ?? '').send(references);
+    const before = await check();
+    expect(before.status).toBe(200);
+    expect(dataOf<{ valid: boolean }>(before).valid).toBe(true);
+    await setFreePlan(ws.tenantId);
+    const after = await check();
+    expect(after.status).toBe(200);
+    const live = dataOf<{ live: { reservations_open: boolean; payment_methods: unknown[] } }>(after).live;
+    expect(live.reservations_open).toBe(false);
+    expect(live.payment_methods).toEqual([]);
+  });
+
   it('hides drafts and exposes only the allowlisted projection once published', async () => {
     const draft = await createStorefrontWorkspace('pub-draft');
     const app = createApp();
@@ -102,7 +144,7 @@ describe('public storefront read API', async () => {
     const ws = await publishedWorkspace('pub-live');
     const response = await request(app).get(`/api/v1/public/stores/${ws.slug}`);
     expect(response.status).toBe(200);
-    expect(response.headers['cache-control']).toContain('s-maxage=300');
+    expect(response.headers['cache-control']).toBe('private, no-store');
     const store = dataOf<PublicStorefront>(response);
     expect(store).toMatchObject({
       name: 'Luna Gown Rentals',
@@ -234,7 +276,7 @@ describe('public storefront read API', async () => {
     const ws = await publishedWorkspace('media-live');
     const publicMedia = await request(app).get(`/api/media/public/stores/${ws.slug}/files/${ws.imageFileId}?w=960`);
     expect(publicMedia.status).toBe(200);
-    expect(publicMedia.headers['cache-control']).toBe('public, max-age=0, s-maxage=45');
+    expect(publicMedia.headers['cache-control']).toBe('private, no-store');
     expect(publicMedia.headers['x-content-type-options']).toBe('nosniff');
     expect(publicMedia.body).toEqual(png);
     expect(publicMedia.headers.location).toBeUndefined();

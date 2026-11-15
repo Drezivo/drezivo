@@ -1,6 +1,6 @@
 # Cloudflare media Worker setup
 
-This runbook configures the API-host image Worker and native Cloudflare cache fallback. Repository code and configuration are prepared, but each environment still needs its dashboard settings and a reviewed deployment. Do not treat a code change or dry-run as production certification.
+This runbook configures the API-host media and optional public-content Worker. Repository code and configuration are prepared, but each environment still needs its dashboard settings and a reviewed deployment. Do not treat a code change or dry-run as production certification.
 
 See the [Worker README](../../api/edge/media-worker/README.md), [environment inventory](environments.md), and [private media delivery](private-media-delivery.md).
 
@@ -9,11 +9,21 @@ See the [Worker README](../../api/edge/media-worker/README.md), [environment inv
 | Environment | Worker route | API origin |
 | --- | --- | --- |
 | Staging | `api-preview.drezivo.shop/api/media/public/*` | `https://api-preview.drezivo.shop` |
+| Staging | `api-preview.drezivo.shop/api/v1/public/stores/*` | `https://api-preview.drezivo.shop` |
 | Production | `api.drezivo.shop/api/media/public/*` | `https://api.drezivo.shop` |
+| Production | `api.drezivo.shop/api/v1/public/stores/*` | `https://api.drezivo.shop` |
 
 Each route must use **Fail Open (proceed)**. If the Worker fails or reaches its request limit, Cloudflare bypasses the Worker and continues to the API origin. The API direct stream repeats publication and file-reference checks.
 
-Add a Cloudflare Cache Rule for the matching API hostname and `/api/media/public/*` path. Set **Cache eligibility** to **Eligible for cache** and, under **Edge TTL**, choose **Use cache-control header if present, bypass cache if not**. The API returns `Cache-Control: public, max-age=0, s-maxage=45` for successful public images and `no-store` for private/error responses, so the rule must respect those headers. Do not use an Edge TTL override: Cloudflare Free's minimum override is two hours and it can override `no-store`. The default cache key includes the full URL query string, so keep query strings enabled to separate the `w=320`, `w=960`, and `w=1600` variants. Do not apply the rule to staff, preview, guest, PDF, or other API paths. Confirm the rule can cache the direct API response when the Worker route is bypassed.
+The Worker checks current image visibility on every request before serving its own 45-second cache entry. Its browser response and the direct API fallback send `Cache-Control: private, no-store`. Configure Cache Rules to bypass both public media and storefront API responses and never override `no-store`; otherwise a CDN hit can skip the visibility check. Purge any entries created by the previous direct-origin cache before testing the new release.
+
+## Public storefront cache rollout
+
+1. Record a full-day baseline for Shared Pooler egress, public API requests, Worker requests, and existing cache hits. A Worker route invocation counts even when its request bypasses the cache; check the applicable Cloudflare limits.
+2. Apply migration `0097_public_storefront_cache_invalidation.sql` and deploy API support with `GUEST_QUOTE_CONFIRMATION_REQUIRED=false`. Deploy the web checkout that fetches and confirms a quote next. Only after the updated web release is verified should quote enforcement be enabled; older clients are asked to refresh. These are release instructions, not authorization to deploy.
+3. Deploy the Worker with `PUBLIC_STOREFRONT_CACHE_ENABLED=false`; verify both routes, Fail Open, and the matching environment-specific grant secret. Enable the flag in staging only after the API and web are ready. Disable it to bypass public-content caching. The direct API remains authoritative and uncached.
+4. Verify shop, catalogue, and item cache hits, 60-second expiry, preview isolation, current booking and payment state, fresh availability, and a changed-price confirmation. Archive a product, unpublish a shop, and remove a photo; each subsequent network request, including a copied photo URL, must stop exposing the withdrawn content. Test database and cache outages separately.
+5. Compare a complete staging day with the baseline and inspect `public_storefront_cache` outcomes and outbox purge failures. Normal cache events are sampled; failure events are logged. Events are coalesced per tenant per minute, so a later edit may rely on the 60-second TTL rather than another purge. Review Worker request limits and measured egress before a separate production rollout.
 
 ## Secrets and variables
 
@@ -31,21 +41,11 @@ The web and app no longer need `MEDIA_READ_GRANT_SECRET`, `MEDIA_EDGE_AUTH_SECRE
 1. [x] **Confirm the code and prerequisites.** Deploy API routes and the outbox invalidation handler first. Confirm migrations `0080_file_image_variants_backfill.sql` and `0081_storefront_media_cache_invalidation.sql` are applied through the protected workflow, variants are processing, and the API points to the staging database and private R2 bucket.
 2. [x] **Set staging variables.** Set the API and Worker values above. Set `MEDIA_PUBLIC_ORIGIN=https://api-preview.drezivo.shop`. Check that the Worker and API grant secrets match without copying their values into logs or chat.
 3. [ ] **Update app/web.** Deploy the browser image components and API-host URL changes. Verify the app/web point to the staging API and that ordinary site pages still use their existing Vercel deployments.
-4. [ ] **Review and deploy the staging Worker.** From the repository root, run `npx wrangler deploy --cwd D:/drezivo/api --config D:/drezivo/api/wrangler.jsonc --dry-run`. Confirm `API_ORIGIN` is `https://api-preview.drezivo.shop` and the only route is the staging API public media path. Confirm the Worker secret matches the staging API secret. Deploy with the same command without `--dry-run` through the approved release workflow; the config attaches its route.
+4. [ ] **Review and deploy the staging Worker.** From the repository root, run `npx wrangler deploy --cwd D:/drezivo/api --config D:/drezivo/api/wrangler.jsonc --dry-run`. Confirm `API_ORIGIN` is `https://api-preview.drezivo.shop` and both routes match the target table. Confirm the Worker secret matches the staging API secret. Deploy with the same command without `--dry-run` through the approved release workflow; the config attaches its routes.
 5. [ ] **Proxy staging API DNS.** In Cloudflare, open **drezivo.shop → DNS → Records**. Find `api-preview.drezivo.shop`, verify its target is the staging API origin, and set **Proxy status** to **Proxied** (orange cloud). Worker routes and Cache Rules require a proxied hostname.
-6. [ ] **Create the staging Cache Rule.** In **Rules → Cache Rules → Create rule**:
-   - Name it `Drezivo public media — staging`.
-   - Select **Custom filter expression**, click **Edit expression**, and enter:
-
-     ```text
-     http.host eq "api-preview.drezivo.shop" and starts_with(http.request.uri.path, "/api/media/public/")
-     ```
-
-   - Set **Cache eligibility** to **Eligible for cache**.
-   - Under **Edge TTL**, select **Use cache-control header if present, bypass cache if not**.
-   - Leave **Cache key** and other optional settings unchanged, then deploy the rule. Do not use an Edge TTL override.
-7. [ ] **Configure the staging Worker route.** In **Workers & Pages → drezivo-media-staging → Settings → Domains & Routes**, confirm that `api-preview.drezivo.shop/api/media/public/*` is the only staging route. The Wrangler config may have added it during deployment; add it here only if it is missing. Set **Failure mode** to **Fail Open (proceed)** and save. Remove the old staging routes `app-preview.drezivo.shop/api/media/staff/*`, `preview.drezivo.shop/api/media/public/*`, and `preview.drezivo.shop/s/*` after the new API-host route is ready. Do not attach staff, web, storefront-page, or broad `/s/*` paths.
-8. [ ] **Verify staging.** Use a staging store and test accounts. Check a public image `MISS`, repeat `HIT`, expiry, three widths, and a cold-region miss. Temporarily bypass the Worker and check the direct API response and native CDN cache. Simulate transient grant/R2 failures and verify the Worker falls back to API. Confirm 401/403/404/409/429 publication/access failures are preserved. Confirm staff tenant/branch denial, preview and guest file scope, grant refresh, no-store headers, CORS preflights, and useful image placeholders after bounded retries.
+6. [ ] **Review staging Cache Rules.** Ensure the staging API public-media path bypasses downstream CDN caching and that no rule overrides `no-store`. Purge earlier direct-origin entries before verification.
+7. [ ] **Configure the staging Worker routes.** In **Workers & Pages → drezivo-media-staging → Settings → Domains & Routes**, confirm both staging routes in the target table. Set **Failure mode** to **Fail Open (proceed)** for each. Remove the old staging routes `app-preview.drezivo.shop/api/media/staff/*`, `preview.drezivo.shop/api/media/public/*`, and `preview.drezivo.shop/s/*` after the new API-host routes are ready. Do not attach staff, web, storefront-page, or broad `/s/*` paths.
+8. [ ] **Verify staging.** Use a staging store and test accounts. Check a public image `MISS`, repeat `HIT`, expiry, three widths, and a cold-region miss. Remove an image and confirm its copied URL fails on the next request. Temporarily bypass the Worker and check that the direct API response is `private, no-store`. Simulate transient grant/R2 failures and verify the Worker falls back to API. Confirm 401/403/404/409/429 publication/access failures are preserved. Confirm staff tenant/branch denial, preview and guest file scope, grant refresh, no-store headers, CORS preflights, and useful image placeholders after bounded retries.
 9. [ ] **Check routing and observability.** Confirm public images never request a Vercel media route; R2 URLs and keys never appear in browser URLs or logs. Review Cloudflare cache, API/R2 fallback, purge, media-error, and Vercel Fast Origin Transfer metrics.
 
 ## Production rollout
@@ -55,26 +55,16 @@ Start only after staging passes. Follow these steps in order:
 1. [ ] **Deploy the production API first.** Apply migrations `0080_file_image_variants_backfill.sql` and `0081_storefront_media_cache_invalidation.sql` through the protected workflow. Confirm production image variants are ready and the API uses the production database and private R2 bucket.
 2. [ ] **Set production API variables.** Configure `MEDIA_PUBLIC_ORIGIN=https://api.drezivo.shop`, a production-only `MEDIA_READ_GRANT_SECRET`, `CLOUDFLARE_MEDIA_ZONE_ID`, and the zone-restricted `CLOUDFLARE_MEDIA_PURGE_TOKEN` in the production API environment.
 3. [ ] **Deploy production web and app.** Set `NEXT_PUBLIC_API_ORIGIN=https://api.drezivo.shop` for both. Keep page hosting on the existing Vercel deployments.
-4. [ ] **Review and deploy the production Worker.** In **Workers & Pages → drezivo-media-prod → Settings → Variables and Secrets**, set `MEDIA_READ_GRANT_SECRET` to the matching production API secret. From the repository root, run `npx wrangler deploy --cwd D:/drezivo/api --config D:/drezivo/api/wrangler.production.jsonc --dry-run`. Confirm `API_ORIGIN` is `https://api.drezivo.shop` and the only route is the production API public media path. Deploy with the same command without `--dry-run` through the approved release workflow; the config attaches its route.
+4. [ ] **Review and deploy the production Worker.** In **Workers & Pages → drezivo-media-prod → Settings → Variables and Secrets**, set `MEDIA_READ_GRANT_SECRET` to the matching production API secret. From the repository root, run `npx wrangler deploy --cwd D:/drezivo/api --config D:/drezivo/api/wrangler.production.jsonc --dry-run`. Confirm `API_ORIGIN` is `https://api.drezivo.shop` and both routes match the target table. Deploy with the same command without `--dry-run` through the approved release workflow; the config attaches its routes.
 5. [ ] **Proxy production API DNS.** In **drezivo.shop → DNS → Records**, find `api.drezivo.shop`, verify its target is the production API origin, and set **Proxy status** to **Proxied** (orange cloud).
-6. [ ] **Create the production Cache Rule.** In **Rules → Cache Rules → Create rule**:
-   - Name it `Drezivo public media — production`.
-   - Select **Custom filter expression**, click **Edit expression**, and enter:
-
-     ```text
-     http.host eq "api.drezivo.shop" and starts_with(http.request.uri.path, "/api/media/public/")
-     ```
-
-   - Set **Cache eligibility** to **Eligible for cache**.
-   - Under **Edge TTL**, select **Use cache-control header if present, bypass cache if not**.
-   - Leave **Cache key** and other optional settings unchanged, then deploy the rule. Do not use an Edge TTL override.
-7. [ ] **Configure the production Worker route.** In **Workers & Pages → drezivo-media-prod → Settings → Domains & Routes**, confirm that `api.drezivo.shop/api/media/public/*` is the only production route. The Wrangler config may have added it during deployment; add it here only if it is missing. Set **Failure mode** to **Fail Open (proceed)** and save. Remove the old production routes `partners.drezivo.shop/api/media/staff/*`, `drezivo.shop/api/media/public/*`, and `drezivo.shop/s/*` after the API-host route is ready.
+6. [ ] **Review production Cache Rules.** Ensure the production API public-media path bypasses downstream CDN caching and that no rule overrides `no-store`. Purge earlier direct-origin entries before verification.
+7. [ ] **Configure the production Worker routes.** In **Workers & Pages → drezivo-media-prod → Settings → Domains & Routes**, confirm both production routes in the target table and set **Failure mode** to **Fail Open (proceed)** for each. Remove the old production routes `partners.drezivo.shop/api/media/staff/*`, `drezivo.shop/api/media/public/*`, and `drezivo.shop/s/*` after the API-host routes are ready.
 8. [ ] **Verify production.** Use a published production image. Confirm a cold Worker `MISS`, a repeat `HIT`, the three width variants, and that image requests use `api.drezivo.shop` rather than a Vercel media path. Check the fail-open setting and ensure staff, preview, and guest images retain their scoped authorization and `private, no-store` behavior.
 9. [ ] **Monitor after release.** Review Worker requests and errors, cache hits, API/R2 fallback and purge volume, media errors, and Vercel Fast Origin Transfer. Existing Vercel page hosting and bundled static assets remain in place.
 
 ## Rollback
 
-Disable or remove only the affected API-host Worker route. The API direct stream and Cloudflare Cache Rule remain as the fallback path. If the API itself is unhealthy, cached public responses can remain available only until they expire; after that, image requests can fail while pages still render placeholders. To roll back code, restore the previous application release through the normal protected release workflow. Do not make an unreviewed route broadening change.
+Disable or remove only the affected API-host Worker route. The uncached API direct stream remains as the fallback path. If the API cannot verify visibility, image requests fail while pages still render placeholders. To roll back code, restore the previous application release through the normal protected release workflow; older Worker versions do not recheck visibility on cache hits. Do not make an unreviewed route broadening change.
 
 ## Troubleshooting
 

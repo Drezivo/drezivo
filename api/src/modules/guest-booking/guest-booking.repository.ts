@@ -5,6 +5,15 @@ import type { GuestCustomer } from '@drezivo/contracts';
 import type { FileObjectRow } from '../files/files.repository.js';
 import type { ReservationCustomerSnapshotRow } from '../reservations/reservations.command.repository.js';
 
+/** Serialize a guest's final quote and allocation against edits to the variant's price. */
+export async function lockGuestQuoteVariant(client: PoolClient, tenantId: string, variantId: string): Promise<boolean> {
+  const result = await client.query(
+    `SELECT id FROM product_variant WHERE tenant_id = $1 AND id = $2 AND status = 'active' FOR SHARE`,
+    [tenantId, variantId],
+  );
+  return (result.rowCount ?? 0) === 1;
+}
+
 /** Reuse a guest profile only on an exact normalized name/email match; unverified input never edits saved profile data. */
 export async function findOrCreateGuestCustomer(
   client: PoolClient,
