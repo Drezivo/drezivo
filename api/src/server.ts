@@ -2,6 +2,7 @@ import { createApp } from './app.js';
 import { config } from './config/index.js';
 import { closePool } from './db/client.js';
 import { logger } from './shared/logger.js';
+import { initMonitoring } from './shared/monitoring.js';
 import { resolveWorkerEntry, startEmbeddedWorker, type EmbeddedWorkerHandle } from './worker/embedded.js';
 import { changeTenantPlan } from './modules/internal-operator/operator-plan-change.service.js';
 import { createOperatorPlanAssertionVerifier } from './modules/internal-operator/operator-plan-assertion.js';
@@ -18,6 +19,8 @@ import { createPlatformPaymentAssertionVerifier } from './modules/internal-opera
  * the same worker entrypoint as a child process under its own database role. Run ONE API instance
  * in that mode; outbox leases keep extra instances safe but wasteful.
  */
+initMonitoring();
+
 const internalOperatorPlanCommands = config.INTERNAL_SERVICE_AUTH && config.INTERNAL_OPERATOR_ASSERTION_SECRET
   ? {
       verifyPlanAssertion: createOperatorPlanAssertionVerifier({

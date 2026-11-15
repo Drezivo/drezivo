@@ -3,6 +3,7 @@ import type { PoolClient } from 'pg';
 import { Pool } from 'pg';
 
 import { config } from '../config/index.js';
+import { startSpan } from '@sentry/node';
 import * as schema from './schema/index.js';
 
 /**
@@ -43,14 +44,14 @@ export async function withTenantTransaction<T>(
     throw new Error('withTenantTransaction: tenantId is required (fail closed, never unscoped)');
   }
 
-  const client = await pool.connect();
+  const client = await startSpan({ name: 'database pool wait', op: 'db.pool.wait', onlyIfParent: true }, () => pool.connect());
   try {
     await client.query('BEGIN');
     // Parameterized `set_config` (not string-interpolated `SET LOCAL`) so a malicious or
     // malformed tenant/principal id can never become a SQL injection vector.
     await client.query('SELECT set_config($1, $2, true)', ['app.tenant_id', tenantId]);
     await client.query('SELECT set_config($1, $2, true)', ['app.principal_id', principalId]);
-    const result = await fn(client);
+    const result = await startSpan({ name: 'tenant database work', op: 'db.transaction', onlyIfParent: true }, () => fn(client));
     await client.query('COMMIT');
     return result;
   } catch (error) {

@@ -46,6 +46,9 @@ naming convention) once TRD §12's "remaining selection" of hosting plans/region
 - `NODE_ENV` — `development` | `staging` | `production`. Gates verbose logging and
   dev-only conveniences; never gates a security control on its own.
 - `PORT` — the port the HTTP server binds. The worker entrypoint does not need this.
+- `SENTRY_DSN` — optional Sentry ingest destination for the API and worker. Store it in the
+  deployment secret manager. With no value, Sentry reporting is disabled. `SENTRY_TRACES_SAMPLE_RATE`
+  accepts 0 through 1 and defaults to 0.1. `SENTRY_RELEASE` is an optional short release identifier.
 - `DATABASE_URL` — the runtime PostgreSQL connection string, or the loopback PostgreSQL URL during
   local Compose development. The API deployment authenticates as `drezivo_app`; the worker
   deployment uses the same variable name but authenticates as `drezivo_worker`. A persistent
