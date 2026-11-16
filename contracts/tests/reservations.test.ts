@@ -11,6 +11,7 @@ import {
   reservationListQuery,
   reservationListResponse,
   reservationPickupRequest,
+  reservationUndoPickupRequest,
   reservationInspectionRequest,
   reservationRejectRequest,
   reservationEditCustomer,
@@ -77,6 +78,12 @@ const baseSummary = {
 };
 
 describe('reservation contracts', () => {
+  it('requires a reservation version and rejects extra undo-pickup fields', () => {
+    expect(reservationUndoPickupRequest.safeParse({ version: 1 }).success).toBe(true);
+    expect(reservationUndoPickupRequest.safeParse({}).success).toBe(false);
+    expect(reservationUndoPickupRequest.safeParse({ version: 1, asset_id: ids.asset }).success).toBe(false);
+  });
+
   it('keeps the reservation lifecycle vocabulary closed and canonical', () => {
     expect(reservationState.options).toEqual([
       'held',

@@ -29,6 +29,7 @@ import { idColumn, timestamps, updatableTimestamps } from './_shared.js';
  * returned -> completed, with cancelled/expired/rejected as terminal side-exits. Every
  * transition in reservations.service.ts is a single conditional UPDATE guarded by
  * `WHERE id = $1 AND state = $2 AND version = $3` — never a read-then-write.
+ * The guarded undo-pickup correction restores confirmed when no handover occurred.
  */
 
 export const reservationStatusEnum = pgEnum('reservation_status', [
@@ -213,7 +214,7 @@ export const reservationLine = pgTable(
   ],
 );
 
-/** Append-only actual facts, outside the planned-block exclusion — a late return must always be recordable. */
+/** Custody facts are append-only except for the guarded erroneous-pickup correction. */
 export const custodyEvent = pgTable(
   'custody_event',
   {
