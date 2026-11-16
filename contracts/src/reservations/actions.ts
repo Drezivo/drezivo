@@ -283,6 +283,13 @@ export type ReservationPickupRequest = z.infer<typeof reservationPickupRequest>;
 export const reservationPickupResponse = z.object({ reservation: reservationSummary }).strict();
 export type ReservationPickupResponse = z.infer<typeof reservationPickupResponse>;
 
+/** Corrects an erroneous pickup without recording a physical return. */
+export const reservationUndoPickupRequest = versionedAction;
+export type ReservationUndoPickupRequest = z.infer<typeof reservationUndoPickupRequest>;
+
+export const reservationUndoPickupResponse = z.object({ reservation: reservationSummary }).strict();
+export type ReservationUndoPickupResponse = z.infer<typeof reservationUndoPickupResponse>;
+
 /** picked_up -> returned; actual return remains recordable even when late. */
 export const reservationReturnRequest = versionedAction.extend({
   condition_note: z.string().trim().max(1_000).optional(),

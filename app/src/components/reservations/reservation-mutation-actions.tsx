@@ -47,6 +47,7 @@ type ReservationAction =
   | "cancel"
   | "reject"
   | "pickup"
+  | "undo_pickup"
   | "return"
   | "inspect"
   | "complete_rental";
@@ -426,6 +427,8 @@ export function ReservationMutationActions({
               },
               idempotencyKey
             );
+          case "undo_pickup":
+            return api.undoPickupReservation(detail.id, detail.version, idempotencyKey);
           case "return":
             return api.returnReservation(
               detail.id,
@@ -1446,7 +1449,7 @@ function getVisibleMutationActions(
           : []),
       ];
     case "picked_up":
-      return canHandleCustody ? [{ action: "return", label: "Return" }] : [];
+      return canHandleCustody ? [{ action: "return", label: "Return" }, { action: "undo_pickup", label: "Undo pickup" }] : [];
     case "returned": {
       const allReturnedAssetsReady = detail.lines.every(
         (line) => line.current_asset_readiness === "ready"
@@ -1512,6 +1515,8 @@ function actionTitle(action: ReservationAction, reservationCompleted = false): s
       return "Reject Reservation";
     case "pickup":
       return "Pick Up";
+    case "undo_pickup":
+      return "Undo pickup";
     case "return":
       return "Return";
     case "inspect":
@@ -1539,6 +1544,8 @@ function confirmLabel(action: ReservationAction, reservationCompleted = false): 
       return "Reject Reservation";
     case "pickup":
       return "Confirm Pick Up";
+    case "undo_pickup":
+      return "Confirm undo pickup";
     case "return":
       return "Confirm Return";
     case "inspect":
@@ -1572,6 +1579,8 @@ function actionDescription(action: ReservationAction, reservationCompleted = fal
       return "Reject this pending reservation after merchant review and release its reservation capacity.";
     case "pickup":
       return "Record the physical handover. Drezivo will recheck garment, allocation, and payment prerequisites.";
+    case "undo_pickup":
+      return "Confirm the garment never left the shop. The reservation will return to Confirmed and the pickup record will be removed.";
     case "return":
       return "Record the garment as physically returned. The garment will still require inspection before becoming ready.";
     case "inspect":
@@ -1659,6 +1668,8 @@ function mutationSuccessNotice(
       return { tone: "success", message: "Reservation rejected and its capacity was released." };
     case "pickup":
       return { tone: "success", message: "Pickup recorded." };
+    case "undo_pickup":
+      return { tone: "success", message: "Pickup undone. The reservation is confirmed." };
     case "return":
       return {
         tone: "success",
