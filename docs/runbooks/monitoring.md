@@ -45,8 +45,8 @@ with HetrixTools and Sentry, then run k6 when ready.
    Investigate expensive queries in Supabase rather than assuming the entire span is query time.
 4. The SDK sends only manually instrumented spans and captured server errors. Error messages,
    request fields, user details, source context, and stack variables are removed. Unknown routes
-   have no dynamic path; UUID request IDs are retained for correlation. The API accepts incoming
-   UUID request IDs and generates a new one for all other incoming values.
+   have no dynamic path; only UUID request IDs are exported to Sentry for correlation. The API
+   preserves the existing request-ID contract for signed internal commands.
 
 The default sampling rate means Sentry data is a sample, not an authoritative total. Check
 sample counts and retention before comparing changes; low-traffic p99 is unstable. Use Render

@@ -15,10 +15,7 @@ declare module 'express-serve-static-core' {
  */
 export function requestId(req: Request, res: Response, next: NextFunction): void {
   const incoming = req.header('x-request-id');
-  // Arbitrary client values can contain secrets or personal data and are written to logs.
-  req.requestId = incoming && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(incoming)
-    ? incoming
-    : randomUUID();
+  req.requestId = incoming && incoming.length <= 128 ? incoming : randomUUID();
   res.setHeader('x-request-id', req.requestId);
   next();
 }
