@@ -24,6 +24,8 @@ import {
 } from './worker/handlers/media-cache-invalidation.js';
 import { EMAIL_EVENT_TYPE } from './modules/notifications/email-notifications.js';
 import { logger } from './shared/logger.js';
+import { captureServerError, initMonitoring } from './shared/monitoring.js';
+import { flush } from '@sentry/node';
 import { SUBSCRIPTION_LIFECYCLE_SWEEP_ENABLED } from './modules/billing/billing.constants.js';
 import { sweepPlatformQrObject } from './modules/billing/platform-qr-cleanup.js';
 import {
@@ -47,6 +49,8 @@ import {
  * WORKER_MODE=continuous runs forever (polling + interval sweeps). WORKER_MODE=drain runs one
  * pass and exits, for a scheduled job; see docs/runbooks/worker-cloud-run.md.
  */
+initMonitoring();
+
 const handlers: Record<string, EventHandler> = {
   'tenant.bootstrapped': handleTenantBootstrapped,
   [EMAIL_EVENT_TYPE]: createEmailDeliveryHandler(),
@@ -94,8 +98,10 @@ const SWEEPS: readonly Sweep[] = [
 function runContinuously(): void {
   const scheduler = startSweepScheduler(SWEEPS);
   logger.info({ sweeps: SWEEPS.map(({ name, intervalMs }) => ({ name, intervalMs })) }, 'worker sweep schedule');
-  const runnerTask = runner.start().catch((error: unknown) => {
-    logger.error({ err: error }, 'worker runner crashed');
+  const runnerTask = runner.start().catch(async (error: unknown) => {
+    captureServerError(error);
+    logger.error('worker runner crashed');
+    await flush(2_000);
     process.exit(1);
   });
 
@@ -148,8 +154,10 @@ if (!config.WORKER_ENABLED) {
   runContinuously();
 } else {
   void runOnce()
-    .catch((error: unknown) => {
-      logger.error({ err: error }, 'worker drain crashed');
+    .catch(async (error: unknown) => {
+      captureServerError(error);
+      logger.error('worker drain crashed');
+      await flush(2_000);
       return 1;
     })
     .then(async (code) => {

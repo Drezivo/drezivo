@@ -59,6 +59,9 @@ export const envSchema = z
     OBJECT_STORAGE_UPLOADS_ENABLED: strictBooleanEnv('OBJECT_STORAGE_UPLOADS_ENABLED').optional(),
 
     LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
+    SENTRY_DSN: z.string().url().optional(),
+    SENTRY_TRACES_SAMPLE_RATE: z.coerce.number().min(0).max(1).default(0.1),
+    SENTRY_RELEASE: z.string().min(1).max(100).regex(/^[a-zA-Z0-9._-]+$/).optional(),
 
     WORKER_POLL_INTERVAL_MS: z.coerce.number().int().min(250).default(2000),
     WORKER_OUTBOX_IDLE_MAX_MS: z.coerce.number().int().min(250).max(3_600_000).default(60_000),

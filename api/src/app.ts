@@ -33,6 +33,7 @@ import {
   type InternalOperatorRouteOptions,
 } from './modules/internal-operator/index.js';
 import { logger } from './shared/logger.js';
+import { requestMonitoring } from './shared/monitoring.js';
 import { sendError } from './shared/response.js';
 import { ValidationError } from './shared/errors.js';
 import { internalMediaRouter } from './modules/internal-media/internal-media.routes.js';
@@ -66,6 +67,7 @@ export function createApp(options: AppOptions = {}): Express {
   app.disable('x-powered-by');
   app.set('trust proxy', config.TRUST_PROXY_HOPS);
   app.use(requestId);
+  app.use(requestMonitoring);
   app.use(
     pinoHttp({
       logger,

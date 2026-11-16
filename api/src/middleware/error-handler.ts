@@ -2,6 +2,7 @@ import type { NextFunction, Request, Response } from 'express';
 
 import { isAppError, RateLimitedError } from '../shared/errors.js';
 import { logger } from '../shared/logger.js';
+import { captureServerError, monitoringRoute } from '../shared/monitoring.js';
 import { sendError } from '../shared/response.js';
 
 /**
@@ -19,9 +20,10 @@ import { sendError } from '../shared/response.js';
 export function errorHandler(err: unknown, req: Request, res: Response, next: NextFunction): void {
   if (isAppError(err)) {
     if (err.status >= 500) {
-      logger.error({ err, requestId: req.requestId, route: req.originalUrl }, 'request failed');
+      captureServerError(err, req);
+      logger.error({ code: err.code, requestId: req.requestId, route: monitoringRoute(req.method, req.path) }, 'request failed');
     } else {
-      logger.warn({ code: err.code, requestId: req.requestId, route: req.originalUrl }, err.message);
+      logger.warn({ code: err.code, requestId: req.requestId, route: monitoringRoute(req.method, req.path) }, 'request rejected');
     }
     if (err instanceof RateLimitedError && err.retryAfterSeconds !== undefined) {
       res.setHeader('Retry-After', String(err.retryAfterSeconds));
@@ -30,6 +32,7 @@ export function errorHandler(err: unknown, req: Request, res: Response, next: Ne
     return;
   }
 
-  logger.error({ err, requestId: req.requestId, route: req.originalUrl }, 'unhandled error');
+  captureServerError(err, req);
+  logger.error({ requestId: req.requestId, route: monitoringRoute(req.method, req.path) }, 'unhandled error');
   sendError(res, 500, 'INTERNAL_ERROR', 'Something went wrong. Please try again.', req.requestId);
 }
