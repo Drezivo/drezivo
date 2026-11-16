@@ -479,13 +479,11 @@ describe("ReservationMutationActions", () => {
     renderActions(heldDetail, ["reservations.manage"]);
 
     fireEvent.click(screen.getByRole("button", { name: "Complete Reservation" }));
-    fireEvent.click(screen.getByRole("button", { name: "Existing customer" }));
-    fireEvent.change(screen.getByLabelText("Search existing customer"), {
+    fireEvent.change(screen.getByLabelText("Full name"), {
       target: { value: "Maria" },
     });
     const customer = await screen.findByRole("button", { name: /Maria Existing/i });
     fireEvent.click(customer);
-    expect(customer).toHaveAttribute("aria-pressed", "true");
     await screen.findByText("Address: 123 Test Street");
     fireEvent.click(screen.getByRole("checkbox", { name: "Customer accepted the rental terms." }));
     fireEvent.click(screen.getAllByRole("button", { name: "Complete Reservation" })[1]!);
@@ -758,11 +756,11 @@ describe("ReservationMutationActions", () => {
       fireEvent.click(screen.getByRole("button", { name: "Record Cash" }));
       const submit = screen.getAllByRole("button", { name: "Record Cash" }).at(-1)!;
       expect(submit).toBeDisabled();
-      fireEvent.change(screen.getByLabelText("Cash tendered"), { target: { value: "1000" } });
+      fireEvent.change(screen.getByLabelText("Cash received"), { target: { value: "1000" } });
       expect(submit).toBeDisabled();
-      fireEvent.click(screen.getByRole("checkbox", { name: "Cash received" }));
+      fireEvent.click(screen.getByRole("checkbox", { name: "I received the cash" }));
       expect(submit).toBeDisabled();
-      fireEvent.change(screen.getByLabelText("Cash tendered"), { target: { value: "2000" } });
+      fireEvent.change(screen.getByLabelText("Cash received"), { target: { value: "2000" } });
       expect(submit).toBeEnabled();
       fireEvent.click(submit);
 

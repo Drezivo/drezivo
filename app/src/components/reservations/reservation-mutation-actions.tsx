@@ -30,6 +30,7 @@ import { createDrezivoApiClient, DrezivoApiError } from "@/lib/drezivo-api";
 import { useDebouncedValue } from "@/lib/use-debounced-value";
 import { useSubmitGuard } from "@/lib/use-submit-guard";
 
+import { CustomerSuggestions } from "./customer-suggestions";
 import { PaymentProof, usePaymentProof } from "./payment-proof";
 
 export type ReservationMutationNotice = {
@@ -193,6 +194,7 @@ export function ReservationMutationActions({
   ]);
 
   useEffect(() => {
+    if (selectedCustomerId) return;
     if (
       selectedAction !== "complete_reservation" ||
       detail.customer.snapshot ||
@@ -226,6 +228,7 @@ export function ReservationMutationActions({
     isCustomerSearchPending,
     isCustomerSearchTooShort,
     selectedAction,
+    selectedCustomerId,
   ]);
 
   useEffect(() => {
@@ -587,42 +590,14 @@ export function ReservationMutationActions({
                   </p>
                 </div>
 
-                <div className="flex gap-2">
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant={customerMode === "new" ? "default" : "secondary"}
-                    disabled={submitGuard.isSubmitting}
-                    onClick={() =>
-                      updateIntentField(() => {
-                        setCustomerMode("new");
-                        setSelectedCustomerId("");
-                        setAddress("");
-                      })
-                    }
-                  >
-                    New customer
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant={customerMode === "existing" ? "default" : "secondary"}
-                    disabled={submitGuard.isSubmitting}
-                    onClick={() =>
-                      updateIntentField(() => {
-                        setCustomerMode("existing");
-                        setFullName("");
-                        setPhone("");
-                        setEmail("");
-                        setAddress("");
-                        setSocialMedia("");
-                        setNotes("");
-                      })
-                    }
-                  >
-                    Existing customer
-                  </Button>
-                </div>
+                {customerMode === "existing" ? (
+                  <Button type="button" size="sm" variant="secondary" disabled={submitGuard.isSubmitting}
+                    onClick={() => updateIntentField(() => {
+                      setCustomerMode("new"); setSelectedCustomerId(""); setSelectedCustomerProfile(null);
+                      setCustomerProfileError(false); setFullName(""); setPhone(""); setEmail("");
+                      setAddress(""); setSocialMedia(""); setNotes("");
+                    })}>Use a different customer</Button>
+                ) : null}
 
                 {customerMode === "new" ? (
                   <div className="grid gap-3 sm:grid-cols-2">
@@ -735,6 +710,14 @@ export function ReservationMutationActions({
                         onChange={(event) => updateIntentField(() => setNotes(event.target.value))}
                       />
                     </label>
+                    <CustomerSuggestions name={fullName} disabled={submitGuard.isSubmitting} onSelect={(customer) =>
+                      updateIntentField(() => {
+                        setCustomerOptions([customer]); setCustomerSearch(customer.full_name);
+                        setSelectedCustomerId(customer.id); setSelectedCustomerProfile(null);
+                        setCustomerProfileError(false); setFullName(customer.full_name);
+                        setPhone(customer.phone ?? ""); setEmail(customer.email ?? ""); setAddress("");
+                        setCustomerMode("existing");
+                      })} />
                   </div>
                 ) : (
                   <div>
@@ -1041,14 +1024,14 @@ export function ReservationMutationActions({
               <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
                 <label className="block">
                   <span className="mb-1.5 block text-xs font-medium text-dashboard-muted">
-                    Cash tendered
+                    Cash received
                   </span>
                   <div className="relative">
                     <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-dashboard-muted">
                       ₱
                     </span>
                     <Input
-                      aria-label="Cash tendered"
+                      aria-label="Cash received"
                       inputMode="decimal"
                       value={amountReceived}
                       disabled={submitGuard.isSubmitting}
@@ -1079,7 +1062,7 @@ export function ReservationMutationActions({
                       updateIntentField(() => setCashReceived(event.target.checked))
                     }
                   />
-                  Cash received
+                  I received the cash
                 </label>
               </div>
             ) : null}

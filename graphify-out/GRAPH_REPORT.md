@@ -1,126 +1,126 @@
 # Graph Report - drezivo  (2026-11-16)
 
 ## Corpus Check
-- 1568 files · ~1,144,523 words
+- 1579 files · ~1,148,000 words
 - Verdict: corpus is large enough that graph structure adds value.
-- Unclassified: 47 file(s) not represented in the graph (top: (none) 27, .jsonc 5, .example 4)
+- Unclassified: 48 file(s) not represented in the graph (top: (none) 27, .jsonc 5, .example 4)
 
 ## Summary
-- 11272 nodes · 28588 edges · 652 communities (469 shown, 183 thin omitted)
+- 11328 nodes · 28662 edges · 657 communities (476 shown, 181 thin omitted)
 - Extraction: 98% EXTRACTED · 2% INFERRED · 0% AMBIGUOUS · INFERRED: 643 edges (avg confidence: 0.9)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `6ea870f2`
+- Built from commit: `63537bff`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
 ## Community Hubs (Navigation)
-- clerk.routes.ts
+- webhook-inbox.repository.ts
 - ValidationError
 - reservations.review.service.ts
 - ref_node_crypto
-- ForbiddenError
+- fittings.controller.ts
 - README.md
 - catalogue-import.routes.ts
-- reservations.service.ts
+- files.service.ts
 - ref_react
-- cn
+- import-model.ts
 - Drezivo Home.md
-- ids.ts
+- ref_node_path
 - ValidationError
 - new-reservation-sheet.tsx
 - reservation-details-sheet.tsx
 - accept-invitation.tsx
 - storefront-cms.service.ts
-- FakeStorage
-- onboarding.controller.ts
-- express
-- onboarding.repository.ts
-- reservations/actions.ts
+- createApp
+- shared/errors.ts
+- app.ts
+- onboarding.service.ts
+- drezivo-api.ts
 - fittings-phase2-integrity.test.ts
-- ref_node_path
+- catalogue-lifecycle-propagation.test.ts
 - ref_zod
-- storefront/catalogue.ts
+- payment-methods.ts
 - settings.service.ts
-- reservations.routes.ts
+- fittings-phase7-finance.test.ts
 - web/package.json
-- reservations.quote.ts
-- customers.repository.ts
+- ref_zod
+- PermissionCode
 - booking-drawer.tsx
-- ids.ts
+- staff.ts
 - storefront.service.ts
 - s3-compatible-object-storage.ts
 - Historical setup checklist, superseded
 - app/src/components/calendar/calendar-availability-page.tsx
 - ref_child_process
-- drezivo-api.ts
+- DrezivoApiError
 - fittings.finance.service.ts
 - cn
 - membership-invitations.dispatcher.ts
-- fittings.service.ts
+- business-hours.ts
 - Fittings V1.1 Implementation Checklist
 - fittings.mutation.service.ts
 - settings.service.ts
-- billing.service.ts
-- payment-step.tsx
-- storefront.routes.ts
+- batch-import-page.tsx
+- storefront-api.ts
+- membership-invitations.routes.ts
 - item-view.tsx
 - drezivo-api.ts
 - Project Context — Clothing Rental SaaS.md
-- tenancy.repository.ts
+- entitlements.service.ts
 - membership-invitations.service.ts
 - app/src/app/layout.tsx
 - catalogue-import.routes.ts
 - batch-import-page.tsx
 - edit-clothing-page.tsx
 - clerk.adapter.ts
-- web/src/app/(marketing)/page.tsx
+- onboarding-entry.tsx
 - Obsidian Bases Skill
 - Obsidian Bases Skill
 - Clothing-rental-saas-pages.md
 - atelier-scene.ts
-- server.ts
-- platform-payment-methods.service.ts
+- logger.ts
+- DependencyUnavailableError
 - (marketing)/layout.tsx
 - platform-payment-methods.service.ts
-- reservation-availability-calendar.tsx
+- ClerkServerAdapter
 - payment-methods.service.ts
 - api/src/modules/operations/operations.service.ts
 - billing.service.ts
 - Reservation Checklist
-- payment-methods.ts
+- dependencies
 - Drezivo Product Requirements Document
 - lib/storefront-preview.ts
 - membership-invitation-claim.service.ts
 - dependencies
-- operations.middleware.ts
-- photo-extraction.service.ts
+- onboarding-plan.tsx
+- steps
 - app/.github/workflows/ci.yml
 - contracts/.github/workflows/ci.yml
 - Operating Model.md
 - web/.github/workflows/ci.yml
-- tenant-bootstrap.repository.ts
-- plan-showcase.tsx
+- billing.routes.ts
+- import-runner.ts
 - reservations.command.service.ts
-- app.ts
+- catalogue-add-clothing-route.test.ts
 - internal-operator.routes.ts
 - steps
 - Tenancy Checklist: What, Why, and How
-- tenancy/onboarding.ts
-- import.ts
-- Drezivo — Market Research and Product Review
+- generate.ts
+- catalogue-edit-clothing-route.test.ts
+- clerk-reconciliation.service.ts
 - ref_vitest
 - Implementation Checklist
 - IdempotencyKeyReusedError
-- pending-hold-guard.tsx
+- reservation-list-read-model.test.ts
 - text
-- customers.routes.ts
+- tenancy.service.ts
 - Rental Day Counting Alignment Implementation Plan
-- api/src/worker.ts
+- worker.ts
 - Drezivo — Market Research and Product Review
 - api/src/modules/billing/operator-proof-link.ts
-- ref_node_url
+- spreadsheet.ts
 - _shared.ts
 - Tenancy, Onboarding, Clerk, Memberships, and Billing Foundation
 - storefront-policy-images.test.tsx
@@ -128,34 +128,34 @@
 - Product Requirements Document (PRD)
 - web/src/components/legal/legal-layout.tsx
 - files.service.ts
-- reservations-page.test.tsx
+- storefront-guest-booking.test.ts
 - build
 - onboarding.persistence.ts
 - reservations.ts
 - reservations.quote.ts
-- migration-order-exception.test.ts
+- dashboard-access-gate.test.tsx
 - dependencies
 - compilerOptions
-- Drezivo — Technical Requirements Document
+- LOW (P2) — platform, operator, and hardening
 - Drezivo API
 - Contributing to `docs`
 - compilerOptions
 - steps
-- schema/index.ts
-- subscription-payment-reviewed.ts
+- tenancy.ts
+- MEDIUM (P1) — V1 completeness
 - StaffSignInForm
 - Drezivo — Technical Requirements Document
 - compilerOptions
 - 0015-starter-and-standard-plans.md
 - fittings-phase9-security.test.ts
 - compilerOptions
-- _shared.ts
+- draft-store.ts
 - API Security Review 2026-09-23
 - Drezivo team development handbook
-- Drezivo — Logical Database Specification
+- 5. Catalogue, planned availability and actual custody
 - Contributing to `app`
 - devDependencies
-- api/tests/integration/catalogue-files.test.ts
+- onboarding-status-panel.tsx
 - package.json
 - Button
 - Membership
@@ -169,13 +169,13 @@
 - email-notifications.ts
 - help-center-page.tsx
 - tenancy.ts
-- tenancy.ts
+- API Response Envelope and Consumer Update
 - Clothing Rental SaaS — Customer Public Storefront Pages.md
-- fittings.ts
+- motion-root.tsx
 - onboarding-status-panel.tsx
-- middleware.ts
+- media-access-grants.ts
 - On-call checklist
-- HIGH (P0) — owner workspace transactional core
+- calendar-schedule-page.tsx
 - common/errors.ts
 - Drezivo Product Requirements Document
 - Phase 1 — Frontend First
@@ -192,7 +192,7 @@
 - Storefront, Storefront CMS, and Settings Checklist
 - scripts
 - internal-operator.routes.ts
-- calendar-schedule-page.test.tsx
+- Feature test engineer
 - Drezivo Product Requirements Document
 - contracts/package.json
 - devDependencies
@@ -202,7 +202,7 @@
 - Core Rental Operations V1 End-to-End Checklist
 - backend
 - before-after.tsx
-- tenancy.service.ts
+- sendSuccess
 - seed-local-clothing.ts
 - Git and delivery workflow — AUTO-LOADED
 - schema/finance.ts
@@ -213,14 +213,14 @@
 - Callouts Reference
 - Object-storage migration and cutover
 - web/src/app/layout.tsx
-- staff-auth-page.tsx
-- src/index.ts
+- catalogue-scale-bounds.test.ts
+- createDrezivoApiClient
 - Drezivo Privacy Policy
 - help-center-page.tsx
 - updates
 - withTenantTransaction
-- calendar-schedule-page.tsx
-- shared/errors.ts
+- staff-auth-page.tsx
+- customers-page.test.tsx
 - app/package.json
 - Ship
 - Ship
@@ -230,7 +230,7 @@
 - migration_action
 - Drezivo Root Repository Architecture
 - api/AGENTS.md
-- fittings-phase8-integrations.test.ts
+- ref_node_crypto
 - api/src/db/schema/catalogue.ts
 - Obsidian Flavored Markdown Skill
 - Pilot operation (free tier, no separate worker)
@@ -238,17 +238,17 @@
 - validate-backend.mjs
 - migration-scope
 - jobs.ts
-- createCatalogueBackupExportHandler
+- catalogue-backup.service.ts
 - WorkerRunner
 - add-clothing-page.test.tsx
-- check-second-brain.mjs
-- Properties (Frontmatter) Reference
+- add-clothing-page.test.tsx
+- Drezivo Acceptable Use Policy
 - baseline.js
 - ref_playwright_test
 - Drezivo Security Overview
-- dashboard.middleware.ts
+- ForbiddenError
 - Drezivo — Product and Architecture Pack
-- Drezivo API
+- integration/dashboard-overview.test.ts
 - customer
 - auth-split-layout.tsx
 - preview-migrations
@@ -257,41 +257,41 @@
 - dashboard-overview.tsx
 - api/.codex/agents/security-reviewer.md
 - JSON Canvas Complete Examples
-- JSON Canvas Complete Examples
-- customers-page.tsx
-- root-document-pack/Drezivo-Data-Model.md
+- Incident response
+- add-clothing-page.tsx
+- Git and delivery workflow — AUTO-LOADED
 - app/.claude/agents/security-reviewer.md
 - app/.codex/agents/security-reviewer.md
 - Drezivo Data Retention and Deletion Standard
-- staffFileMediaUrl
+- interface
 - members-settings-page.test.tsx
 - compilerOptions
 - HIGH (P0) — owner workspace transactional core
 - legal/README.md
 - Notes.md
 - API Module Boundaries and Layering
-- 0006. Consolidate the Drezivo workspaces into one monorepo
+- Drezivo API
 - Clothing V1 End-to-End Checklist
 - jobs
 - staging-migrations
 - .claude/agents/security-reviewer/security-reviewer.md
 - .codex/agents/security-reviewer/security-reviewer.md
-- Common Workflows
+- auth-split-layout.tsx
 - Tenancy, Owner Onboarding, Clerk, Memberships, and Billing V1 Checklist
 - scripts
 - drezivo-api-business-hours.test.ts
 - staff-sign-in-form.test.tsx
-- Common Workflows
+- business-settings-page.test.tsx
 - scripts
 - api/.claude/agents/code-reviewer.md
 - api/.claude/agents/frontend-designer.md
 - api/.codex/agents/code-reviewer.md
 - api/.codex/agents/frontend-designer.md
-- Db
+- Git and delivery workflow — AUTO-LOADED
 - Continuous integration baseline
-- calendar-schedule-page.tsx
-- 0009. Supabase as the managed PostgreSQL provider
-- workspace-access.test.ts
+- Drezivo Data Retention and Deletion Standard
+- Drezivo Vulnerability Disclosure Policy
+- public-storefront-cache-staging.md
 - 0013. Standard plan pilot capacity
 - app/.claude/agents/code-reviewer.md
 - app/.claude/agents/frontend-designer.md
@@ -342,14 +342,14 @@
 - hooks
 - reservation-status.ts
 - Stage a branch for testing
-- Git and delivery workflow — AUTO-LOADED
+- edit-clothing-page.test.tsx
 - api/.github/PULL_REQUEST_TEMPLATE.md
 - commit-hygiene
 - steps
 - postgres
 - tenancy.routes.ts
 - tsconfig.test.json
-- R2 Image Replacement Cleanup Checklist
+- R2 Image Replacement Cleanup Checklist.md
 - web/src/lib/use-submit-guard.ts
 - Code Quality
 - Code Quality
@@ -361,17 +361,17 @@
 - AtelierScene
 - contracts/.github/PULL_REQUEST_TEMPLATE.md
 - AGENTS.md
-- lib/money.ts
+- Membership
 - AGENTS.md
 - Monorepo Workspace Map
 - 3. Clothing Catalog
-- app/src/app/not-found.tsx
+- contracts
 - 2026-09-30.md
 - clothing-details-page.test.tsx
 - root-document-pack/Drezivo-Data-Model.md
-- result.ts
+- auth.ts
 - Frontend
-- measurement-guide-settings-page.test.tsx
+- Code Quality
 - Frontend
 - clerk-webhook-reconciler.ts
 - web/.github/PULL_REQUEST_TEMPLATE.md
@@ -380,11 +380,11 @@
 - cloudbuild.yaml
 - Engineering Standards — write it like company code
 - verify
-- post-auth-resolver.test.tsx
-- 0.1.0
+- post-auth-resolver.tsx
+- Drezivo Cookie Notice
 - Engineering Standards — write it like company code
 - Engineering Standards — write it like company code
-- lint-staged
+- Environments
 - prettier@^3.9.9
 - @types/express@^5.0.0
 - Engineering Standards — write it like company code
@@ -394,7 +394,7 @@
 - Engineering Standards — write it like company code
 - Engineering Standards — write it like company code
 - 11. Core Customer-Side Principle
-- engines
+- Owner lifecycle
 - next@15.5.24
 - env
 - production-migrations
@@ -428,7 +428,7 @@
 - read-excel-file
 - docs/.github/ISSUE_TEMPLATE/bug_report.md
 - docs/.github/ISSUE_TEMPLATE/feature_request.md
-- @typescript-eslint/parser@^8.24.0
+- The order: rotate, then contain, then assess exposure
 - .github/PULL_REQUEST_TEMPLATE.md
 - web/.github/ISSUE_TEMPLATE/bug_report.md
 - web/.github/ISSUE_TEMPLATE/feature_request.md
@@ -451,7 +451,7 @@
 - @types/node@^26.6.4
 - Durable lessons
 - Drezivo Second Brain
-- Manual frontend end-to-end validation plan
+- Code Quality
 - contracts/.claude/hooks/block-dangerous-commands.sh
 - Idempotency, Concurrency & Security — NON-NEGOTIABLE
 - contracts/.codex/hooks/block-dangerous-commands.sh
@@ -464,7 +464,7 @@
 - Clerk verification email template
 - Lessons
 - eslint@^9.39.1
-- ref_zod
+- shared/money.ts
 - eslint-config-next@15.5.27
 - web/.claude/hooks/block-dangerous-commands.sh
 - Idempotency, Concurrency & Security — NON-NEGOTIABLE
@@ -486,7 +486,7 @@
 - @testing-library/react@^16.2.0
 - Lessons
 - Lessons
-- 0017: Shorter lapse window, Standard back to 300 garments, one color per clothing
+- Code Quality
 - @typescript-eslint/eslint-plugin@^8.24.0
 - Lessons
 - No tracked env files
@@ -527,6 +527,8 @@
 - docs/.codex/hooks/session-start.sh
 - 10. What Should Be Public vs Private
 - 7. Reservation Confirmation
+- Drezivo Legal and Trust Documentation
+- Drezivo documentation
 - Drezivo organization profile template
 - web/postcss.config.mjs
 - Codex project guidance
@@ -555,8 +557,11 @@
 - api/.codex/rules/session-lifecycle.md
 - api/.codex/rules/testing.md
 - api/.codex/rules/writing-style.md
-- ref_testing_library_react
+- src/index.ts
 - spreadsheet.ts
+- 0015. Starter and Standard subscription plans
+- Second Brain Archive
+- lint-staged
 - api/scripts/branch-protection.sh
 - app/.claude/hooks/scan-secrets.sh
 - app/.claude/hooks/warn-large-files.sh
@@ -576,6 +581,7 @@
 - app/.codex/rules/session-lifecycle.md
 - app/.codex/rules/testing.md
 - app/.codex/rules/writing-style.md
+- api/vitest.config.ts
 - @types/react@19.0.8
 - Git and delivery workflow — AUTO-LOADED
 - operator-workspace-repair.md
@@ -651,7 +657,6 @@
 - web/.codex/rules/testing.md
 - web/.codex/rules/writing-style.md
 - web/scripts/branch-protection.sh
-- drezivo-api-fittings.test.ts
 
 ## God Nodes (most connected - your core abstractions)
 1. `ValidationError` - 383 edges
@@ -660,7 +665,7 @@
 4. `cn()` - 177 edges
 5. `Button` - 165 edges
 6. `NotFoundError` - 162 edges
-7. `createDrezivoApiClient()` - 155 edges
+7. `createDrezivoApiClient()` - 157 edges
 8. `pg` - 141 edges
 9. `ForbiddenError` - 117 edges
 10. `DrezivoApiError` - 106 edges
@@ -668,255 +673,259 @@
 ## Surprising Connections (you probably didn't know these)
 - `Commit messages — Conventional Commits, enforced by commitlint` --references--> `Db`  [INFERRED]
   app/.claude/rules/git-workflow.md → api/src/db/client.ts
+- `Commit messages — Conventional Commits, enforced by commitlint` --references--> `Db`  [INFERRED]
+  app/.codex/rules/git-workflow.md → api/src/db/client.ts
 - `Scopes` --references--> `Db`  [INFERRED]
   app/CONTRIBUTING.md → api/src/db/client.ts
 - `Commit messages — Conventional Commits, enforced by commitlint` --references--> `Db`  [INFERRED]
   contracts/.claude/rules/git-workflow.md → api/src/db/client.ts
 - `Commit messages — Conventional Commits, enforced by commitlint` --references--> `Db`  [INFERRED]
   contracts/.codex/rules/git-workflow.md → api/src/db/client.ts
-- `Scopes` --references--> `Db`  [INFERRED]
-  contracts/CONTRIBUTING.md → api/src/db/client.ts
 
 ## Import Cycles
 - None detected.
 
-## Communities (652 total, 183 thin omitted)
+## Communities (657 total, 181 thin omitted)
 
-### Community 0 - "clerk.routes.ts"
-Cohesion: 0.16
-Nodes (18): createClerkWebhookController(), handleClerkRawBodyError(), requireClerkJsonContentType(), clerkWebhookRouter, ClerkWebhookRouterDependencies, createClerkWebhookRouter(), ClerkWebhookService, ClerkWebhookServiceDependencies (+10 more)
+### Community 0 - "webhook-inbox.repository.ts"
+Cohesion: 0.29
+Nodes (10): NormalizedClerkWebhookEvent, ClerkWebhookServiceDependencies, insertClerkWebhookInbox(), insertInput, InsertWebhookInboxInput, InsertWebhookInboxResult, persistClerkWebhookInbox(), WebhookInboxRow (+2 more)
 
 ### Community 1 - "ValidationError"
-Cohesion: 0.12
-Nodes (39): attachReservationPaymentReceiptController(), cancelReservationController(), completeRentalReservationController(), completeStaffReservationController(), confirmReservationController(), createStaffReservationController(), editReservationController(), getReservationDetailController() (+31 more)
+Cohesion: 0.07
+Nodes (64): attachReservationPaymentReceiptController(), cancelReservationController(), completeRentalReservationController(), completeStaffReservationController(), confirmReservationController(), createStaffReservationController(), editReservationController(), getReservationDetailController() (+56 more)
 
 ### Community 2 - "reservations.review.service.ts"
-Cohesion: 0.03
-Nodes (187): FittingCreateCommandResponse, FittingPaymentIntentCommandResponse, FittingPaymentReceiptCommandResponse, FittingPaymentVerifyCommandResponse, FittingRefundCreateCommandResponse, FittingRefundResolveCommandResponse, FittingActionCommandResponse, FittingGarmentPlanCommandResponse (+179 more)
+Cohesion: 0.05
+Nodes (148): assertCancellableAllocation(), assertCancellationState(), cancelReservationByStaff(), deadlineElapsed(), expireInsteadOfCancel(), finalizeKnownFailure(), finalizeSuccess(), replayOrThrow() (+140 more)
 
 ### Community 3 - "ref_node_crypto"
 Cohesion: 0.26
 Nodes (11): AUTH_FAILURES, browserResponse(), cacheKeyFor(), directApiRequest(), failure(), fallbackToApi(), handleMedia(), IMAGE_TYPES (+3 more)
 
-### Community 4 - "ForbiddenError"
-Cohesion: 0.10
-Nodes (31): bodyValidator(), express-serve-static-core, queryValidator(), requireFittingConfigurationOwner(), requireFittingIdempotencyKey(), requireFittingOperationalPermission(), requireFittingPaymentVerificationPermission(), validateFittingCancel (+23 more)
+### Community 4 - "fittings.controller.ts"
+Cohesion: 0.04
+Nodes (91): FittingCreateContext, attachFittingPaymentReceiptController(), cancelFittingController(), commandContext(), completeFittingController(), configurationContext(), confirmFittingController(), createFittingController() (+83 more)
 
 ### Community 5 - "README.md"
 Cohesion: 0.29
 Nodes (3): Drezivo root agent instructions, graphify, Drezivo security foundation template
 
 ### Community 6 - "catalogue-import.routes.ts"
-Cohesion: 0.04
-Nodes (108): archiveClothingController(), changeClothingSizingModeController(), createAssetMaintenanceBlockController(), createCatalogueCategoryController(), createClothingController(), createClothingVariantController(), createPhysicalAssetController(), getCatalogueClothingDetailController() (+100 more)
+Cohesion: 0.10
+Nodes (61): mapJsonBodyError(), archiveClothingController(), changeClothingSizingModeController(), createAssetMaintenanceBlockController(), createCatalogueCategoryController(), createClothingController(), createClothingVariantController(), createPhysicalAssetController() (+53 more)
 
-### Community 7 - "reservations.service.ts"
-Cohesion: 0.04
-Nodes (110): sweepPlatformQrObject(), resolveReservationCatalogueQuoteSelection(), readClothingDetailModel(), readClothingListSummary(), assertCatalogueReadContext(), CatalogueContext, CommandContext, getCatalogueClothingDetail() (+102 more)
+### Community 7 - "files.service.ts"
+Cohesion: 0.07
+Nodes (51): boundStoredObjectBody(), CatalogueContext, CommandContext, CatalogueBackupContext, authorizeImportUploads(), createImportClothing(), failure(), finalizeImportUploads() (+43 more)
 
 ### Community 8 - "ref_react"
-Cohesion: 0.04
-Nodes (121): Page(), Page(), Page(), Page(), Page(), Page(), Page(), StorefrontLayout() (+113 more)
+Cohesion: 0.03
+Nodes (142): Page(), Page(), Page(), Page(), Page(), Page(), StorefrontLayout(), Page() (+134 more)
 
-### Community 9 - "cn"
-Cohesion: 0.05
-Nodes (80): BatchImportClothingPage(), ActionFeedback, ActionFeedbackDialog(), BatchImportPage(), Category, DefaultsPanel(), EmptyState(), Field() (+72 more)
+### Community 9 - "import-model.ts"
+Cohesion: 0.13
+Nodes (22): applyExtraction(), capitalize(), categoryFromPath(), editedRow(), emptyRow(), ImportRowStatus, MAX_PHOTO_BYTES, MEASUREMENT_FIELDS (+14 more)
 
 ### Community 10 - "Drezivo Home.md"
-Cohesion: 0.06
-Nodes (30): Canonical specifications, Current truth, Drezivo Home, Start here, API boundary, Authority and query shape, Clothing Availability Timeline — Backend, Decision (+22 more)
+Cohesion: 0.08
+Nodes (22): Canonical specifications, Current truth, Drezivo Home, Start here, API boundary, Authority and query shape, Clothing Availability Timeline — Backend, Decision (+14 more)
 
-### Community 11 - "ids.ts"
-Cohesion: 0.16
-Nodes (19): __dirname, main(), MIGRATIONS_DIR, classifyRemoteMigrationConnection(), RemoteMigrationConnectionMode, resolveMigrationDatabaseUrl(), assertInvitationResolverIsNotAlreadyInstalled(), inspectMigrationHistory() (+11 more)
+### Community 11 - "ref_node_path"
+Cohesion: 0.04
+Nodes (56): __dirname, main(), MIGRATIONS_DIR, classifyRemoteMigrationConnection(), RemoteMigrationConnectionMode, resolveMigrationDatabaseUrl(), assertInvitationResolverIsNotAlreadyInstalled(), inspectMigrationHistory() (+48 more)
 
 ### Community 12 - "ValidationError"
-Cohesion: 0.06
-Nodes (129): AssetOperationalConstraints, createDisruptionsForThreatenedReservations(), CreatedMaintenanceBlock, createMaintenanceBlock(), isAllocationOverlapViolation(), readAssetOperationalConstraints(), truncateRecoveryForReadyAsset(), appendCatalogueAuditEvent() (+121 more)
+Cohesion: 0.05
+Nodes (140): AssetOperationalConstraints, createDisruptionsForThreatenedReservations(), CreatedMaintenanceBlock, createMaintenanceBlock(), isAllocationOverlapViolation(), readAssetOperationalConstraints(), truncateRecoveryForReadyAsset(), appendCatalogueAuditEvent() (+132 more)
 
 ### Community 13 - "new-reservation-sheet.tsx"
-Cohesion: 0.10
-Nodes (42): MAX_GARMENTS_PER_BOOKING, addIsoDays(), buildCancellationCustomerInput(), buildCustomerInput(), CustomerMode, ExactAvailabilityStatus(), Field(), FieldError() (+34 more)
+Cohesion: 0.04
+Nodes (101): AdditionalGarments(), additionalGarmentsReadiness(), GarmentStatus(), MAX_GARMENTS_PER_BOOKING, SelectedGarmentCard(), selectedVariantLabel(), Update, variantPrice() (+93 more)
 
 ### Community 14 - "reservation-details-sheet.tsx"
 Cohesion: 0.04
-Nodes (96): ReservationsRoute(), ReservationRebookSource, isImage(), PaymentProof(), usePaymentProof(), CONTINUABLE_STATUSES, ContinueReservation(), DeliveryCard() (+88 more)
+Nodes (88): ReservationsRoute(), CustomerSuggestions(), ReservationRebookSource, usePaymentProof(), CONTINUABLE_STATUSES, ContinueReservation(), DeliveryCard(), DetailValue() (+80 more)
 
 ### Community 15 - "accept-invitation.tsx"
-Cohesion: 0.11
-Nodes (18): AcceptInvitationPage(), dynamic, AcceptInvitation(), ClerkInvitationStatus, delay(), InvitationState, isRetryable(), isTerminalInvitationFailure() (+10 more)
+Cohesion: 0.10
+Nodes (19): AcceptInvitationPage(), dynamic, AcceptInvitation(), ClerkInvitationStatus, delay(), InvitationState, isRetryable(), isTerminalInvitationFailure() (+11 more)
 
 ### Community 16 - "storefront-cms.service.ts"
 Cohesion: 0.12
-Nodes (29): onlinePaymentMethodReadySql(), PAYMENT_MATERIAL_CONTENT_TYPES, PaymentMaterialContentType, paymentMethodFileJoinsSql(), syncBusinessContactFromStorefront(), findAcceptedStorefrontAssets(), findActiveProducts(), insertPolicyVersion() (+21 more)
+Nodes (30): syncBusinessContactFromStorefront(), appendStorefrontAudit(), findAcceptedStorefrontAssets(), findActiveProducts(), insertPolicyVersion(), PolicyRow, readCurrentPolicy(), ReadinessRow (+22 more)
 
-### Community 18 - "onboarding.controller.ts"
-Cohesion: 0.11
-Nodes (32): abandonOnboardingController(), bootstrapTenantController(), createOnboardingController(), getCurrentOnboardingController(), readIdempotencyKey(), readOnboardingId(), readPrincipalId(), selectOnboardingPlanController() (+24 more)
+### Community 17 - "createApp"
+Cohesion: 0.04
+Nodes (46): createApp(), mocks, adminUrl, asEnvelope(), clerk, expectSafeError(), futureIso(), readAssetState() (+38 more)
 
-### Community 19 - "express"
-Cohesion: 0.12
-Nodes (22): allowedHeaders, allowedHeaderSet, allowedHeadersHeader, allowedMethods, allowedMethodsHeader, corsMiddleware(), hasOnlyAllowedHeaders(), rejectOrigin() (+14 more)
-
-### Community 20 - "onboarding.repository.ts"
-Cohesion: 0.12
-Nodes (27): enqueueClerkOrganizationCleanup(), OwnerOnboardingContextDTO, PublicOnboarding, abandonOnboarding(), abandonOnboardingInTransaction(), AccountLifecycleRow, chooseOnboardingPlan(), chooseOnboardingPlanInTransaction() (+19 more)
-
-### Community 21 - "reservations/actions.ts"
+### Community 18 - "shared/errors.ts"
 Cohesion: 0.08
-Nodes (37): Request, H09 — Reservations core: shared allocator and staff booking, reservationCancellationNewCustomer, ReservationCancelRequest, ReservationCompleteRequest, ReservationConfirmRequest, ReservationConfirmResponse, ReservationEditCustomer (+29 more)
+Nodes (28): express-serve-static-core, isUuid(), Request, requireTenantContext(), TenantContext, ALWAYS_ALLOWED, assertSubscriptionAccess(), GateRequest (+20 more)
+
+### Community 19 - "app.ts"
+Cohesion: 0.07
+Nodes (44): pinoHttp, allowedHeaders, allowedHeaderSet, allowedHeadersHeader, allowedMethods, allowedMethodsHeader, corsMiddleware(), hasOnlyAllowedHeaders() (+36 more)
+
+### Community 20 - "onboarding.service.ts"
+Cohesion: 0.05
+Nodes (91): args, withGlobalTransaction(), withOperatorGlobalTransaction(), AccountRow, claimOwnedTenant(), consumeTrial(), ensureAccount(), findAccountRow() (+83 more)
+
+### Community 21 - "drezivo-api.ts"
+Cohesion: 0.06
+Nodes (62): countStaffVariantAvailableAssets(), readActiveBranchTimezone(), readStaffVariantCalendarAvailability(), StaffVariantCalendarDayRow, StaffVariantCalendarMetadataRow, StaffVariantCalendarReadModel, Request, getStaffReservationAvailabilityCheck() (+54 more)
 
 ### Community 22 - "fittings-phase2-integrity.test.ts"
-Cohesion: 0.21
-Nodes (18): appendFittingSettingsAudit(), deactivateFittingCapacitySlotsAbove(), FittingCapacityClaimAssignment, FittingCapacitySlotRebalanceRow, insertFittingCapacityClaimsForRebalance(), LockedFittingSettingsCommandRow, lockFittingCapacitySlotsForRebalance(), lockFittingSettingsForCommand() (+10 more)
+Cohesion: 0.17
+Nodes (21): appendFittingSettingsAudit(), deactivateFittingCapacitySlotsAbove(), FittingCapacityClaimAssignment, FittingCapacitySlotRebalanceRow, insertFittingCapacityClaimsForRebalance(), LockedFittingSettingsCommandRow, lockFittingCapacitySlotsForRebalance(), lockFittingSettingsForCommand() (+13 more)
 
-### Community 23 - "ref_node_path"
-Cohesion: 0.11
-Nodes (13): collectLayerFiles(), modulesRoot, failures, files, headings, ignored, root, walk() (+5 more)
+### Community 23 - "catalogue-lifecycle-propagation.test.ts"
+Cohesion: 0.09
+Nodes (26): computeAvailability(), adminUrl, asEnvelope(), clerk, expectSafeError(), readArchiveState(), readArray(), readData() (+18 more)
 
 ### Community 24 - "ref_zod"
 Cohesion: 0.07
-Nodes (51): boundStoredObjectBody(), insertPendingFile(), FileMediaGrant, assertCheckoutRules(), assertRequirement(), assertShopOpenForHandover(), closedMessage(), handoverDates() (+43 more)
+Nodes (57): guestReceiptStorageKey(), isGuestReceiptStorageKey(), FileMediaGrant, assertCheckoutRules(), assertRequirement(), assertShopOpenForHandover(), closedMessage(), handoverDates() (+49 more)
 
-### Community 25 - "storefront/catalogue.ts"
-Cohesion: 0.06
-Nodes (34): Request, CategoryId, branchIdPattern, documentRoute, guestRoute, MediaUrl, previewRoute, publicRoute (+26 more)
+### Community 25 - "payment-methods.ts"
+Cohesion: 0.17
+Nodes (13): Request, ArchivePaymentMethodRequest, CreatePaymentMethodRequest, LegacyRenterSteps, PaymentDestination, PaymentMethodMaterial, PaymentMethodPresentation, PaymentMethodSettingsItem (+5 more)
 
 ### Community 26 - "settings.service.ts"
 Cohesion: 0.07
 Nodes (29): 10. Release evolution, 11. Reliability targets and falsification, 12. Operational readiness and remaining decisions, 13. Monorepo operations and scaffold boundary, 1. Architecture decision, 2.1 Monorepo workspace topology, 2. Domain boundaries and ownership, 3. Authentication, authorization, and tenant isolation (+21 more)
 
-### Community 27 - "reservations.routes.ts"
-Cohesion: 0.12
-Nodes (27): express-serve-static-core, requireMerchantReservationReviewPermission(), requireReservationCustodyPermission(), requireReservationIdempotencyKey(), requireReservationManagePermission(), validateReservationCancel(), validateReservationConfirm(), validateReservationEdit() (+19 more)
+### Community 27 - "fittings-phase7-finance.test.ts"
+Cohesion: 0.09
+Nodes (27): cancelFittingCommand(), confirmFittingCommand(), adminUrl, baseContext(), createGuaranteed(), readClaimState(), requireId(), Seed (+19 more)
 
 ### Community 28 - "web/package.json"
-Cohesion: 0.04
-Nodes (77): @fontsource-variable/caveat, @fontsource-variable/newsreader, @fontsource-variable/playfair-display, @gsap/react, @testing-library/user-event, @types/three, @vitest/coverage-v8, dependencies (+69 more)
-
-### Community 29 - "reservations.quote.ts"
 Cohesion: 0.06
-Nodes (62): ReservationQuote, PaymentId, PaymentMethodId, RefundId, ReservationId, ReservationLineId, StorefrontId, currencyCode (+54 more)
+Nodes (51): @testing-library/user-event, @types/three, @vitest/coverage-v8, description, devDependencies, eslint@^9.39.1, eslint-config-next@15.5.27, @eslint/eslintrc@^3.1.0 (+43 more)
 
-### Community 30 - "customers.repository.ts"
-Cohesion: 0.12
-Nodes (22): CustomerDetailReadRow, CustomerFittingHistoryReadRow, CustomerHistoryReadPage, customerIsReadable(), CustomerListCursor, CustomerListReadPage, CustomerListReadRow, CustomerMutationRow (+14 more)
+### Community 29 - "ref_zod"
+Cohesion: 0.03
+Nodes (132): ResolveReservationCatalogueQuoteSelectionInput, ResolveReservationCatalogueSelectionInput, ReservationQuote, AvailabilityQuery, AvailabilityResult, CreateAssetMaintenanceBlockResponse, MaintenanceBlockKind, pricePreview (+124 more)
+
+### Community 30 - "PermissionCode"
+Cohesion: 0.10
+Nodes (22): baseManilaDateMs, nextUsSpringForwardDate(), reservationTestDate(), reservationTestInstant(), adminUrl, clerk, createFastHoldRequest(), createRequest() (+14 more)
 
 ### Community 31 - "booking-drawer.tsx"
-Cohesion: 0.06
-Nodes (51): CatalogueVariant, AvailabilityCalendar(), pickOnCalendar(), rangeProblem(), setPickup(), setReturn(), DateRange, DateRangeNotice (+43 more)
+Cohesion: 0.07
+Nodes (56): M02 — Wire public storefront reads to the contracts, CatalogueVariant, ItemDetail, AvailabilityCalendar(), pickOnCalendar(), rangeProblem(), setPickup(), setReturn() (+48 more)
 
-### Community 32 - "ids.ts"
-Cohesion: 0.06
-Nodes (47): readReservationCatalogueQuoteSelection(), readReservationCatalogueSelection(), ReservationCatalogueQuoteSelectionRow, ReservationCatalogueSelectionRow, ResolveReservationCatalogueQuoteSelectionInput, resolveReservationCatalogueSelection(), ResolveReservationCatalogueSelectionInput, reservationSelection() (+39 more)
+### Community 32 - "staff.ts"
+Cohesion: 0.04
+Nodes (64): Request, EditableVariantRow, AdditionalGarment, MAIN, OTHER, CatalogueCategoryList, CatalogueCategoryStatus, CataloguePricingMode (+56 more)
 
 ### Community 33 - "storefront.service.ts"
-Cohesion: 0.08
-Nodes (52): resolveTenantEntitlements(), createMediaReadGrant(), selectMediaObject(), ImageVariantWidth, toDocument(), checkPublicCacheReferences(), PublicCacheReferences, readStoreLiveState() (+44 more)
+Cohesion: 0.07
+Nodes (57): createMediaReadGrant(), selectMediaObject(), ImageVariantWidth, onlinePaymentMethodReadySql(), paymentMethodFileJoinsSql(), toDocument(), checkPublicCacheReferences(), PublicCacheReferences (+49 more)
 
 ### Community 34 - "s3-compatible-object-storage.ts"
 Cohesion: 0.06
-Nodes (36): MAX_CLOTHING_PHOTOS, PublicAvailabilityQuery, contactPhone, facebookPage, facebookProfile, hasControlCharacter(), instagramProfile, MAX_FEATURED_PRODUCTS (+28 more)
+Nodes (34): contactPhone, facebookPage, facebookProfile, hasControlCharacter(), instagramProfile, MAX_FEATURED_PRODUCTS, optionalText(), plainText() (+26 more)
 
 ### Community 35 - "Historical setup checklist, superseded"
 Cohesion: 0.08
 Nodes (24): 10. Review and deploy the production Worker, 11. Verify production and monitor usage, 12. Roll back production routes, 1. Confirm the code and staging environment, 2. Check Cloudflare DNS, 3. Configure the staging application and API, 4. Configure the staging Worker, 5. Deploy the staging Worker (+16 more)
 
 ### Community 36 - "app/src/components/calendar/calendar-availability-page.tsx"
-Cohesion: 0.06
-Nodes (68): CalendarAvailabilityRoute(), addCalendarDays(), agendaPlacement, AVAILABILITY_WINDOW_DAYS, AvailabilityDay, availabilityStatusLabel(), buildAvailabilityDays(), calendarDayDifference() (+60 more)
+Cohesion: 0.09
+Nodes (51): CalendarAvailabilityRoute(), addCalendarDays(), agendaPlacement, AVAILABILITY_WINDOW_DAYS, AvailabilityDay, availabilityStatusLabel(), buildAvailabilityDays(), calendarDayDifference() (+43 more)
 
 ### Community 37 - "ref_child_process"
 Cohesion: 0.06
 Nodes (50): block(), changedFiles(), LESSONS_REL, main(), mtime(), block(), changedFiles(), LESSONS_REL (+42 more)
 
-### Community 38 - "drezivo-api.ts"
-Cohesion: 0.02
-Nodes (142): AuthResolvePage(), DashboardLayout(), OnboardingPage(), OnboardingPlanPage(), VercelAnalytics(), AuthBrand(), AuthSplitLayout(), PostAuthResolver() (+134 more)
+### Community 38 - "DrezivoApiError"
+Cohesion: 0.04
+Nodes (98): ClothingDetailsRoute(), DashboardLayout(), VercelAnalytics(), currencyToMinor(), Draft, Field(), FittingSettingsDialog(), messageOf() (+90 more)
 
 ### Community 39 - "fittings.finance.service.ts"
-Cohesion: 0.08
-Nodes (64): appendFittingFinanceAudit(), appendFittingRefundAudit(), attachAcceptedFittingReceipt(), createFittingFeePayment(), createFittingRefundInstruction(), FittingAllocationApplyCapacityRow, FittingFeeChargeRow, FittingPaymentMethodRow (+56 more)
+Cohesion: 0.06
+Nodes (86): FittingCreateCommandResponse, appendFittingFinanceAudit(), appendFittingRefundAudit(), attachAcceptedFittingReceipt(), createFittingFeePayment(), createFittingRefundInstruction(), FittingAllocationApplyCapacityRow, FittingFeeChargeRow (+78 more)
 
 ### Community 40 - "cn"
-Cohesion: 0.05
-Nodes (89): WorkspaceSelectPage(), Page(), SettingsLayout(), toApiError(), WorkspaceChooser(), chooseWorkspace(), ReservationStatusTabs(), AccountSettingsPage() (+81 more)
+Cohesion: 0.04
+Nodes (112): WorkspaceSelectPage(), Page(), SettingsLayout(), Page(), ChoiceState, toApiError(), WorkspaceChooser(), chooseWorkspace() (+104 more)
 
 ### Community 41 - "membership-invitations.dispatcher.ts"
-Cohesion: 0.06
-Nodes (40): clerkInvitationDispatchSource, ClerkOrganizationInvitation, cleanupPayload, createFileObjectCleanupHandler(), enqueueDetachedFileObjectCleanup(), enqueueFileObjectCleanupCandidates(), enqueueReplacedFileObjectCleanup(), enqueueReplacedFileObjectSetCleanup() (+32 more)
+Cohesion: 0.08
+Nodes (27): cleanupPayload, createFileObjectCleanupHandler(), FILE_OBJECT_CLEANUP_EVENT_TYPE, handleFileObjectCleanup, FileObjectCleanupPreparation, FileObjectCleanupTarget, markFileObjectDeleted(), prepareFileObjectCleanup() (+19 more)
 
-### Community 42 - "fittings.service.ts"
-Cohesion: 0.20
-Nodes (15): allowedActions(), assertFittingReadContext(), GarmentJson, getFittingDetail(), getFittingIntakeOptions(), getFittingList(), getFittingSettings(), mapGarmentsWithImages() (+7 more)
+### Community 42 - "business-hours.ts"
+Cohesion: 0.10
+Nodes (23): closure, closureId, hours, BranchClosureId, LocalTime, Weekday, BRANCH_CLOSURE_LIST_MAX_WINDOW_DAYS, BRANCH_CLOSURE_REASON_MAX_LENGTH (+15 more)
 
 ### Community 43 - "Fittings V1.1 Implementation Checklist"
 Cohesion: 0.25
 Nodes (8): Explicitly out of scope, Fittings V1.1 Implementation Checklist, Frontend product decision: no fitting resources, Frontend prototype boundary, How to use this checklist, In scope, Prototype information model, Prototype-to-production decisions
 
 ### Community 44 - "fittings.mutation.service.ts"
-Cohesion: 0.05
-Nodes (100): ActiveFittingLineRow, appendFittingCreateAudit(), appendFittingMutationAudit(), bumpFittingVersion(), chooseAvailableFittingAsset(), claimFittingCapacitySlot(), createFittingAppointmentBase(), createFittingCustomer() (+92 more)
+Cohesion: 0.06
+Nodes (88): ActiveFittingLineRow, appendFittingCreateAudit(), appendFittingMutationAudit(), bumpFittingVersion(), chooseAvailableFittingAsset(), claimFittingCapacitySlot(), createFittingAppointmentBase(), createFittingCustomer() (+80 more)
 
 ### Community 45 - "settings.service.ts"
-Cohesion: 0.06
-Nodes (61): StaffContext, appendBranchSettingsAudit(), appendSettingsAudit(), BranchBusinessHoursRow, BranchClosureRow, createBranchClosure(), decodeBranchClosureCursor(), encodeBranchClosureCursor() (+53 more)
+Cohesion: 0.12
+Nodes (33): StaffContext, appendBranchSettingsAudit(), appendSettingsAudit(), BranchBusinessHoursRow, BranchClosureRow, createBranchClosure(), decodeBranchClosureCursor(), encodeBranchClosureCursor() (+25 more)
 
-### Community 46 - "billing.service.ts"
-Cohesion: 0.23
-Nodes (6): guestRenterStepsMediaUrl(), publicStorefrontMediaUrl(), staffFileDocumentUrl(), DISPLAYABLE_PURPOSES, MediaAudience, storefrontMediaUrlMapper
+### Community 46 - "batch-import-page.tsx"
+Cohesion: 0.12
+Nodes (23): BatchImportClothingPage(), ActionFeedback, BatchImportPage(), Category, DefaultsPanel(), EmptyState(), Field(), Notice (+15 more)
 
-### Community 47 - "payment-step.tsx"
-Cohesion: 0.13
-Nodes (20): GuestReservationView, GuestRenterStepsImage(), load(), parseGuestMediaUrl(), readMediaGrant(), MoneyBreakdown(), PaymentStep(), submit() (+12 more)
+### Community 47 - "storefront-api.ts"
+Cohesion: 0.08
+Nodes (47): FittingSlotsResponse, GuestReservationView, GuestRenterStepsImage(), load(), parseGuestMediaUrl(), readMediaGrant(), MoneyBreakdown(), PaymentStep() (+39 more)
 
-### Community 48 - "storefront.routes.ts"
-Cohesion: 0.06
-Nodes (37): @clerk/express@^1.3.0, clerkContext, express-serve-static-core, Request, requireVerifiedStaffAuth(), acceptAccountTermsController(), accountsRouter, express-serve-static-core (+29 more)
+### Community 48 - "membership-invitations.routes.ts"
+Cohesion: 0.14
+Nodes (18): express-serve-static-core, Request, requireActiveClerkOrganization(), requireMembershipInvitationClaimIdempotencyKey(), requireMembershipInvitationIdempotencyKey(), requireMembershipInvitationOwner(), validateClaimMembershipInvitationBody(), validateCreateMembershipInvitation() (+10 more)
 
 ### Community 49 - "item-view.tsx"
 Cohesion: 0.09
-Nodes (47): CatalogueCard, ItemDetail, StorefrontHome(), metadata, PoliciesPage(), PolicySection, AvailabilityDrawer(), ContactToReserve() (+39 more)
+Nodes (43): CatalogueCard, StorefrontHome(), metadata, PoliciesPage(), PolicySection, ContactToReserve(), About(), CategoryIndex() (+35 more)
 
 ### Community 50 - "drezivo-api.ts"
-Cohesion: 0.08
-Nodes (23): MeasurementUnit, variantFitRange, catalogueBackupExportStartResponse, catalogueBackupImportCommitRequest, CatalogueBackupImportCommitResponse, CatalogueBackupImportPreviewRequest, catalogueBackupJobId, catalogueBackupPreviewConflict (+15 more)
+Cohesion: 0.10
+Nodes (21): BatchCreateClothingRequest, BatchResponse, BatchUploadAuthorizationRequest, BatchUploadFinalizeRequest, CatalogueImportCapabilities, ClothingPhotoExtractRequest, ClothingPhotoExtractResponse, uniqueKeys() (+13 more)
 
 ### Community 51 - "Project Context — Clothing Rental SaaS.md"
 Cohesion: 0.04
 Nodes (48): 10. Reservation System, 11. Reservation Information, 12. Reservation Status, 13. Reservation Dashboard, 14. Fitting Appointments, 15. Unified Business Calendar, 16. Payments, 17. Customer Management (+40 more)
 
-### Community 52 - "tenancy.repository.ts"
+### Community 52 - "entitlements.service.ts"
 Cohesion: 0.06
-Nodes (43): ActorTenantResolutionContext, express-serve-static-core, isUuid(), Request, TenantContext, ALWAYS_ALLOWED, assertSubscriptionAccess(), GateRequest (+35 more)
+Nodes (55): ActorTenantResolutionContext, countActiveFrontdeskMemberships(), countActivePhysicalAssets(), countReservedFrontdeskSeats(), lockTenantForQuota(), PlanEntitlementRow, PlanRow, readActiveV1Plan() (+47 more)
 
 ### Community 53 - "membership-invitations.service.ts"
 Cohesion: 0.09
-Nodes (55): cancelMembershipInvitationController(), claimMembershipInvitationController(), createMembershipInvitationController(), listMembershipInvitationsController(), requireContext(), requireIdempotencyKey(), requireInvitationId(), resendMembershipInvitationController() (+47 more)
+Nodes (54): cancelMembershipInvitationController(), claimMembershipInvitationController(), createMembershipInvitationController(), listMembershipInvitationsController(), requireContext(), requireIdempotencyKey(), requireInvitationId(), resendMembershipInvitationController() (+46 more)
 
 ### Community 54 - "app/src/app/layout.tsx"
-Cohesion: 0.06
-Nodes (29): body, CLERK_ORIGIN, display, metadata, clerkFrontendApiOrigin(), DARK_QUERY, THEME_BOOT_SCRIPT, THEME_STORAGE_KEY (+21 more)
+Cohesion: 0.05
+Nodes (32): body, encode(), request(), body, CLERK_ORIGIN, display, metadata, clerkFrontendApiOrigin() (+24 more)
 
 ### Community 55 - "catalogue-import.routes.ts"
-Cohesion: 0.09
-Nodes (30): authorizeRateLimit, backupContext(), batchRateLimit(), catalogueIdempotencyKey(), catalogueImportRouter, createRateLimit, extractRateLimit, finalizeRateLimit (+22 more)
+Cohesion: 0.12
+Nodes (18): authorizeRateLimit, backupContext(), batchRateLimit(), catalogueIdempotencyKey(), catalogueImportRouter, createRateLimit, extractRateLimit, finalizeRateLimit (+10 more)
 
 ### Community 56 - "batch-import-page.tsx"
-Cohesion: 0.14
+Cohesion: 0.13
 Nodes (14): Before you start, Known limits, Pause, resume, or roll back, Step 1 — Google Cloud project (once, in the browser), Step 2 — Install and sign in to `gcloud` (once, on your PC), Step 3 — Service accounts (once), Step 4 — The one secret (once, and again whenever a value changes), Step 5 — Build and push the image (every release) (+6 more)
 
 ### Community 57 - "edit-clothing-page.tsx"
-Cohesion: 0.03
-Nodes (117): EditClothingRoute(), NewClothingPage(), AddClothingPage(), CapturedGuideImage, ClothingSize, daysToMinutes(), EMPTY_MEASUREMENT_KINDS, EMPTY_MEASUREMENTS (+109 more)
+Cohesion: 0.05
+Nodes (77): EditClothingRoute(), AddVariantDialog(), createVariant(), ArchivedEditState(), buildMeasurementPatch(), buildPricingInput(), buildProductPatch(), buildVariantPatch() (+69 more)
 
 ### Community 58 - "clerk.adapter.ts"
-Cohesion: 0.05
-Nodes (39): ClerkInvitationDispatchMarker, ClerkInvitationDispatchOperation, clerkInvitationDispatchOperations, ClerkInvitationStatus, clerkInvitationStatuses, ClerkMembershipInput, ClerkOrganization, ClerkOrganizationMembership (+31 more)
+Cohesion: 0.04
+Nodes (52): ClerkInvitationDispatchMarker, ClerkInvitationDispatchOperation, clerkInvitationDispatchOperations, clerkInvitationDispatchSource, ClerkInvitationStatus, clerkInvitationStatuses, ClerkMembershipInput, ClerkOrganization (+44 more)
 
-### Community 59 - "web/src/app/(marketing)/page.tsx"
+### Community 59 - "onboarding-entry.tsx"
 Cohesion: 0.13
-Nodes (18): 4. Customers table, LandingPage(), metadata, AtelierHero(), canUseWebGL(), markSceneReady(), motionAllowed(), AtelierScene (+10 more)
+Nodes (21): OnboardingPage(), AuthSplitLayout(), ExitOnboardingDialog(), handleExit(), LoadingState(), LoadState, OnboardingEntry(), OnboardingFrame() (+13 more)
 
 ### Community 60 - "Obsidian Bases Skill"
 Cohesion: 0.04
@@ -934,69 +943,69 @@ Nodes (44): 1. Product Page Architecture, 2. Customer Pages, 3. Business Pages, 
 Cohesion: 0.10
 Nodes (31): three, three@^0.180.0, clamp01(), createAtelierScene(), createDressForm(), GOLD_DEEP, GOLD_LIGHT, Ribbon (+23 more)
 
-### Community 64 - "server.ts"
-Cohesion: 0.15
-Nodes (12): createPlatformPaymentAssertionVerifier(), equal(), body, encode(), request(), app, server, shutdown() (+4 more)
+### Community 64 - "logger.ts"
+Cohesion: 0.11
+Nodes (19): createTurnstileVerifier(), FetchLike, TurnstileOutcome, app, server, shutdown(), Logger, EmbeddedWorkerHandle (+11 more)
 
-### Community 65 - "platform-payment-methods.service.ts"
-Cohesion: 0.14
-Nodes (20): args, withOperatorGlobalTransaction(), objectStorage, retryFailedPlatformQrCleanup(), LegacyQr, migratePlatformQrs(), sha(), platformQrMime() (+12 more)
+### Community 65 - "DependencyUnavailableError"
+Cohesion: 0.07
+Nodes (36): pool, objectStorage, listActivePlanRows(), PLAN_CAPABILITIES, PlanCatalogRow, BOOLEAN_FEATURES, getPublicPlanCatalog(), PLAN_CODES (+28 more)
 
 ### Community 66 - "(marketing)/layout.tsx"
-Cohesion: 0.11
-Nodes (27): gsap, MarketingLayout(), SPECULATION_RULES, MarketingMotion(), CSS_EASE_UI, EASE_DRAMA, EASE_REVEAL, EASE_UI (+19 more)
+Cohesion: 0.06
+Nodes (46): 4. Customers table, gsap, MarketingLayout(), SPECULATION_RULES, LandingPage(), metadata, AtelierHero(), canUseWebGL() (+38 more)
 
 ### Community 67 - "platform-payment-methods.service.ts"
 Cohesion: 0.17
 Nodes (12): 10. Priority and governing law, 1. Parties and roles, 2. Processing instructions, 3. Processing details, 4. Confidentiality and security, 5. Personnel and subprocessors, 6. Assistance and data-subject requests, 7. Personal data incidents (+4 more)
 
-### Community 68 - "reservation-availability-calendar.tsx"
-Cohesion: 0.21
-Nodes (18): addCalendarDays(), addIsoDays(), availabilityLabel(), availabilityWindow(), formatCalendarDate(), formatDateRanges(), formatIsoForNotice(), isSameCalendarDay() (+10 more)
+### Community 68 - "ClerkServerAdapter"
+Cohesion: 0.09
+Nodes (6): ClerkServerAdapter, ClaimInvitationInput, FRONTDESK_PERMISSION_CODES, resolveAcceptedProviderInvitation(), MembershipInvitationDispatchDependencies, invitation
 
 ### Community 69 - "payment-methods.service.ts"
-Cohesion: 0.15
-Nodes (34): assertPlanFeatureEnabled(), assertFileObjectCleanupProducerEnabled(), appendPaymentMethodAuditEvent(), appendPaymentRenterStepsAuditEvent(), countActiveOnlineMethods(), insertPaymentMethod(), isAcceptedStorefrontAsset(), LegacyPaymentRenterStepsRow (+26 more)
+Cohesion: 0.09
+Nodes (47): guestRenterStepsMediaUrl(), publicStorefrontMediaUrl(), staffFileDocumentUrl(), staffFileMediaUrl(), assertFileObjectCleanupProducerEnabled(), enqueueDetachedFileObjectCleanup(), enqueueFileObjectCleanupCandidates(), enqueueReplacedFileObjectCleanup() (+39 more)
 
 ### Community 70 - "api/src/modules/operations/operations.service.ts"
 Cohesion: 0.09
 Nodes (38): getClothingAvailabilityTimelineController(), getDashboardFittingSummaryController(), getOperationalCalendarController(), requireContext(), CalendarEventRow, ClothingAvailabilityTimelineAgendaRow, ClothingAvailabilityTimelineAssetRow, ClothingAvailabilityTimelineCursor (+30 more)
 
 ### Community 71 - "billing.service.ts"
-Cohesion: 0.06
-Nodes (59): withOperatorTenantTransaction(), changeSubscriptionPlanController(), appendSubscriptionEvent(), appendTenantAuditEvent(), LockedSubscriptionRow, lockTenantSubscription(), readSubscriptionProjection(), updateSubscriptionPlan() (+51 more)
+Cohesion: 0.09
+Nodes (36): withOperatorTenantTransaction(), PAST_DUE_GRACE_DURATION_DAYS, SUBSCRIPTION_LIFECYCLE_SWEEP_ENABLED, TRIAL_DURATION_DAYS, appendSubscriptionEvent(), appendTenantAuditEvent(), LockedSubscriptionRow, lockTenantSubscription() (+28 more)
 
 ### Community 72 - "Reservation Checklist"
 Cohesion: 0.05
 Nodes (40): 10. Staff availability APIs, 11. Expired holds and availability, 12. Policy snapshot behavior, 13. Existing workspace backfill migration, 14. Bootstrap changes, 15. Calendar navigation fix, 16. Reservation-sheet UI changes, 17. Tests / validation completed during implementation (+32 more)
 
-### Community 73 - "payment-methods.ts"
-Cohesion: 0.19
-Nodes (24): FittingSlotsResponse, GuestFittingCreated, GuestFittingRequest, FittingFlow(), addPick(), openItem(), problem(), submit() (+16 more)
+### Community 73 - "dependencies"
+Cohesion: 0.09
+Nodes (23): @fontsource-variable/caveat, @fontsource-variable/newsreader, @fontsource-variable/playfair-display, @gsap/react, dependencies, @drezivo/contracts@0.2.0, @fontsource-variable/caveat@^5.3.0, @fontsource-variable/newsreader@^5.3.0 (+15 more)
 
 ### Community 74 - "Drezivo Product Requirements Document"
-Cohesion: 0.10
-Nodes (20): 10. Version gates and references, 11. Implementation acceptance details, 1. Product decision and release contract, 2. Boundaries and users, 3. Domain model and invariants, 4. Workflows and acceptance, 5. Permissions and privacy, 6. Pricing, entitlements, notifications, operator admin, billing (+12 more)
+Cohesion: 0.05
+Nodes (40): 1. Recommendation, 2. Competitive landscape, 3. Philippine context and clothing-specific evidence, 4. Findings in the supplied PRD and screens, 5. Positioning and release strategy, 6. Pricing and unit economics, 7. Validation plan before general availability, 8. Research limits and next decisions (+32 more)
 
 ### Community 75 - "lib/storefront-preview.ts"
 Cohesion: 0.06
-Nodes (33): nextConfig, navigation, openGuard(), PublicCategory, nextConfig, BookingPage(), metadata, CatalogPage() (+25 more)
+Nodes (41): nextConfig, NotFound(), NotFoundBackButton(), navigation, @fontsource-variable/jost, nextConfig, @fontsource-variable/jost@^5.3.0, NotFound() (+33 more)
 
 ### Community 76 - "membership-invitation-claim.service.ts"
-Cohesion: 0.07
-Nodes (33): ClerkServerAdapter, acceptClaimInvitation(), appendClaimAudit(), ClaimInvitationRow, ClaimMembershipRow, ClaimTenantRow, expireClaimInvitation(), findClaimMembership() (+25 more)
+Cohesion: 0.16
+Nodes (26): acceptClaimInvitation(), appendClaimAudit(), ClaimInvitationRow, ClaimMembershipRow, ClaimTenantRow, expireClaimInvitation(), findClaimMembership(), findClaimTenant() (+18 more)
 
 ### Community 77 - "dependencies"
-Cohesion: 0.11
-Nodes (19): dependencies, @aws-sdk/s3-request-presigner@^3.1142.0, @drezivo/contracts@0.2.0, drizzle-orm@^0.44.0, express@^5.0.0, fflate@^0.8.3, pg@^8.12.0, pino@^9.4.0 (+11 more)
+Cohesion: 0.10
+Nodes (21): dependencies, @aws-sdk/client-s3@^3.1142.0, @aws-sdk/s3-request-presigner@^3.1142.0, @clerk/express@^1.3.0, @drezivo/contracts@0.2.0, drizzle-orm@^0.44.0, express@^5.0.0, fflate@^0.8.3 (+13 more)
 
-### Community 78 - "operations.middleware.ts"
-Cohesion: 0.25
-Nodes (9): express-serve-static-core, Request, ClothingAvailabilityTimelineQuery, ClothingAvailabilityTimelineResponse, OperationalCalendarQuery, OperationalCalendarResponse, DashboardFittingSummaryResponse, ids (+1 more)
+### Community 78 - "onboarding-plan.tsx"
+Cohesion: 0.19
+Nodes (19): OnboardingPlanPage(), BrandHeader(), formatPlanPrice(), InlineError(), LaunchPhase, LoadState, OnboardingPlan(), handleSavePlan() (+11 more)
 
-### Community 79 - "photo-extraction.service.ts"
-Cohesion: 0.15
-Nodes (16): EMPTY_EXTRACTION, extractClothingPhoto(), geminiNativeGemmaEndpoint(), ModelReply, nativeGeminiContent(), openAiCompatibleContent(), openRouterSettings(), parseModelReply() (+8 more)
+### Community 79 - "steps"
+Cohesion: 0.10
+Nodes (20): jobs, test, name, branches, branches, if, name, run (+12 more)
 
 ### Community 80 - "app/.github/workflows/ci.yml"
 Cohesion: 0.06
@@ -1008,27 +1017,27 @@ Nodes (37): if, name, runs-on, steps, concurrency, cancel-in-progress, group, en
 
 ### Community 82 - "Operating Model.md"
 Cohesion: 0.05
-Nodes (36): Cache invalidation, Cloudflare media Worker, Deploy and verify, Public image request, Routes and secrets, If rollout or cleanup fails, Inspect, retry, or hold a cleanup, Production gate (+28 more)
+Nodes (39): Cache invalidation, Cloudflare media Worker, Deploy and verify, Public image request, Routes and secrets, If rollout or cleanup fails, Inspect, retry, or hold a cleanup, Production gate (+31 more)
 
 ### Community 83 - "web/.github/workflows/ci.yml"
 Cohesion: 0.06
 Nodes (37): if, name, runs-on, steps, concurrency, cancel-in-progress, group, env (+29 more)
 
-### Community 84 - "tenant-bootstrap.repository.ts"
-Cohesion: 0.10
-Nodes (32): BootstrapTransactionContext, withBootstrapTransaction(), hasAccountAcceptedTerms(), DEFAULT_CATEGORIES, seedDefaultCatalogueCategories(), BootstrapPersistenceResult, failure(), rejectAndFinalize() (+24 more)
+### Community 84 - "billing.routes.ts"
+Cohesion: 0.15
+Nodes (13): changeSubscriptionPlanController(), express-serve-static-core, Request, requireSubscriptionContext, requireSubscriptionIdempotencyKey(), requireTenantOwner(), validateChangeSubscriptionPlan(), billingActor() (+5 more)
 
-### Community 85 - "plan-showcase.tsx"
-Cohesion: 0.26
-Nodes (12): LABELS, TapeMeasure(), tickLength(), TICKS, Features(), PAY_WITH, PlanCards(), PlanShowcase() (+4 more)
+### Community 85 - "import-runner.ts"
+Cohesion: 0.21
+Nodes (15): Api, byKey(), chunk(), createRows(), eachLimited(), rowMessage(), RowUpdate, Schema (+7 more)
 
 ### Community 86 - "reservations.command.service.ts"
-Cohesion: 0.10
-Nodes (38): appendExpiredReservationAuditEvents(), appendExpiredReservationOutboxEvents(), chooseAvailableLockedAsset(), CreatedReservationGraphRow, createReservationCustomer(), createReservationGraph(), ExpiredReservationHoldRow, fillReservationCustomerAddress() (+30 more)
+Cohesion: 0.11
+Nodes (35): appendExpiredReservationAuditEvents(), appendExpiredReservationOutboxEvents(), chooseAvailableLockedAsset(), CreatedReservationGraphRow, createReservationCustomer(), createReservationGraph(), ExpiredReservationHoldRow, fillReservationCustomerAddress() (+27 more)
 
-### Community 87 - "app.ts"
-Cohesion: 0.15
-Nodes (12): guestAccessCookieName(), guestAccessCookiePath(), readGuestAccessCookie(), serializeGuestAccessCookie(), capabilityOf(), guestBookingRouter, perIp(), renterMediaParams (+4 more)
+### Community 87 - "catalogue-add-clothing-route.test.ts"
+Cohesion: 0.19
+Nodes (8): adminUrl, asEnvelope(), clerk, countProductCode(), expectSafeError(), requireRow(), seedAcceptedImage(), seedRouteTenant()
 
 ### Community 88 - "internal-operator.routes.ts"
 Cohesion: 0.15
@@ -1042,49 +1051,49 @@ Nodes (35): if, name, runs-on, steps, concurrency, cancel-in-progress, group, GI
 Cohesion: 0.06
 Nodes (36): Architecture In One Minute, Delivery status, Phase 0: Canonical Decision and Contract Preparation, Phase 1: Global Account and Pre-Tenant State, Phase 2: Clerk Integration and Owner Onboarding, Phase 3: Tenant Bootstrap, Context, and Entitlements, Phase 4: Front Desk Invitation and Membership, Phase 5: Operator Payment, Recovery, and Closure (+28 more)
 
-### Community 91 - "tenancy/onboarding.ts"
-Cohesion: 0.06
-Nodes (38): OperatorActionId, billingPlanDetails, PlatformPaymentMethod, StartTrialRequest, SubmitSubscriptionPaymentRequest, SubmitSubscriptionPaymentResponse, SubscriptionAccessLevel, SubscriptionAccessReason (+30 more)
+### Community 91 - "generate.ts"
+Cohesion: 0.03
+Nodes (91): Request, ContractAbandonOwnerOnboardingInput, document, extraPaths, generator, guestAccessCookieHeader, guestIdParams, header (+83 more)
 
-### Community 92 - "import.ts"
-Cohesion: 0.13
-Nodes (29): FittingCreateContext, attachFittingPaymentReceiptController(), cancelFittingController(), commandContext(), completeFittingController(), configurationContext(), confirmFittingController(), createFittingController() (+21 more)
+### Community 92 - "catalogue-edit-clothing-route.test.ts"
+Cohesion: 0.22
+Nodes (9): adminUrl, asEnvelope(), clerk, expectSafeError(), readEditState(), requireNamedRow(), requireNamedStorageFile(), requireRow() (+1 more)
 
-### Community 93 - "Drezivo — Market Research and Product Review"
-Cohesion: 0.10
-Nodes (20): 1. Recommendation, 2. Competitive landscape, 3. Philippine context and clothing-specific evidence, 4. Findings in the supplied PRD and screens, 5. Positioning and release strategy, 6. Pricing and unit economics, 7. Validation plan before general availability, 8. Research limits and next decisions (+12 more)
+### Community 93 - "clerk-reconciliation.service.ts"
+Cohesion: 0.27
+Nodes (9): OrganizationCreatedRepairInput, OrganizationCreatedRepairResult, reconcileOrganizationCreatedMarkerInTransaction(), DeferredClerkReconciliationResult, reconcileDeferredClerkEvent(), reconcileOrganizationCreatedMarker(), reconcileOrganizationCreatedMarkerInTransaction(), ClerkOnboardingMarker (+1 more)
 
 ### Community 94 - "ref_vitest"
-Cohesion: 0.01
-Nodes (301): createApp(), mapJsonBodyError(), pinoHttp, apiRoot, layered, mountedFile(), parseFile(), shared (+293 more)
+Cohesion: 0.03
+Nodes (137): apiRoot, layered, mountedFile(), parseFile(), shared, closePool(), withSystemGlobalTransaction(), adminUrl (+129 more)
 
 ### Community 95 - "Implementation Checklist"
 Cohesion: 0.06
 Nodes (33): API Contract, Architecture Contract, Availability and transactions, Data conventions, Definition of Done, Excluded, Files and privacy, Implementation Checklist (+25 more)
 
 ### Community 96 - "IdempotencyKeyReusedError"
-Cohesion: 0.08
-Nodes (44): finalizeOnResponse(), handle(), IdempotencyScope, idempotent(), AccountTermsAcceptanceRecord, getAccountTermsAcceptance(), getLatestAccountTermsAcceptance(), insertAccountTermsAcceptance() (+36 more)
+Cohesion: 0.17
+Nodes (19): ActiveTenantMemberRow, insertMemberRemovalAudit(), insertMemberRemovalOutbox(), listActiveTenantMembers(), LockedMembershipRow, lockMembership(), markFrontdeskMembershipRemoved(), finalizeRemoval() (+11 more)
 
-### Community 97 - "pending-hold-guard.tsx"
-Cohesion: 0.27
-Nodes (15): PendingHoldGuard(), RESERVATIONS_CHANGED_EVENT, claimHoldOwner(), clearPendingHold(), draftKey(), isHoldOwned(), notify(), PENDING_HOLD_EVENT (+7 more)
+### Community 97 - "reservation-list-read-model.test.ts"
+Cohesion: 0.20
+Nodes (8): adminUrl, clerk, requireRow(), ReservationState, seedReservation(), SeedReservationInput, seedWorkspace(), WorkspaceSeed
 
 ### Community 98 - "text"
 Cohesion: 0.12
 Nodes (16): Allocation release rules, Appointment lifecycle, Atomic creation and reschedule, BE-0 implementation consequence, Branch fitting configuration, Capacity and concurrency model, Cross-product rollout, Explicit first-slice non-goals (+8 more)
 
-### Community 99 - "customers.routes.ts"
-Cohesion: 0.18
-Nodes (15): express-serve-static-core, requireCustomerIdempotencyKey(), requireCustomerReadPermission(), requireCustomerWritePermission(), validateCustomerArchive(), validateCustomerArchiveRequest(), validateCustomerEditRequest(), validateCustomerHistoryQuery() (+7 more)
+### Community 99 - "tenancy.service.ts"
+Cohesion: 0.08
+Nodes (30): express-serve-static-core, requireCustomerIdempotencyKey(), requireCustomerReadPermission(), requireCustomerWritePermission(), validateCustomerArchive(), validateCustomerArchiveRequest(), validateCustomerEditRequest(), validateCustomerHistoryQuery() (+22 more)
 
 ### Community 100 - "Rental Day Counting Alignment Implementation Plan"
 Cohesion: 0.06
 Nodes (33): 10. Phase 4 — Reservation and availability backend cutover, 11. Phase 5 — Staff reservation UI, 12. Phase 6 — Clothing configuration UI, 13. Phase 7 — Public storefront checkout, 14. Phase 8 — Calendar, dashboard, notifications, and downstream projections, 15. Phase 9 — Test matrix, 16. Phase 10 — Data and release safety, 17. Files/modules expected to change if verified (+25 more)
 
-### Community 101 - "api/src/worker.ts"
-Cohesion: 0.06
-Nodes (51): config, withSystemTenantTransaction(), CATALOGUE_BACKUP_EXPORT_EVENT, sweepCatalogueBackupArtifactsForAllTenants(), FILE_IMAGE_VARIANTS_EVENT_TYPE, FILE_OBJECT_CLEANUP_EVENT_TYPE, handleFileObjectCleanup, createMemberRemovalDispatchHandler() (+43 more)
+### Community 101 - "worker.ts"
+Cohesion: 0.04
+Nodes (66): createEmailSender(), EmailMessage, EmailSender, FileEmailSender, ResendEmailSender, CATALOGUE_BACKUP_EXPORT_EVENT, FILE_IMAGE_VARIANTS_EVENT_TYPE, variantKeys (+58 more)
 
 ### Community 102 - "Drezivo — Market Research and Product Review"
 Cohesion: 0.10
@@ -1094,61 +1103,61 @@ Nodes (20): 1. Recommendation, 2. Competitive landscape, 3. Philippine context a
 Cohesion: 0.10
 Nodes (20): 10. Version gates and references, 11. Implementation acceptance details, 1. Product decision and release contract, 2. Boundaries and users, 3. Domain model and invariants, 4. Workflows and acceptance, 5. Permissions and privacy, 6. Pricing, entitlements, notifications, operator admin, billing (+12 more)
 
-### Community 104 - "ref_node_url"
-Cohesion: 0.14
-Nodes (10): compat, __dirname, eslintConfig, __filename, shouldApplyMigrations(), workflow, compat, __dirname (+2 more)
+### Community 104 - "spreadsheet.ts"
+Cohesion: 0.18
+Nodes (10): ImportDefaults, ImportRow, HEADER_ALIASES, MAX_SHEET_ROWS, parseCsv(), readSpreadsheet(), SheetImport, SheetRecord (+2 more)
 
 ### Community 105 - "_shared.ts"
-Cohesion: 0.12
-Nodes (21): streamFileResponse(), authorizeUploadController(), finalizeUploadController(), parseImageWidth(), readStaffFileController(), requireContext(), requireIdempotencyKey(), express-serve-static-core (+13 more)
+Cohesion: 0.08
+Nodes (33): streamFileResponse(), authorizeUploadController(), finalizeUploadController(), parseImageWidth(), readStaffFileController(), requireContext(), requireIdempotencyKey(), express-serve-static-core (+25 more)
 
 ### Community 106 - "Tenancy, Onboarding, Clerk, Memberships, and Billing Foundation"
-Cohesion: 0.07
-Nodes (28): 2026-09-16, Acceptance and access removal, Catalogue sizing mode, Create-only organization onboarding, Current plan catalog, Decided boundaries, Decision history, Implementation sequence and evidence (+20 more)
+Cohesion: 0.08
+Nodes (25): 2026-09-16, Acceptance and access removal, Catalogue sizing mode, Contract boundary, Current plan catalog, Decided boundaries, Decision history, Implementation sequence and evidence (+17 more)
 
 ### Community 107 - "storefront-policy-images.test.tsx"
-Cohesion: 0.09
-Nodes (47): context, createClothing, items, archiveCustomerController(), getCustomerDetailController(), getCustomerSummaryController(), listCustomerFittingsController(), listCustomerReservationsController() (+39 more)
+Cohesion: 0.06
+Nodes (66): archiveCustomerController(), getCustomerDetailController(), getCustomerSummaryController(), listCustomerFittingsController(), listCustomerReservationsController(), listCustomersController(), requireCustomerContext(), requireCustomerMutationContext() (+58 more)
 
 ### Community 108 - "clerk.schemas.ts"
-Cohesion: 0.10
-Nodes (28): withSystemGlobalTransaction(), OrganizationCreatedRepairInput, OrganizationCreatedRepairResult, reconcileOrganizationCreatedMarkerInTransaction(), DeferredClerkReconciliationResult, reconcileDeferredClerkEvent(), reconcileOrganizationCreatedMarker(), reconcileOrganizationCreatedMarkerInTransaction() (+20 more)
+Cohesion: 0.18
+Nodes (15): addIfPresent(), invitationData, mapInvitationData(), mapMembershipData(), mapOrganizationData(), membershipData, normalizeClerkWebhookEvent(), NormalizeClerkWebhookResult (+7 more)
 
 ### Community 109 - "Product Requirements Document (PRD)"
 Cohesion: 0.07
 Nodes (29): 10. Non-Functional Requirements, 11. Success Metrics, 12. Assumptions & Open Questions, 13. Appendix — Reference Screens Provided, 1.1 What is Rentivo?, 1.2 Guiding principle, 1.3 The three surfaces, 1. Overview (+21 more)
 
 ### Community 110 - "web/src/components/legal/legal-layout.tsx"
-Cohesion: 0.08
-Nodes (29): READ_ONLY_ACCESS_DAYS, STOREFRONT_GRACE_DAYS, FAQ_JSON_LD, FaqPage(), groupId(), metadata, metadata, PricingPage() (+21 more)
+Cohesion: 0.07
+Nodes (38): FAQ_JSON_LD, FaqPage(), groupId(), metadata, metadata, PricingPage(), metadata, PrivacyPage() (+30 more)
 
 ### Community 111 - "files.service.ts"
-Cohesion: 0.12
-Nodes (27): ascii(), assertUnique(), BackupManifest, BackupRows, createCatalogueBackup(), CSV_FILES, CSV_HEADERS, csvCell() (+19 more)
+Cohesion: 0.08
+Nodes (45): ascii(), assertUnique(), BackupManifest, BackupMedia, BackupRows, CSV_FILES, CSV_HEADERS, csvCell() (+37 more)
 
-### Community 112 - "reservations-page.test.tsx"
-Cohesion: 0.22
-Nodes (14): baseSelect(), cursorPredicate(), decodeCursor(), encodeCursor(), escapeLikePattern(), FittingDetailReadRow, FittingIntakeCustomerRow, FittingListCursor (+6 more)
+### Community 112 - "storefront-guest-booking.test.ts"
+Cohesion: 0.29
+Nodes (9): adminUrl, attempt(), holdRequest(), interval(), liveStore(), PNG, PNG_SHA, setClosedWeekdays() (+1 more)
 
 ### Community 113 - "build"
-Cohesion: 0.11
-Nodes (17): Commands, Drezivo App, Key decisions, build(), glossary(), inventory(), iter_dirs(), iter_files() (+9 more)
+Cohesion: 0.06
+Nodes (31): Commands, Drezivo App, Key decisions, build(), glossary(), inventory(), iter_dirs(), iter_files() (+23 more)
 
 ### Community 114 - "onboarding.persistence.ts"
-Cohesion: 0.07
-Nodes (40): AccountRecord, appendGlobalAuditEvent(), AppendGlobalAuditEventInput, GlobalAuditActorKind, GlobalAuditEventRecord, GlobalAuditEventRow, GlobalAuditOutcome, readGlobalAuditEvents() (+32 more)
+Cohesion: 0.04
+Nodes (74): BootstrapTransactionContext, withBootstrapTransaction(), AccountRecord, hasAccountAcceptedTerms(), appendGlobalAuditEvent(), AppendGlobalAuditEventInput, GlobalAuditActorKind, GlobalAuditEventRecord (+66 more)
 
 ### Community 115 - "reservations.ts"
-Cohesion: 0.10
-Nodes (35): withActorTenantResolutionTransaction(), AccessRow, appendBillingAuditEvent(), BillingSubscriptionRow, insertPendingSubscriptionPayment(), isAcceptedPaymentProof(), listActivePlatformPaymentMethods(), listSubscriptionPayments() (+27 more)
+Cohesion: 0.07
+Nodes (44): withActorTenantResolutionTransaction(), accessOf(), AccessSubscription, daysLeft(), iso(), locked(), AccessRow, appendBillingAuditEvent() (+36 more)
 
 ### Community 116 - "reservations.quote.ts"
-Cohesion: 0.07
-Nodes (42): EditableVariantRow, assertEventDateWithinRentalPeriod(), assertSupportedAmount(), assertSupportedTimezone(), computeRentalTotal(), countRentalDays(), includedRentalDaysOf(), isoDateDayNumber() (+34 more)
+Cohesion: 0.06
+Nodes (49): readReservationCatalogueQuoteSelection(), readReservationCatalogueSelection(), ReservationCatalogueQuoteSelectionRow, ReservationCatalogueSelectionRow, resolveReservationCatalogueQuoteSelection(), resolveReservationCatalogueSelection(), assertEventDateWithinRentalPeriod(), assertRequestedPickupNotInPast() (+41 more)
 
-### Community 117 - "migration-order-exception.test.ts"
-Cohesion: 0.19
-Nodes (8): applyMigrationTransaction(), MigrationTransactionClient, API_ROOT, applyMigration(), MIGRATIONS_DIR, TSX_CLI, applyMigration(), MIGRATIONS_DIR
+### Community 117 - "dashboard-access-gate.test.tsx"
+Cohesion: 0.24
+Nodes (7): rememberResolvedWorkspace(), takeResolvedWorkspace(), api, clerk, CurrentPlan(), resolver, router
 
 ### Community 118 - "dependencies"
 Cohesion: 0.07
@@ -1158,13 +1167,13 @@ Nodes (28): dependencies, class-variance-authority@^0.7.1, @clerk/nextjs@^6.12.0
 Cohesion: 0.07
 Nodes (27): compilerOptions, allowJs, allowSyntheticDefaultImports, checkJs, esModuleInterop, exactOptionalPropertyTypes, forceConsistentCasingInFileNames, incremental (+19 more)
 
-### Community 120 - "Drezivo — Technical Requirements Document"
-Cohesion: 0.17
-Nodes (12): ascii(), CapturedPhotoFile, capturePhotoFile(), describeOtherFormat(), detectPhotoContentType(), PhotoContentType, UnsupportedPhotoTypeError, AVIF (+4 more)
+### Community 120 - "LOW (P2) — platform, operator, and hardening"
+Cohesion: 0.20
+Nodes (10): L01 — Operator-assisted payment activation and recovery (OR1), L02 — Entitlement and plan-quota lifecycle (OR2), L03 — Subscription billing lifecycle (OR3), L04 — Restricted-tenant continuity tests (OR3), L05 — Operator support grants (OR4, OR8), L06 — Clerk webhook reconciliation hardening, L07 — Production indexes and query bounds (PERF), L08 — NFR and load verification (+2 more)
 
 ### Community 121 - "Drezivo API"
-Cohesion: 0.07
-Nodes (22): Drezivo Workspace License Notice, API commands, Drezivo API, Environment and production, License, Local development, Prerequisites, Staff actor and workspace context (+14 more)
+Cohesion: 0.09
+Nodes (15): Drezivo Workspace License Notice, Drezivo Workspace License Notice, Development, Drezivo staff authentication and owner dashboard, License, Drezivo Workspace License Notice, Drezivo Workspace Documentation License Notice, Drezivo Proprietary Monorepo License (+7 more)
 
 ### Community 122 - "Contributing to `docs`"
 Cohesion: 0.08
@@ -1178,17 +1187,17 @@ Nodes (25): compilerOptions, declaration, esModuleInterop, exactOptionalProperty
 Cohesion: 0.08
 Nodes (24): description, CONTRACTS_REF, inputs, ref, token, name, description, required (+16 more)
 
-### Community 125 - "schema/index.ts"
-Cohesion: 0.25
-Nodes (10): account, accountTermsAcceptance, bootstrapIdempotencyRecord, globalAuditEvent, clerkOrganizationCleanupJob, onboardingPaymentVerification, organizationOnboarding, ownerOnboardingAttempt (+2 more)
+### Community 125 - "tenancy.ts"
+Cohesion: 0.14
+Nodes (23): account, accountTermsAcceptance, auditEvent, operatorCommand, operatorCommandStatusEnum, supportGrant, bootstrapIdempotencyRecord, globalAuditEvent (+15 more)
 
-### Community 126 - "subscription-payment-reviewed.ts"
-Cohesion: 0.09
-Nodes (19): createEmailSender(), EmailMessage, EmailSender, FileEmailSender, ResendEmailSender, openSealedEmail(), createEmailDeliveryHandler(), activateApprovedFreeUpgrade() (+11 more)
+### Community 126 - "MEDIUM (P1) — V1 completeness"
+Cohesion: 0.20
+Nodes (10): M01 — Storefront publish workflow and settings, M03 — Guest checkout flow, M04 — Operations dashboard read model, M05 — Unified calendar, M06 — CSV import (OR6), M07 — Async exports (OR7), M08 — Email adapter and notification delivery, M09 — Audit coverage completion (+2 more)
 
 ### Community 127 - "StaffSignInForm"
-Cohesion: 0.07
-Nodes (25): SignInPage(), SignUpPage(), AuthBackButton(), AuthBackButtonProps, BackIcon(), HistoryBackButton(), AuthSplitLayoutProps, StaffAuthPage() (+17 more)
+Cohesion: 0.11
+Nodes (16): AuthFlow, getSecondFactorLabel(), GoogleIcon(), SecondFactorStrategy, SecondFactorTarget, StaffSignInForm(), handleEmailSubmit(), handleFirstFactorSubmit() (+8 more)
 
 ### Community 128 - "Drezivo — Technical Requirements Document"
 Cohesion: 0.07
@@ -1200,19 +1209,19 @@ Nodes (24): compilerOptions, allowJs, esModuleInterop, forceConsistentCasingInFi
 
 ### Community 130 - "0015-starter-and-standard-plans.md"
 Cohesion: 0.06
-Nodes (29): Narrow operator plan change, Operator console audit projection, 0002. Drizzle and node-postgres, Consequences, Context, Decision, 0011. One Standard plan during the pilot, Consequences (+21 more)
+Nodes (27): Narrow operator plan change, Operator console audit projection, 0002. Drizzle and node-postgres, Consequences, Context, Decision, 0010. Storefront CMS, guest reservation requests, and public fitting requests, Consequences (+19 more)
 
 ### Community 131 - "fittings-phase9-security.test.ts"
 Cohesion: 0.12
-Nodes (16): 10. Mandatory SQL invariants beyond DBML, 11. Falsification checklist, 1. Design and release boundaries, 2. Conventions, 3. Relationship overview, 5. Catalogue, planned availability and actual custody, 6. Reservation states and transaction recipes, 7. Operational financial subledger (+8 more)
+Nodes (17): 10. Mandatory SQL invariants beyond DBML, 11. Falsification checklist, 1. Design and release boundaries, 2. Conventions, 3. Relationship overview, 5. Catalogue, planned availability and actual custody, 6. Reservation states and transaction recipes, 7. Operational financial subledger (+9 more)
 
 ### Community 132 - "compilerOptions"
 Cohesion: 0.08
 Nodes (23): compilerOptions, declaration, esModuleInterop, exactOptionalPropertyTypes, forceConsistentCasingInFileNames, isolatedModules, lib, module (+15 more)
 
-### Community 133 - "_shared.ts"
-Cohesion: 0.21
-Nodes (11): auditEvent, operatorCommand, operatorCommandStatusEnum, supportGrant, file, fileLifecycleEnum, filePurposeEnum, idColumn (+3 more)
+### Community 133 - "draft-store.ts"
+Cohesion: 0.33
+Nodes (7): clearBatch(), loadBatch(), openDb(), run(), saveBatch(), SavedBatch, DEFAULT_IMPORT_DEFAULTS
 
 ### Community 134 - "API Security Review 2026-09-23"
 Cohesion: 0.08
@@ -1222,9 +1231,9 @@ Nodes (24): 2026-09-23 — Initial read-only review, API Security Review 2026-09
 Cohesion: 0.08
 Nodes (23): 10. Useful references, 1. The team agreement, 2. Repository map, 3. Starting work, 4. Commit and push rules, 5. Pull request workflow, 6. Validation by change type, 7. Dependabot policy (+15 more)
 
-### Community 136 - "Drezivo — Logical Database Specification"
-Cohesion: 0.13
-Nodes (15): 10. Mandatory SQL invariants beyond DBML, 11. Falsification checklist, 1. Design and release boundaries, 2. Conventions, 3. Relationship overview, 5. Catalogue, planned availability and actual custody, 6. Reservation states and transaction recipes, 7. Operational financial subledger (+7 more)
+### Community 136 - "5. Catalogue, planned availability and actual custody"
+Cohesion: 0.50
+Nodes (4): 5. Catalogue, planned availability and actual custody, Actual truth, Canonical planned block, Three identities
 
 ### Community 137 - "Contributing to `app`"
 Cohesion: 0.09
@@ -1234,25 +1243,25 @@ Nodes (22): 1. Branching model, 2. Commit messages — Conventional Commits 1.0.
 Cohesion: 0.09
 Nodes (23): devDependencies, @eslint/eslintrc@^3.2.0, husky@^9.1.7, jsdom@^30.1.1, @playwright/test@^1.50.1, postcss@^8.5.1, prettier@^3.9.9, tailwindcss@^4.0.6 (+15 more)
 
-### Community 139 - "api/tests/integration/catalogue-files.test.ts"
-Cohesion: 0.15
-Nodes (24): createStaffReservation(), actionEffectCounts(), adminUrl, attachAcceptedReceipt(), cancellationAudit(), clerk, createConfirmedReservation(), createHold() (+16 more)
+### Community 139 - "onboarding-status-panel.tsx"
+Cohesion: 0.31
+Nodes (7): OnboardingStatusPage(), OnboardingCheck, onboardingChecks, OnboardingStatusPanel(), OnboardingStep, onboardingSteps, OnboardingVisualState
 
 ### Community 140 - "package.json"
 Cohesion: 0.09
-Nodes (22): description, devDependencies, eslint@^10.11.0, vitest@^5.0.3, engines, node, eslint, vitest (+14 more)
+Nodes (26): description, devDependencies, eslint@^10.11.0, @playwright/test@^1.65.1, @types/node@^26.6.6, vitest@^5.0.3, engines, node (+18 more)
 
 ### Community 141 - "Button"
-Cohesion: 0.03
-Nodes (114): FittingsRoute(), actionLabel(), DetailValue(), FittingDetailsSheet(), FittingDetailState(), InlineError(), ProductionActions(), SectionHeading() (+106 more)
+Cohesion: 0.05
+Nodes (84): FittingsRoute(), actionLabel(), DetailValue(), FittingDetailsSheet(), InlineError(), ProductionActions(), SectionHeading(), toDrezivoApiError() (+76 more)
 
 ### Community 142 - "Membership"
-Cohesion: 0.14
-Nodes (14): 10. Mandatory SQL invariants beyond DBML, 11. Falsification checklist, 1. Design and release boundaries, 3. Relationship overview, 5. Catalogue, planned availability and actual custody, 6. Reservation states and transaction recipes, 7. Operational financial subledger, 9. Fittings and transfers (+6 more)
+Cohesion: 0.12
+Nodes (16): 10. Mandatory SQL invariants beyond DBML, 11. Falsification checklist, 1. Design and release boundaries, 2. Conventions, 3. Relationship overview, 5. Catalogue, planned availability and actual custody, 6. Reservation states and transaction recipes, 7. Operational financial subledger (+8 more)
 
 ### Community 143 - "schema/billing.ts"
-Cohesion: 0.14
-Nodes (13): bytea, plan, planEntitlement, platformPaymentMethod, platformPaymentMethodChange, platformPaymentQrObject, subscription, subscriptionEvent (+5 more)
+Cohesion: 0.13
+Nodes (14): bytea, plan, planEntitlement, platformPaymentMethod, platformPaymentMethodChange, platformPaymentQrObject, subscription, subscriptionEvent (+6 more)
 
 ### Community 144 - "fitting-prototype-presentation.ts"
 Cohesion: 0.13
@@ -1271,16 +1280,16 @@ Cohesion: 0.06
 Nodes (33): Accessibility (non-negotiable), Component Framework, Design Principles, Design Tokens, Frontend, Layout, Performance, Accessibility (non-negotiable) (+25 more)
 
 ### Community 148 - "devDependencies"
-Cohesion: 0.07
-Nodes (41): description, devDependencies, @commitlint/cli@^21.2.3, @commitlint/config-conventional@^21.2.2, drizzle-kit@^0.31.11, eslint@^10.11.0, @eslint/js@^10.0.1, husky@^9.1.6 (+33 more)
+Cohesion: 0.06
+Nodes (46): description, devDependencies, @commitlint/cli@^21.2.3, @commitlint/config-conventional@^21.2.2, drizzle-kit@^0.31.11, eslint@^10.11.0, @eslint/js@^10.0.1, husky@^9.1.6 (+38 more)
 
 ### Community 149 - "dependencies"
-Cohesion: 0.10
-Nodes (25): @aws-sdk/client-s3@^3.1142.0, MAX_STORED_OBJECT_READ_BYTES, ReadAuthorization, StoredObjectMetadata, StoredObjectRead, UploadAuthorization, UploadedObjectMetadata, asAsyncByteStream() (+17 more)
+Cohesion: 0.09
+Nodes (29): config, MAX_STORED_OBJECT_READ_BYTES, ReadAuthorization, StoredObjectMetadata, StoredObjectRead, UploadAuthorization, UploadedObjectMetadata, asAsyncByteStream() (+21 more)
 
 ### Community 150 - "email-notifications.ts"
-Cohesion: 0.26
-Nodes (9): allOn(), ComposedEmail, EMAIL_EVENT_TYPE, emailNotifications, enqueueEmail(), formatLocal(), NOTIFICATION_PREFERENCES_ENFORCED, WorkspaceMailContext (+1 more)
+Cohesion: 0.24
+Nodes (10): allOn(), ComposedEmail, EMAIL_EVENT_TYPE, emailNotifications, enqueueEmail(), formatLocal(), NOTIFICATION_PREFERENCES_ENFORCED, WorkspaceMailContext (+2 more)
 
 ### Community 151 - "help-center-page.tsx"
 Cohesion: 0.31
@@ -1290,37 +1299,37 @@ Nodes (7): metadata, Page(), faqUrl(), Guide, HelpCenterPage(), Topic, TOPICS
 Cohesion: 0.19
 Nodes (10): adminUrl, createCommittedFitting(), FittingIds, insertPendingFitting(), PERIOD_A, PERIOD_ADJACENT, PERIOD_OVERLAP, requireId() (+2 more)
 
-### Community 153 - "tenancy.ts"
-Cohesion: 0.22
-Nodes (9): membershipInvitation, membershipInvitationStatusEnum, branchClosure, branchMembership, membership, membershipRoleEnum, membershipStatusEnum, tenant (+1 more)
+### Community 153 - "API Response Envelope and Consumer Update"
+Cohesion: 0.20
+Nodes (10): API Response Envelope and Consumer Update, Caller example, Client changes, Contract, Error codes, Migration notes for contributors, Purpose, Scope and known limitations (+2 more)
 
 ### Community 154 - "Clothing Rental SaaS — Customer Public Storefront Pages.md"
 Cohesion: 0.10
 Nodes (20): 12. V1 Customer Public Pages, 13. Important Product Boundary, 14. North Star, 1. Customer-Facing Architecture, 6. Reservation Checkout, 8. Customer Journey, 9. Information Relationship Between Pages, Clothing Rental SaaS — Customer Public Storefront Pages (+12 more)
 
-### Community 155 - "fittings.ts"
-Cohesion: 0.22
-Nodes (8): productVariant, fittingAppointment, fittingCapacitySlot, fittingLine, fittingSettings, fittingSlotAllocation, timestampTzRange, customer
+### Community 155 - "motion-root.tsx"
+Cohesion: 0.42
+Nodes (8): lenis, MotionRoot(), reducedMotion(), afterUnlock, registerLenis(), scrollToSection(), syncScrollPosition(), whenScrollUnlocked()
 
 ### Community 156 - "onboarding-status-panel.tsx"
-Cohesion: 0.15
-Nodes (12): reservationExpirySchedule, custodyEvent, custodyEventKindEnum, disruption, disruptionStatusEnum, guestAccessToken, reservation, reservationLine (+4 more)
+Cohesion: 0.10
+Nodes (23): productVariant, fittingAppointment, fittingCapacitySlot, fittingLine, fittingSettings, fittingSlotAllocation, timestampTzRange, reservationExpirySchedule (+15 more)
 
-### Community 157 - "middleware.ts"
-Cohesion: 0.07
-Nodes (35): expiry(), FILE_GRANT_SHAPE, FILE_MEDIA_GRANT_TTL_SECONDS, issueFileMediaGrant(), issuePreviewMediaSession(), PREVIEW_MEDIA_SESSION_TTL_SECONDS, PREVIEW_SESSION_SHAPE, PreviewMediaSession (+27 more)
+### Community 157 - "media-access-grants.ts"
+Cohesion: 0.24
+Nodes (14): expiry(), FILE_GRANT_SHAPE, FILE_MEDIA_GRANT_TTL_SECONDS, issueFileMediaGrant(), issuePreviewMediaSession(), PREVIEW_MEDIA_SESSION_TTL_SECONDS, PREVIEW_SESSION_SHAPE, PreviewMediaSession (+6 more)
 
 ### Community 158 - "On-call checklist"
 Cohesion: 0.25
 Nodes (9): LINK_SHAPE, PROOF_LINK_MAX_TTL_SECONDS, ProofLinkGrant, sign(), signProofLink(), verifyProofLink(), expiresAt, fourMinutesBefore (+1 more)
 
-### Community 159 - "HIGH (P0) — owner workspace transactional core"
-Cohesion: 0.15
-Nodes (19): CalendarActivityFilter, CalendarActivityType, calendarBusinessHoursModel(), CalendarCategory, calendarDateKeyAt(), calendarTodayDateKey(), CalendarView, capitalizeWeekday() (+11 more)
+### Community 159 - "calendar-schedule-page.tsx"
+Cohesion: 0.06
+Nodes (80): CalendarPage(), activityTone, PhoneDayAgenda(), PhoneWeekStrip(), useHorizontalSwipe(), addCalendarDays(), addCalendarMonths(), CALENDAR_HOUR_HEIGHT (+72 more)
 
 ### Community 160 - "common/errors.ts"
-Cohesion: 0.42
-Nodes (6): apiEnvelope(), successEnvelope(), ErrorEnvelope, ErrorField, ErrorObject, Contracts (`contracts`)
+Cohesion: 0.16
+Nodes (12): 0.1.0, Changelog, apiEnvelope(), successEnvelope(), ErrorEnvelope, ErrorField, ErrorObject, IDEMPOTENCY_KEY_HEADER (+4 more)
 
 ### Community 161 - "Drezivo Product Requirements Document"
 Cohesion: 0.17
@@ -1344,7 +1353,7 @@ Nodes (18): 1. Branching model, 2. Commit messages — Conventional Commits 1.0.
 
 ### Community 166 - "catalogue.read.repository.ts"
 Cohesion: 0.15
-Nodes (17): ClothingDetailAllocationRow, ClothingDetailAssetRow, ClothingDetailImageRow, ClothingDetailProductRow, ClothingDetailReadModel, ClothingDetailVariantRow, ClothingListReadPage, ClothingListReadRow (+9 more)
+Nodes (18): ClothingDetailAllocationRow, ClothingDetailAssetRow, ClothingDetailImageRow, ClothingDetailProductRow, ClothingDetailReadModel, ClothingDetailVariantRow, ClothingListReadPage, ClothingListReadRow (+10 more)
 
 ### Community 167 - "Fittings Prototype Review Gate"
 Cohesion: 0.10
@@ -1363,8 +1372,8 @@ Cohesion: 0.25
 Nodes (7): Before editing anything, Commit messages — Conventional Commits, enforced by commitlint, Cross-repo changes, Git and delivery workflow — AUTO-LOADED, Never, Reporting, Stop before committing
 
 ### Community 171 - "catalogue-files.test.ts"
-Cohesion: 0.32
-Nodes (11): applyLiveState(), checkGate(), clientResponse(), fileId(), gateFailure(), handlePublicContent(), jsonBounded(), noStore() (+3 more)
+Cohesion: 0.23
+Nodes (14): applyLiveState(), checkGate(), clientResponse(), fileId(), gateFailure(), handlePublicContent(), jsonBounded(), noStore() (+6 more)
 
 ### Community 172 - "Contributing to `contracts`"
 Cohesion: 0.11
@@ -1372,23 +1381,23 @@ Nodes (17): 1. Branching model, 2. Commit messages — Conventional Commits 1.0.
 
 ### Community 173 - "Storefront, Storefront CMS, and Settings Checklist"
 Cohesion: 0.10
-Nodes (19): access(), Change log, Known gaps left as they are (outside this scope, recorded for follow-up), Milestone 0 — Prerequisites, Milestone 10 — Worker hosting (Cloud Run Jobs, Stage 1), Milestone 11 — Motion, UI/UX polish, and owner-side QA, Milestone 12 — Owner preview, sign-in fix, layout and speed, Milestone 13 — Section links, motion robustness, save and upload fixes (+11 more)
+Nodes (20): access(), Change log, Decisions recorded before building, Known gaps left as they are (outside this scope, recorded for follow-up), Milestone 0 — Prerequisites, Milestone 10 — Worker hosting (Cloud Run Jobs, Stage 1), Milestone 11 — Motion, UI/UX polish, and owner-side QA, Milestone 12 — Owner preview, sign-in fix, layout and speed (+12 more)
 
 ### Community 174 - "scripts"
 Cohesion: 0.11
 Nodes (18): scripts, build, db:generate, db:migrate, db:migrate:status, db:studio, dev, dev:worker (+10 more)
 
 ### Community 175 - "internal-operator.routes.ts"
-Cohesion: 0.05
+Cohesion: 0.04
 Nodes (49): Security, Security, AppOptions, express-serve-static-core, Request, requestId(), createInternalOperatorRouter(), hasPermission() (+41 more)
 
-### Community 176 - "calendar-schedule-page.test.tsx"
-Cohesion: 0.12
-Nodes (14): CALENDAR_HOUR_HEIGHT, actorContext, api, businessHours, calendarEvents, clerk, fittingAt, fittingDetailFixture (+6 more)
+### Community 176 - "Feature test engineer"
+Cohesion: 0.22
+Nodes (6): Playwright execution and evidence, QA report and defect evidence, Boundaries, Deliverable, Feature test engineer, Workflow
 
 ### Community 177 - "Drezivo Product Requirements Document"
-Cohesion: 0.05
-Nodes (60): Request, Request, document, extraPaths, generator, guestAccessCookieHeader, guestIdParams, header (+52 more)
+Cohesion: 0.07
+Nodes (40): Request, customerId, detail(), listItem(), variantId, PaymentReceiptId, FittingActionResponse, FittingCancelRequest (+32 more)
 
 ### Community 178 - "contracts/package.json"
 Cohesion: 0.12
@@ -1399,8 +1408,8 @@ Cohesion: 0.12
 Nodes (17): devDependencies, @asteasolutions/zod-to-openapi@^7.3.0, @commitlint/cli@^21.2.3, @commitlint/config-conventional@^21.2.2, eslint@^10.11.0, husky@^9.1.6, prettier@^3.9.9, typescript-eslint@^8.71.0 (+9 more)
 
 ### Community 180 - "Decisions"
-Cohesion: 0.08
-Nodes (27): attention(), fail(), Basic Callout, Callouts Reference, Custom Callouts (CSS), Foldable Callouts, Nested Callouts, Supported Callout Types (+19 more)
+Cohesion: 0.14
+Nodes (16): attention(), fail(), Basic Callout, Callouts Reference, Custom Callouts (CSS), Foldable Callouts, Nested Callouts, Supported Callout Types (+8 more)
 
 ### Community 181 - "docs/package.json"
 Cohesion: 0.15
@@ -1408,7 +1417,7 @@ Nodes (16): description, devDependencies, @commitlint/cli@^21.2.3, @commitlint/c
 
 ### Community 182 - "draft-store.ts"
 Cohesion: 0.06
-Nodes (28): ObjectStorage, ExtractDependencies, MEDIA_READ_GRANT_TTL_SECONDS, MediaReadGrant, SelectedMediaObject, FileStreamResponse, guestReceiptStorageKey(), IMAGE_VARIANT_PURPOSES (+20 more)
+Nodes (33): ObjectStorage, EMPTY_EXTRACTION, extractClothingPhoto(), ExtractDependencies, geminiNativeGemmaEndpoint(), ModelReply, nativeGeminiContent(), openAiCompatibleContent() (+25 more)
 
 ### Community 183 - "Core Rental Operations V1 End-to-End Checklist"
 Cohesion: 0.12
@@ -1422,9 +1431,9 @@ Nodes (17): env, name, runs-on, services, timeout-minutes, POSTGRES_DB, POSTGRES
 Cohesion: 0.27
 Nodes (14): AfterCalendar(), AfterDeposit(), AfterPaymentReview(), AfterReturns(), AfterStorefront(), AppScreen(), BeforeInquiries(), BeforeMissedCalls() (+6 more)
 
-### Community 186 - "tenancy.service.ts"
-Cohesion: 0.05
-Nodes (56): requireStaffAuth(), Bucket, rateLimit(), RateLimitOptions, commandHandler(), readHandler(), staffContextOf(), workspaceRateLimit() (+48 more)
+### Community 186 - "sendSuccess"
+Cohesion: 0.04
+Nodes (58): Bucket, rateLimit(), RateLimitOptions, commandHandler(), readHandler(), staffContextOf(), workspaceRateLimit(), toValidationError() (+50 more)
 
 ### Community 187 - "seed-local-clothing.ts"
 Cohesion: 0.28
@@ -1435,8 +1444,8 @@ Cohesion: 0.25
 Nodes (7): Before editing anything, Commit messages — Conventional Commits, enforced by commitlint, Cross-repo changes, Git and delivery workflow — AUTO-LOADED, Never, Reporting, Stop before committing
 
 ### Community 189 - "schema/finance.ts"
-Cohesion: 0.12
-Nodes (15): allocationDirectionEnum, charge, chargeKindEnum, depositEntry, depositEntryKindEnum, evidenceStatusEnum, payment, paymentAllocation (+7 more)
+Cohesion: 0.11
+Nodes (18): file, fileLifecycleEnum, filePurposeEnum, allocationDirectionEnum, charge, chargeKindEnum, depositEntry, depositEntryKindEnum (+10 more)
 
 ### Community 190 - "Git and delivery workflow — AUTO-LOADED"
 Cohesion: 0.25
@@ -1447,16 +1456,16 @@ Cohesion: 0.22
 Nodes (9): Current request paths, Environment configuration, Private derivatives and cleanup, Private media delivery, Public storefront images, Renter payment-step images, Staff images, Store previews (+1 more)
 
 ### Community 192 - "access.ts"
-Cohesion: 0.10
-Nodes (24): accessOf(), AccessSubscription, daysLeft(), iso(), locked(), SubscriptionProjectionRow, END, paid() (+16 more)
+Cohesion: 0.08
+Nodes (28): paid(), trial(), PaymentReceiptSubmitRequest, Cancellation — business side only, Creating a new reservation — frontend wired; manual validation pending, Customer information and reservation completion — frontend wired; manual validation pending, Deferred from Reservations V1, How to use this checklist (+20 more)
 
 ### Community 193 - "Git and delivery workflow — AUTO-LOADED"
 Cohesion: 0.25
 Nodes (7): Before editing anything, Commit messages — Conventional Commits, enforced by commitlint, Cross-repo changes, Git and delivery workflow — AUTO-LOADED, Never, Reporting, Stop before committing
 
 ### Community 194 - "Callouts Reference"
-Cohesion: 0.12
-Nodes (12): parseCorsAllowedOrigins(), strictBooleanEnv(), envSchema, loadConfig(), parseConfig(), withObjectStorageCompatibility(), baseEnvironment, issuePaths() (+4 more)
+Cohesion: 0.17
+Nodes (9): parseCorsAllowedOrigins(), strictBooleanEnv(), envSchema, loadConfig(), parseConfig(), withObjectStorageCompatibility(), baseEnvironment, issuePaths() (+1 more)
 
 ### Community 195 - "Object-storage migration and cutover"
 Cohesion: 0.18
@@ -1466,13 +1475,13 @@ Nodes (10): Browser CORS, Cutover, Existing AWS object inventory, Non-production
 Cohesion: 0.17
 Nodes (8): dashboardPaths, sanitizeStaffAnalyticsEvent(), @tanstack/react-query, @tanstack/react-query@^5.59.0, metadata, RootLayout(), VercelAnalytics(), QueryProvider()
 
-### Community 197 - "staff-auth-page.tsx"
-Cohesion: 0.22
-Nodes (9): 27. Wire summary cards, 28. Wire list/search/filter/pagination, 29. Wire Customer Details Sheet, 30. Wire Edit, 31. Wire Archive, 32. Production UI tests, 33. End-to-end/manual validation, 34. Documentation cleanup (+1 more)
+### Community 197 - "catalogue-scale-bounds.test.ts"
+Cohesion: 0.31
+Nodes (7): getCatalogueClothingList(), adminUrl, explainSearchIndex(), insertScaleCatalogue(), planText(), requireId(), seedScaleCatalogue()
 
-### Community 198 - "src/index.ts"
-Cohesion: 0.04
-Nodes (89): RestoreState, Page(), ChoiceState, CatalogPlan, Load, MethodDetails(), payablePlanCode(), PaymentForm() (+81 more)
+### Community 198 - "createDrezivoApiClient"
+Cohesion: 0.06
+Nodes (65): Page(), CatalogPlan, formatPrice(), FreeOwnerActions(), longDate(), planSummary(), PlanUpgradeProvider(), startTrial() (+57 more)
 
 ### Community 199 - "Drezivo Privacy Policy"
 Cohesion: 0.12
@@ -1487,16 +1496,16 @@ Cohesion: 0.12
 Nodes (15): dependency-type, development-dependencies, production-dependencies, dependency-name, update-types, dependency-type, interval, updates (+7 more)
 
 ### Community 202 - "withTenantTransaction"
-Cohesion: 0.02
-Nodes (113): withTenantTransaction(), countProductCode(), adminUrl, createSubscription(), readCreatedGraph(), requireRow(), seedAcceptedImage(), seedCommandTenant() (+105 more)
+Cohesion: 0.03
+Nodes (106): withTenantTransaction(), assertReservationBookingContext(), assertReservationReadContext(), createStaffReservation(), getReservationDetail(), getReservationList(), getReservationPaymentReceipts(), getStaffReservationQuote() (+98 more)
 
-### Community 203 - "calendar-schedule-page.tsx"
-Cohesion: 0.20
-Nodes (16): CalendarPage(), addCalendarDays(), addCalendarMonths(), calendarBoundaryInstant(), formatCalendarDateKey(), getCalendarMonthGridDateKeys(), getCalendarWeekDateKeys(), parseCalendarDateKey() (+8 more)
+### Community 203 - "staff-auth-page.tsx"
+Cohesion: 0.33
+Nodes (4): SignInPage(), SignUpPage(), StaffAuthPage(), StaffAuthPageProps
 
-### Community 204 - "shared/errors.ts"
-Cohesion: 0.13
-Nodes (15): pool, PAST_DUE_GRACE_DURATION_DAYS, SUBSCRIPTION_LIFECYCLE_SWEEP_ENABLED, TRIAL_DURATION_DAYS, listActivePlanRows(), PLAN_CAPABILITIES, PlanCatalogRow, BOOLEAN_FEATURES (+7 more)
+### Community 204 - "customers-page.test.tsx"
+Cohesion: 0.25
+Nodes (7): api, clerk, firstCustomer, installDefaults(), page(), secondCustomer, summary
 
 ### Community 205 - "app/package.json"
 Cohesion: 0.12
@@ -1534,29 +1543,29 @@ Nodes (15): `api/` service, `app/` application, Authority split, `contracts/` pa
 Cohesion: 0.14
 Nodes (12): API Responses, Async and Errors, Auth and Authorization, Comments, Config and Logging, Core Rules, Drizzle and Database, File Storage (+4 more)
 
-### Community 214 - "fittings-phase8-integrations.test.ts"
-Cohesion: 0.15
-Nodes (15): getCentralPaymentsController(), Request, CentralPaymentRow, listCentralPayments(), CentralPaymentsContext, getCentralPayments(), adminUrl, insertFitting() (+7 more)
+### Community 214 - "ref_node_crypto"
+Cohesion: 0.06
+Nodes (29): mocks, adminUrl, REQUIRED_INDEXES, requireId(), seedBranch(), TENANT_SCOPED_TABLES, adminUrl, requireId() (+21 more)
 
 ### Community 215 - "api/src/db/schema/catalogue.ts"
 Cohesion: 0.09
-Nodes (22): allocationKindEnum, ASSET_ALLOCATION_TABLE, AssetAllocationKind, BLOCKING_RESERVATION_KINDS, maintenanceWorkOrder, workOrderKindEnum, workOrderStatusEnum, assetCustodyKindEnum (+14 more)
+Nodes (21): allocationKindEnum, ASSET_ALLOCATION_TABLE, AssetAllocationKind, BLOCKING_RESERVATION_KINDS, maintenanceWorkOrder, workOrderKindEnum, workOrderStatusEnum, assetCustodyKindEnum (+13 more)
 
 ### Community 216 - "Obsidian Flavored Markdown Skill"
 Cohesion: 0.14
 Nodes (14): Callouts, Comments, Complete Example, Diagrams (Mermaid), Embeds, Footnotes, Internal Links (Wikilinks), Math (LaTeX) (+6 more)
 
 ### Community 217 - "Pilot operation (free tier, no separate worker)"
-Cohesion: 0.09
-Nodes (18): Default Properties, Properties (Frontmatter) Reference, Property Types, Tags, Callouts, Comments, Complete Example, Diagrams (Mermaid) (+10 more)
+Cohesion: 0.14
+Nodes (14): Callouts, Comments, Complete Example, Diagrams (Mermaid), Embeds, Footnotes, Internal Links (Wikilinks), Math (LaTeX) (+6 more)
 
 ### Community 218 - "Decision"
 Cohesion: 0.20
 Nodes (10): Consumers, @drezivo/contracts, Installing from GitHub Packages, License, Package layout, Regenerating the OpenAPI document, Scripts, The release rule for a breaking change (+2 more)
 
 ### Community 219 - "validate-backend.mjs"
-Cohesion: 0.12
-Nodes (10): env, fixture(), env, tenant(), apiBuild, commonSteps, getValidationSteps(), repositoryRoot (+2 more)
+Cohesion: 0.13
+Nodes (7): env, apiBuild, commonSteps, getValidationSteps(), repositoryRoot, runValidation(), validationPlans
 
 ### Community 220 - "migration-scope"
 Cohesion: 0.15
@@ -1566,49 +1575,49 @@ Nodes (14): migration-scope, staging-migration-scope, if, name, outputs, runs-on
 Cohesion: 0.15
 Nodes (12): exportJob, exportJobStatusEnum, idempotencyRecord, idempotencyStatusEnum, importJob, importJobStatusEnum, notificationDelivery, notificationStatusEnum (+4 more)
 
-### Community 222 - "createCatalogueBackupExportHandler"
-Cohesion: 0.33
-Nodes (7): sha256Hex(), createCatalogueBackupExportHandler(), isImageType(), mediaPath(), readBounded(), readExportSnapshot(), readVerifiedMedia()
+### Community 222 - "catalogue-backup.service.ts"
+Cohesion: 0.13
+Nodes (28): Db, withSystemTenantTransaction(), tenant, createCatalogueBackup(), sha256Hex(), appendBackupAudit(), assertBackupReadContext(), assertBackupWriteContext() (+20 more)
 
 ### Community 224 - "add-clothing-page.test.tsx"
 Cohesion: 0.13
 Nodes (12): actorContext, anonymousHold, api, clerk, navigation, reservation, reservationDetailRecord, returnedDetailRecord (+4 more)
 
-### Community 225 - "check-second-brain.mjs"
-Cohesion: 0.29
-Nodes (6): canonical, failures, files, names, vault, walk()
+### Community 225 - "add-clothing-page.test.tsx"
+Cohesion: 0.32
+Nodes (6): api, clerk, navigation, pickAndAdd(), renderPage(), waitForDefaultGuideLoaded()
 
-### Community 226 - "Properties (Frontmatter) Reference"
+### Community 226 - "Drezivo Acceptable Use Policy"
 Cohesion: 0.25
-Nodes (13): activityTone, PhoneDayAgenda(), PhoneWeekStrip(), useHorizontalSwipe(), CalendarActivity, calendarClosedReason(), formatCalendarDate(), formatCalendarTime() (+5 more)
+Nodes (8): 1. Purpose and scope, 2. You must not, 3. Accurate rental and payment information, 4. Account and security responsibilities, 5. Enforcement, 6. Reporting a concern, Drezivo Acceptable Use Policy, References
 
 ### Community 227 - "baseline.js"
 Cohesion: 0.33
 Nodes (4): allowed, match, options, paths
 
 ### Community 228 - "ref_playwright_test"
-Cohesion: 0.17
+Cohesion: 0.14
 Nodes (5): isCI, expectedSalesFor(), fixedOverview, hasRealStorageState, mockOverview()
 
 ### Community 229 - "Drezivo Security Overview"
-Cohesion: 0.06
-Nodes (33): AdditionalGarment, AdditionalGarments(), additionalGarmentsReadiness(), GarmentStatus(), SelectedGarmentCard(), selectedVariantLabel(), variantPrice(), garment() (+25 more)
+Cohesion: 0.08
+Nodes (23): garment(), api, calendarResponse, clerk, completedResponse, confirmedResponse, detail, exactResponse (+15 more)
 
-### Community 230 - "dashboard.middleware.ts"
-Cohesion: 0.40
-Nodes (5): express-serve-static-core, Request, requireDashboardReadPermission(), validateDashboardOverviewQuery(), DashboardOverviewQuery
+### Community 230 - "ForbiddenError"
+Cohesion: 0.09
+Nodes (29): getDashboardOverviewController(), express-serve-static-core, Request, requireDashboardReadPermission(), validateDashboardOverviewQuery(), DASHBOARD_OVERVIEW_SQL, readDashboardOverview(), dashboardReadRateLimit (+21 more)
 
 ### Community 231 - "Drezivo — Product and Architecture Pack"
-Cohesion: 0.13
-Nodes (13): api, clerk, confirmedDetail, detail, entitlements, installDefaults(), listItem, navigation (+5 more)
+Cohesion: 0.08
+Nodes (23): Request, api, clerk, confirmedDetail, detail, entitlements, installDefaults(), listItem (+15 more)
 
-### Community 232 - "Drezivo API"
-Cohesion: 0.09
-Nodes (16): auth, dashboardApi, fittingFixtureId, overview, reservationFixtureId, boundedNames, customerPhone, dashboardCount (+8 more)
+### Community 232 - "integration/dashboard-overview.test.ts"
+Cohesion: 0.10
+Nodes (18): adminUrl, createFittingAllocation(), createReservationAllocation(), createReservationDependencies(), requireId(), seedActiveAssets(), seedTimelineFixture(), WINDOW (+10 more)
 
 ### Community 233 - "customer"
-Cohesion: 0.12
-Nodes (22): provider(), H08 — Customer directory, customer(), role(), Weekday, 12. Entity dictionary, 8. SaaS billing, files and durable jobs, 12. Entity dictionary (+14 more)
+Cohesion: 0.22
+Nodes (8): H08 — Customer directory, customer(), Customers and walk-ins, Approved V1 behavior, Customers Implementation Checklist, Dashboard metrics, Backend Phase BE-0: Freeze product and domain behavior, Customer decisions
 
 ### Community 234 - "auth-split-layout.tsx"
 Cohesion: 0.20
@@ -1628,7 +1637,7 @@ Nodes (11): Authentication, Authorization, Cryptography, Data exposure, Dependen
 
 ### Community 238 - "dashboard-overview.tsx"
 Cohesion: 0.03
-Nodes (166): DashboardPage(), InventoryCategoriesPage(), ClothingDetailsRoute(), InventoryPage(), DashboardLoading(), GlobalError(), AvailabilityTimeline(), FilterMenu() (+158 more)
+Nodes (143): CustomersRoute(), DashboardPage(), InventoryCategoriesPage(), InventoryPage(), DashboardLoading(), GlobalError(), FilterMenu(), CalendarControls() (+135 more)
 
 ### Community 239 - "api/.codex/agents/security-reviewer.md"
 Cohesion: 0.17
@@ -1638,13 +1647,17 @@ Nodes (11): Authentication, Authorization, Cryptography, Data exposure, Dependen
 Cohesion: 0.24
 Nodes (6): config, isAuthPage, isInvitationRoute, isPublicRoute, MiddlewareAuth, routeAccess()
 
-### Community 241 - "JSON Canvas Complete Examples"
+### Community 241 - "Incident response"
+Cohesion: 0.25
+Nodes (7): Communication path, Declaring resolution, Evidence to capture before restarting anything, Incident response, Related runbooks, Severity levels, The incident-owner role
+
+### Community 242 - "add-clothing-page.tsx"
+Cohesion: 0.04
+Nodes (80): NewClothingPage(), ActivityValue(), ContactItem(), CustomerDetails(), CustomerDetailsSheet(), DetailSection(), DetailState(), formatDate() (+72 more)
+
+### Community 243 - "Git and delivery workflow — AUTO-LOADED"
 Cohesion: 0.25
 Nodes (7): Before editing anything, Commit messages — Conventional Commits, enforced by commitlint, Cross-repo changes, Git and delivery workflow — AUTO-LOADED, Never, Reporting, Stop before committing
-
-### Community 242 - "customers-page.tsx"
-Cohesion: 0.06
-Nodes (58): CustomersRoute(), ArchiveCustomerDialog(), ActivityValue(), ContactItem(), CustomerDetails(), CustomerDetailsSheet(), DetailSection(), DetailState() (+50 more)
 
 ### Community 244 - "app/.claude/agents/security-reviewer.md"
 Cohesion: 0.17
@@ -1658,9 +1671,9 @@ Nodes (11): Authentication, Authorization, Cryptography, Data exposure, Dependen
 Cohesion: 0.22
 Nodes (15): idempotencyKeyOf(), archivePaymentMethodController(), createPaymentMethodController(), listPaymentMethodSettingsController(), requireContext(), updatePaymentMethodSettingsController(), updatePaymentRenterStepsController(), express-serve-static-core (+7 more)
 
-### Community 247 - "staffFileMediaUrl"
-Cohesion: 0.33
-Nodes (6): File Nodes, Generic Node Attributes, Group Nodes, Link Nodes, Nodes, Text Nodes
+### Community 247 - "interface"
+Cohesion: 0.29
+Nodes (6): interface, default_prompt, display_name, short_description, policy, allow_implicit_invocation
 
 ### Community 248 - "members-settings-page.test.tsx"
 Cohesion: 0.18
@@ -1671,12 +1684,8 @@ Cohesion: 0.17
 Nodes (11): compilerOptions, declaration, declarationMap, emitDeclarationOnly, noEmit, outDir, rootDir, exclude (+3 more)
 
 ### Community 250 - "HIGH (P0) — owner workspace transactional core"
-Cohesion: 0.06
-Nodes (35): meta(), Authority and how to use this checklist, Definition of done, H01 — Adopt `@drezivo/contracts` as the api wire boundary, H03 — Integration-test harness against real PostgreSQL, H05 — Files and object storage module, H06 — Catalogue and physical asset management, H07 — Operational availability blocks (+27 more)
-
-### Community 251 - "legal/README.md"
-Cohesion: 0.04
-Nodes (46): 1. Purpose and scope, 2. You must not, 3. Accurate rental and payment information, 4. Account and security responsibilities, 5. Enforcement, 6. Reporting a concern, Drezivo Acceptable Use Policy, References (+38 more)
+Cohesion: 0.14
+Nodes (14): Authority and how to use this checklist, Definition of done, H03 — Integration-test harness against real PostgreSQL, H05 — Files and object storage module, H06 — Catalogue and physical asset management, H07 — Operational availability blocks, H09 — Reservations core: shared allocator and staff booking, H10 — Reservation lifecycle actions (+6 more)
 
 ### Community 252 - "Notes.md"
 Cohesion: 0.17
@@ -1686,9 +1695,9 @@ Nodes (11): A better model for your SaaS, And the owner can revoke it, And you d
 Cohesion: 0.17
 Nodes (12): 2026-09-17 — Layer boundaries accepted, API Module Boundaries and Layering, Controllers, Decision log, DTOs and schemas, Module policy, Purpose, Refactor order and compatibility (+4 more)
 
-### Community 254 - "0006. Consolidate the Drezivo workspaces into one monorepo"
-Cohesion: 0.33
-Nodes (6): 0006. Consolidate the Drezivo workspaces into one monorepo, Boundaries that remain, Consequences, Decision, Migration rules, Why
+### Community 254 - "Drezivo API"
+Cohesion: 0.29
+Nodes (7): API commands, Drezivo API, Environment and production, License, Local development, Prerequisites, Staff actor and workspace context
 
 ### Community 255 - "Clothing V1 End-to-End Checklist"
 Cohesion: 0.17
@@ -1710,9 +1719,9 @@ Nodes (11): Authentication, Authorization, Cryptography, Data exposure, Dependen
 Cohesion: 0.17
 Nodes (11): Authentication, Authorization, Cryptography, Data exposure, Dependencies, How to review, Injection, Input validation (+3 more)
 
-### Community 260 - "Common Workflows"
-Cohesion: 0.40
-Nodes (5): 1. Create a New Canvas, 2. Add a Node to an Existing Canvas, 3. Connect Two Nodes, 4. Edit an Existing Canvas, Common Workflows
+### Community 260 - "auth-split-layout.tsx"
+Cohesion: 0.48
+Nodes (5): AuthBackButton(), AuthBackButtonProps, BackIcon(), HistoryBackButton(), AuthSplitLayoutProps
 
 ### Community 261 - "Tenancy, Owner Onboarding, Clerk, Memberships, and Billing V1 Checklist"
 Cohesion: 0.18
@@ -1730,9 +1739,9 @@ Nodes (7): api, category, clerk, defaultSummary, firstItem, navigation, secondIt
 Cohesion: 0.11
 Nodes (17): HetrixTools: availability, Production monitoring, Repeatable staging baseline, Sentry: API performance and errors, Supabase, Vercel and Render, What each tool does, Database pool wait (+9 more)
 
-### Community 265 - "Common Workflows"
-Cohesion: 0.40
-Nodes (5): 1. Create a New Canvas, 2. Add a Node to an Existing Canvas, 3. Connect Two Nodes, 4. Edit an Existing Canvas, Common Workflows
+### Community 265 - "business-settings-page.test.tsx"
+Cohesion: 0.29
+Nodes (5): api, business, clerk, closure, hours
 
 ### Community 266 - "scripts"
 Cohesion: 0.18
@@ -1754,25 +1763,25 @@ Nodes (9): Complexity, Correctness, Error handling, How to review, Naming, Opera
 Cohesion: 0.20
 Nodes (9): Accessibility (non-negotiable), Anti-patterns (NEVER), Backgrounds and motion, Before you write, Color, Layout, Operating principles, Output (+1 more)
 
-### Community 271 - "Db"
-Cohesion: 0.05
-Nodes (35): Db, Before editing anything, Commit messages — Conventional Commits, enforced by commitlint, Cross-repo changes, Git and delivery workflow — AUTO-LOADED, Never, Reporting, Stop before committing (+27 more)
+### Community 271 - "Git and delivery workflow — AUTO-LOADED"
+Cohesion: 0.25
+Nodes (7): Before editing anything, Commit messages — Conventional Commits, enforced by commitlint, Cross-repo changes, Git and delivery workflow — AUTO-LOADED, Never, Reporting, Stop before committing
 
 ### Community 272 - "Continuous integration baseline"
 Cohesion: 0.40
 Nodes (5): Backend pre-PR validation, Continuous integration baseline, Current local evidence, Full-gate enablement, Protected migration runs
 
-### Community 273 - "calendar-schedule-page.tsx"
-Cohesion: 0.17
-Nodes (20): CalendarBusinessHours, calendarGridHeight(), calendarTimeTicks(), formatCalendarMinute(), ActivityFilter, activityIcon, activityTone, calendarCategoryLabel() (+12 more)
+### Community 273 - "Drezivo Data Retention and Deletion Standard"
+Cohesion: 0.29
+Nodes (7): 1. Purpose, 2. Required approval record, 3. Operating rules, 4. Data-subject and tenant requests, 5. Verification and review, Drezivo Data Retention and Deletion Standard, References
 
-### Community 274 - "0009. Supabase as the managed PostgreSQL provider"
-Cohesion: 0.25
-Nodes (6): api, catalogueDetail, catalogueList, clerk, createdFitting, settings
+### Community 274 - "Drezivo Vulnerability Disclosure Policy"
+Cohesion: 0.29
+Nodes (7): 1. Purpose, 2. How to report, 3. Good-faith testing boundaries, 4. What Drezivo will do, 5. Out of scope, Drezivo Vulnerability Disclosure Policy, Related documents
 
-### Community 275 - "workspace-access.test.ts"
-Cohesion: 0.47
-Nodes (4): @fontsource-variable/jost, @fontsource-variable/jost@^5.3.0, NotFound(), NotFoundBackButton()
+### Community 275 - "public-storefront-cache-staging.md"
+Cohesion: 0.29
+Nodes (6): 1. Prepare the staging API and web app, 2. Deploy the updated staging Worker, 3. Configure Worker routes, 4. Change the staging cache rules, 5. Enable the staging storefront cache, 6. Test that it works
 
 ### Community 276 - "0013. Standard plan pilot capacity"
 Cohesion: 0.40
@@ -1876,7 +1885,7 @@ Nodes (3): failure(), GET(), safeOrigin()
 
 ### Community 301 - "Drezivo Home.md"
 Cohesion: 0.06
-Nodes (43): Architecture, Catalogue subcategories, Drezivo Product Brief, 2026-10-11 — Confirmed reservation snapshot correction, Customer Address and Social Profile Fields, 2026-09-28, 2026-09-29, 2026-10-02 (+35 more)
+Nodes (41): Architecture, Catalogue subcategories, Drezivo Product Brief, 2026-10-11 — Confirmed reservation snapshot correction, Customer Address and Social Profile Fields, Catalogue UUID-only identity cleanup, 2026-09-28, 2026-09-29 (+33 more)
 
 ### Community 302 - "api"
 Cohesion: 0.40
@@ -1903,8 +1912,8 @@ Cohesion: 0.12
 Nodes (13): Embed Audio, Embed Bases, Embed Images, Embed Lists, Embed Notes, Embed PDF, Embed Search Results, Embeds Reference (+5 more)
 
 ### Community 308 - "Obsidian Flavored Markdown Skill"
-Cohesion: 0.22
-Nodes (9): Embed Audio, Embed Bases, Embed Images, Embed Lists, Embed Notes, Embed PDF, Embed Search Results, Embeds Reference (+1 more)
+Cohesion: 0.12
+Nodes (13): Embed Audio, Embed Bases, Embed Images, Embed Lists, Embed Notes, Embed PDF, Embed Search Results, Embeds Reference (+5 more)
 
 ### Community 309 - "contracts/.claude/agents/silent-failure-hunter.md"
 Cohesion: 0.22
@@ -1974,9 +1983,9 @@ Nodes (6): PAYMENT_STATUS_LABELS, PAYMENT_STATUS_TONE, PaymentEvidenceStatus, RE
 Cohesion: 0.25
 Nodes (7): 1. Establish a safe checkout, 2. Explain the change and run focused checks, 3. Plan local and preview verification, 4. Review PR and migration safety, 5. Verify staging after merge, Required final report, Stage a branch for testing
 
-### Community 326 - "Git and delivery workflow — AUTO-LOADED"
-Cohesion: 0.25
-Nodes (7): Before editing anything, Commit messages — Conventional Commits, enforced by commitlint, Cross-repo changes, Git and delivery workflow — AUTO-LOADED, Never, Reporting, Stop before committing
+### Community 326 - "edit-clothing-page.test.tsx"
+Cohesion: 0.33
+Nodes (4): api, clerk, detail, navigation
 
 ### Community 327 - "api/.github/PULL_REQUEST_TEMPLATE.md"
 Cohesion: 0.25
@@ -1995,16 +2004,16 @@ Cohesion: 0.25
 Nodes (8): POSTGRES_DB, POSTGRES_PASSWORD, POSTGRES_USER, env, image, options, ports, postgres
 
 ### Community 331 - "tenancy.routes.ts"
-Cohesion: 0.17
-Nodes (11): getActorContextController(), getWorkspacesController(), readRateLimit, tenancyRouter, getWorkspaces(), DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, Page (+3 more)
+Cohesion: 0.28
+Nodes (6): DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, Page, PageMeta, PaginationQuery, paginationQuerySchema
 
 ### Community 332 - "tsconfig.test.json"
 Cohesion: 0.25
 Nodes (7): compilerOptions, noEmit, rootDir, exclude, extends, include, ./tsconfig.json
 
-### Community 333 - "R2 Image Replacement Cleanup Checklist"
-Cohesion: 0.40
-Nodes (5): Goal and agreed behavior, R2 Image Replacement Cleanup Checklist, Reference and object coverage confirmed on 2026-10-09, Related notes and sources, Scope
+### Community 333 - "R2 Image Replacement Cleanup Checklist.md"
+Cohesion: 0.12
+Nodes (13): 2026-10-08, R2 image replacement cleanup, 2026-10-09, R2 image replacement cleanup, Replacement-flow test coverage follow-up, Safe rollout and operator runbook, 2026-10-10, R2 image replacement cleanup ship preparation (+5 more)
 
 ### Community 334 - "web/src/lib/use-submit-guard.ts"
 Cohesion: 0.60
@@ -2027,20 +2036,20 @@ Cohesion: 0.06
 Nodes (27): Obsidian Second Brain, Deferred alternative, Engineering alternative, Hosting the Drezivo Second Brain, Owner setup, Private Git setup, Recommended shared setup, Sharing rules (+19 more)
 
 ### Community 339 - "JSON Canvas Skill"
-Cohesion: 0.25
-Nodes (8): Colors, Complete Examples, Edges, File Structure, ID Generation, JSON Canvas Skill, Layout Guidelines, References
+Cohesion: 0.15
+Nodes (13): 1. Create a New Canvas, 2. Add a Node to an Existing Canvas, 3. Connect Two Nodes, 4. Edit an Existing Canvas, Colors, Common Workflows, Complete Examples, Edges (+5 more)
 
 ### Community 340 - "JSON Canvas Skill"
-Cohesion: 0.25
-Nodes (8): Colors, Complete Examples, Edges, File Structure, ID Generation, JSON Canvas Skill, Layout Guidelines, References
+Cohesion: 0.15
+Nodes (13): 1. Create a New Canvas, 2. Add a Node to an Existing Canvas, 3. Connect Two Nodes, 4. Edit an Existing Canvas, Colors, Common Workflows, Complete Examples, Edges (+5 more)
 
 ### Community 341 - "Continuous integration baseline"
-Cohesion: 0.22
-Nodes (10): H02 — Corrective migrations: reconcile the database with the PRD, ERD, and contracts, File Nodes, Generic Node Attributes, Group Nodes, Link Nodes, Nodes, Text Nodes, Validation Checklist (+2 more)
+Cohesion: 0.14
+Nodes (16): H02 — Corrective migrations: reconcile the database with the PRD, ERD, and contracts, File Nodes, Generic Node Attributes, Group Nodes, Link Nodes, Nodes, Text Nodes, Validation Checklist (+8 more)
 
 ### Community 342 - "AtelierScene"
-Cohesion: 0.26
-Nodes (10): datesBetween(), formatDate(), formatDuration(), localDate(), recoveryAvailabilityHint(), calendar(), day(), nextDay() (+2 more)
+Cohesion: 0.27
+Nodes (9): datesBetween(), formatDate(), formatDuration(), localDate(), recoveryAvailabilityHint(), calendar(), day(), nextDay() (+1 more)
 
 ### Community 343 - "contracts/.github/PULL_REQUEST_TEMPLATE.md"
 Cohesion: 0.25
@@ -2050,9 +2059,9 @@ Nodes (7): Contract impact, How it was tested, Non-negotiables, Rollback, Tenant
 Cohesion: 0.25
 Nodes (7): AGENTS.md, Core Rules, Documentation Style, Product Boundaries, Source Priority, Technical Docs, Writing Product Specs
 
-### Community 345 - "lib/money.ts"
-Cohesion: 0.18
-Nodes (14): Membership, 4. Tenancy, permissions and historical ownership, 4. Tenancy, permissions and historical ownership, Request-time actor and workspace resolution (TBF-031), 4. Tenancy, permissions and historical ownership, Request-time actor and workspace resolution (TBF-031), v2 rollout order, Backfill and validation (+6 more)
+### Community 345 - "Membership"
+Cohesion: 0.09
+Nodes (33): provider(), role(), Branch, Membership, 10. Mandatory SQL invariants beyond DBML, 11. Falsification checklist, 12. Entity dictionary, 1. Design and release boundaries (+25 more)
 
 ### Community 346 - "AGENTS.md"
 Cohesion: 0.25
@@ -2066,13 +2075,13 @@ Nodes (6): api, app and web, contracts, docs, Monorepo Workspace Map, Release di
 Cohesion: 0.25
 Nodes (8): 3. Clothing Catalog, Availability Awareness, Catalog Empty State, Categories, Clothing Listing, Filters, Purpose, Search
 
-### Community 349 - "app/src/app/not-found.tsx"
-Cohesion: 0.53
-Nodes (3): NotFound(), NotFoundBackButton(), navigation
+### Community 349 - "contracts"
+Cohesion: 0.33
+Nodes (4): Contracts agent notes, Commands, contracts, Key decisions
 
 ### Community 350 - "2026-09-30.md"
-Cohesion: 0.04
-Nodes (61): 1. Establish context before editing, 2. Ownership and dependency direction, 3. Boundary rules that must hold, 4. How to trace a feature, 5. Validation and delivery, 6. Shared Obsidian second brain, 7. Finish the turn, Drezivo AI Agent Onboarding (+53 more)
+Cohesion: 0.03
+Nodes (65): 1. Establish context before editing, 2. Ownership and dependency direction, 3. Boundary rules that must hold, 4. How to trace a feature, 5. Validation and delivery, 6. Shared Obsidian second brain, 7. Finish the turn, Drezivo AI Agent Onboarding (+57 more)
 
 ### Community 351 - "clothing-details-page.test.tsx"
 Cohesion: 0.50
@@ -2082,17 +2091,25 @@ Nodes (3): 2026-09-15 — Scaffold verification, 2026-09-15 — why this package
 Cohesion: 0.25
 Nodes (8): Baseline knowledge graph, Confirmed decisions, Development scaffold, Drezivo — Product and Architecture Pack, Drezivo second brain, Read in this order, Root operating guide, Verification and limitations
 
+### Community 353 - "auth.ts"
+Cohesion: 0.12
+Nodes (17): clerkContext, express-serve-static-core, Request, requireStaffAuth(), requireVerifiedStaffAuth(), buildApp(), mocks, express-serve-static-core (+9 more)
+
 ### Community 354 - "Frontend"
 Cohesion: 0.25
 Nodes (7): Accessibility (non-negotiable), Component Framework, Design Principles, Design Tokens, Frontend, Layout, Performance
+
+### Community 355 - "Code Quality"
+Cohesion: 0.33
+Nodes (5): Anti-defaults (counter common Claude tendencies), Code Markers, Code Quality, File Organization, Naming
 
 ### Community 356 - "Frontend"
 Cohesion: 0.25
 Nodes (7): Accessibility (non-negotiable), Component Framework, Design Principles, Design Tokens, Frontend, Layout, Performance
 
 ### Community 357 - "clerk-webhook-reconciler.ts"
-Cohesion: 0.11
-Nodes (23): withSystemTenantResolutionTransaction(), createClerkServerAdapter(), findWebhookClaimInvitation(), validInput, claimReceivedClerkWebhookRows(), insertClerkWebhookInbox(), insertInput, markClerkWebhookProcessed() (+15 more)
+Cohesion: 0.22
+Nodes (10): withSystemTenantResolutionTransaction(), findWebhookClaimInvitation(), claimMembershipInvitationInTransaction(), InvitationClaimDeferredError, validInput, claimReceivedClerkWebhookRows(), markClerkWebhookProcessed(), acceptedPayload (+2 more)
 
 ### Community 358 - "web/.github/PULL_REQUEST_TEMPLATE.md"
 Cohesion: 0.25
@@ -2118,13 +2135,13 @@ Nodes (6): 0. The one question that governs all others, 1. CLEAN — readable, c
 Cohesion: 0.29
 Nodes (7): DATABASE_URL, NODE_ENV, verify, env, name, runs-on, services
 
-### Community 364 - "post-auth-resolver.test.tsx"
-Cohesion: 0.50
-Nodes (3): clerk, resolver, router
+### Community 364 - "post-auth-resolver.tsx"
+Cohesion: 0.26
+Nodes (9): AuthResolvePage(), AuthBrand(), PostAuthResolver(), ResolveState, toDrezivoApiError(), WorkspaceOpening(), clerk, resolver (+1 more)
 
-### Community 365 - "0.1.0"
-Cohesion: 0.50
-Nodes (3): 0.1.0, Changelog, MoneyMinor
+### Community 365 - "Drezivo Cookie Notice"
+Cohesion: 0.33
+Nodes (6): 1. What this notice covers, 2. Categories, 3. Your choices, 4. Keep this notice accurate, Drezivo Cookie Notice, References
 
 ### Community 366 - "Engineering Standards — write it like company code"
 Cohesion: 0.29
@@ -2134,9 +2151,9 @@ Nodes (6): 0. The one question that governs all others, 1. CLEAN — readable, c
 Cohesion: 0.29
 Nodes (6): 0. The one question that governs all others, 1. CLEAN — readable, changeable, maintainable, 2. EFFICIENT — does the job without wasting resources, 3. AI-GENERATED CODE IS NOT EXEMPT — it is the highest-risk code in the repo, 4. Definition of done, Engineering Standards — write it like company code
 
-### Community 368 - "lint-staged"
-Cohesion: 0.67
-Nodes (3): lint-staged, *.{json,md,yml,yaml}, *.{ts,tsx}
+### Community 368 - "Environments"
+Cohesion: 0.33
+Nodes (6): `app` (Next.js staff/business dashboard), `contracts` (`@drezivo/contracts`), `docs` (this repository), Environments, Environments, `web` (Next.js marketing site + public tenant storefronts)
 
 ### Community 369 - "prettier@^3.9.9"
 Cohesion: 0.29
@@ -2173,6 +2190,10 @@ Nodes (6): 0. The one question that governs all others, 1. CLEAN — readable, c
 ### Community 377 - "11. Core Customer-Side Principle"
 Cohesion: 0.29
 Nodes (7): 11. Core Customer-Side Principle, 1. What does this business offer?, 2. What clothing do they have?, 3. Do I like this particular item?, 4. Can I rent it for my date?, 5. Can I reserve it?, 6. What happened after I submitted it?
+
+### Community 378 - "Owner lifecycle"
+Cohesion: 0.33
+Nodes (6): Create-only organization onboarding, One owned business and closure, Owner lifecycle, Public signup and mandatory routing, Resume, abandon, and payment-pending, Tenant bootstrap
 
 ### Community 380 - "env"
 Cohesion: 0.29
@@ -2286,9 +2307,9 @@ Nodes (5): Environment, Impact, Steps to reproduce, What happened, What should h
 Cohesion: 0.33
 Nodes (5): Out of scope, Problem, Proposed behaviour, Scope, Spec reference
 
-### Community 412 - "@typescript-eslint/parser@^8.24.0"
-Cohesion: 0.25
-Nodes (7): 1. Rotate first, 2. Contain, 3. Assess exposure, A git history rewrite un-publishes nothing, After, Security incident: leaked credential, The order: rotate, then contain, then assess exposure
+### Community 412 - "The order: rotate, then contain, then assess exposure"
+Cohesion: 0.50
+Nodes (4): 1. Rotate first, 2. Contain, 3. Assess exposure, The order: rotate, then contain, then assess exposure
 
 ### Community 413 - ".github/PULL_REQUEST_TEMPLATE.md"
 Cohesion: 0.33
@@ -2374,9 +2395,9 @@ Nodes (4): 2026-09-16, 2026-09-30, 2026-10-01, Durable lessons
 Cohesion: 0.40
 Nodes (4): Drezivo Second Brain, Graph rules, Note rules, Safe update loop
 
-### Community 435 - "Manual frontend end-to-end validation plan"
-Cohesion: 0.15
-Nodes (13): Cancellation — business side only, Creating a new reservation — frontend wired; manual validation pending, Customer information and reservation completion — frontend wired; manual validation pending, Inspection and rental completion — frontend wired; manual validation pending, Manual frontend end-to-end validation plan, Owner V1 end-to-end smoke flow, Payment and evidence behavior, Pickup / handover (+5 more)
+### Community 435 - "Code Quality"
+Cohesion: 0.33
+Nodes (5): Anti-defaults (counter common Claude tendencies), Code Markers, Code Quality, File Organization, Naming
 
 ### Community 436 - "contracts/.claude/hooks/block-dangerous-commands.sh"
 Cohesion: 0.70
@@ -2421,10 +2442,6 @@ Nodes (4): Clerk verification email template, Development change record, Preview
 ### Community 446 - "Lessons"
 Cohesion: 0.25
 Nodes (7): Before editing anything, Commit messages — Conventional Commits, enforced by commitlint, Cross-repo changes, Git and delivery workflow — AUTO-LOADED, Never, Reporting, Stop before committing
-
-### Community 448 - "ref_zod"
-Cohesion: 0.09
-Nodes (32): decimalStringSchema, minorUnitsSchema, customerAddress, customerSocialMedia, CustomerId, FittingId, CUSTOMER_INTERNAL_NOTES_MAX_LENGTH, CustomerActivity (+24 more)
 
 ### Community 450 - "web/.claude/hooks/block-dangerous-commands.sh"
 Cohesion: 0.70
@@ -2498,9 +2515,9 @@ Nodes (3): 2026-09-15 — An unversioned specification is a specification that s
 Cohesion: 0.50
 Nodes (3): 2026-09-15 — An unversioned specification is a specification that silently stops being true, 2026-09-15 — Scaffold verification, Lessons
 
-### Community 470 - "0017: Shorter lapse window, Standard back to 300 garments, one color per clothing"
-Cohesion: 0.50
-Nodes (3): 2026-09-15 — Scaffold verification, 2026-09-15 — why this package exists, Lessons
+### Community 470 - "Code Quality"
+Cohesion: 0.33
+Nodes (5): Anti-defaults (counter common Claude tendencies), Code Markers, Code Quality, File Organization, Naming
 
 ### Community 472 - "Lessons"
 Cohesion: 0.50
@@ -2542,41 +2559,57 @@ Nodes (3): 10. What Should Be Public vs Private, Private, Public
 Cohesion: 0.67
 Nodes (3): 7. Reservation Confirmation, Confirmation State, Purpose
 
-### Community 542 - "ref_testing_library_react"
-Cohesion: 0.05
-Nodes (47): M02 — Wire public storefront reads to the contracts, api, clerk, navigation, api, clerk, upload, api (+39 more)
+### Community 512 - "Drezivo Legal and Trust Documentation"
+Cohesion: 0.40
+Nodes (5): Drezivo Legal and Trust Documentation, Internal governance documents, Public or customer-contract documents, Required completion before publishing, Source materials
+
+### Community 513 - "Drezivo documentation"
+Cohesion: 0.40
+Nodes (5): Development, Drezivo documentation, Legal drafts, License, Second Brain
+
+### Community 542 - "src/index.ts"
+Cohesion: 0.03
+Nodes (55): api, clerk, navigation, api, clerk, upload, api, customer (+47 more)
 
 ### Community 543 - "spreadsheet.ts"
 Cohesion: 0.22
 Nodes (9): Addresses, Background work without a worker service, One-time setup, Pilot operation (free tier, no separate worker), Settings per service, Staff holds cannot be forgotten, Storefront guest email behavior, Subscription plans, trial, and manual payment (+1 more)
 
+### Community 544 - "0015. Starter and Standard subscription plans"
+Cohesion: 0.40
+Nodes (5): 0015. Starter and Standard subscription plans, Consequences, Context, Decision, Related decisions
+
+### Community 545 - "Second Brain Archive"
+Cohesion: 0.67
+Nodes (3): Archived project plans and checklists, Archived review and scratch notes, Second Brain Archive
+
+### Community 546 - "lint-staged"
+Cohesion: 0.67
+Nodes (3): lint-staged, *.{json,css,md}, *.{ts,tsx}
+
 ### Community 571 - "Git and delivery workflow — AUTO-LOADED"
 Cohesion: 0.25
 Nodes (7): Before editing anything, Commit messages — Conventional Commits, enforced by commitlint, Cross-repo changes, Git and delivery workflow — AUTO-LOADED, Never, Reporting, Stop before committing
 
-### Community 664 - "drezivo-api-fittings.test.ts"
-Cohesion: 0.33
-Nodes (4): customerId, detail(), listItem(), variantId
-
 ## Knowledge Gaps
 - **3 isolated node(s):** `./tsconfig.json`, `RFC-4180`, `./tsconfig.json`
-  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 4779 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
-- **183 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 4811 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
+- **181 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `api()` connect `2026-09-30.md` to `Drezivo — Technical Requirements Document`, `eslint@^9.39.1`, `Drezivo team development handbook`, `staff-sign-in-form.test.tsx`, `Contributing to `app``, `cn`, `Code Quality`, `Db`, `Continuous integration baseline`, `Reservations V1 End-to-End Checklist`, `settings.service.ts`, `@typescript-eslint/parser@^8.24.0`, `0002. Drizzle and node-postgres`, `Historical setup checklist, superseded`, `Contributing to `web``, `Contributing to `api``, `Git and delivery workflow — AUTO-LOADED`, `Contributing to `contracts``, `Storefront, Storefront CMS, and Settings Checklist`, `Decisions`, `Git and delivery workflow — AUTO-LOADED`, `Git and delivery workflow — AUTO-LOADED`, `Git and delivery workflow — AUTO-LOADED`, `Lessons`, `Git and delivery workflow — AUTO-LOADED`, `Stage a branch for testing`, `Git and delivery workflow — AUTO-LOADED`, `Code Quality`, `Code Quality`, `Operating Model.md`, `Drezivo Root Repository Architecture`, `0017: Shorter lapse window, Standard back to 300 garments, one color per clothing`, `Decision`, `Monorepo Workspace Map`, `clothing-details-page.test.tsx`, `root-document-pack/Drezivo-Data-Model.md`, `Contributing to `docs``, `Drezivo onboarding`, `JSON Canvas Complete Examples`, `build`, `HIGH (P0) — owner workspace transactional core`, `0006. Consolidate the Drezivo workspaces into one monorepo`?**
-  _High betweenness centrality (0.084) - this node is a cross-community bridge._
+- **Why does `api()` connect `2026-09-30.md` to `Drezivo — Technical Requirements Document`, `Drezivo team development handbook`, `staff-sign-in-form.test.tsx`, `Contributing to `app``, `import-model.ts`, `Code Quality`, `Git and delivery workflow — AUTO-LOADED`, `Continuous integration baseline`, `Reservations V1 End-to-End Checklist`, `settings.service.ts`, `The order: rotate, then contain, then assess exposure`, `0002. Drizzle and node-postgres`, `Historical setup checklist, superseded`, `Contributing to `web``, `Contributing to `api``, `Git and delivery workflow — AUTO-LOADED`, `Contributing to `contracts``, `Storefront, Storefront CMS, and Settings Checklist`, `Code Quality`, `Decisions`, `sendSuccess`, `Git and delivery workflow — AUTO-LOADED`, `Git and delivery workflow — AUTO-LOADED`, `Git and delivery workflow — AUTO-LOADED`, `Lessons`, `Git and delivery workflow — AUTO-LOADED`, `Stage a branch for testing`, `Code Quality`, `Code Quality`, `Operating Model.md`, `Drezivo Root Repository Architecture`, `Code Quality`, `Decision`, `Monorepo Workspace Map`, `contracts`, `clothing-details-page.test.tsx`, `root-document-pack/Drezivo-Data-Model.md`, `Code Quality`, `Contributing to `docs``, `Drezivo onboarding`, `Environments`, `build`, `Git and delivery workflow — AUTO-LOADED`, `HIGH (P0) — owner workspace transactional core`, `eslint@^9.39.1`?**
+  _High betweenness centrality (0.082) - this node is a cross-community bridge._
 - **Are the 3 inferred relationships involving `withTenantTransaction()` (e.g. with `Already built — do not redo` and `Authority and how to use this checklist`) actually correct?**
   _`withTenantTransaction()` has 3 INFERRED edges - model-reasoned connections that need verification._
 - **What connects `./tsconfig.json`, `RFC-4180`, `./tsconfig.json` to the rest of the system?**
   _3 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `ValidationError` be split into smaller, more focused modules?**
-  _Cohesion score 0.11794871794871795 - nodes in this community are weakly interconnected._
-- **Why does `withTenantTransaction()` connect `withTenantTransaction` to `ValidationError`, `reservations.review.service.ts`, `reservations.service.ts`, `api/tests/integration/catalogue-files.test.ts`, `ValidationError`, `storefront-cms.service.ts`, `fittings-phase2-integrity.test.ts`, `ref_zod`, `ids.ts`, `storefront.service.ts`, `fittings.finance.service.ts`, `fittings.service.ts`, `fittings.mutation.service.ts`, `settings.service.ts`, `membership-invitations.service.ts`, `tenancy.service.ts`, `access.ts`, `payment-methods.service.ts`, `api/src/modules/operations/operations.service.ts`, `billing.service.ts`, `photo-extraction.service.ts`, `fittings-phase8-integrations.test.ts`, `reservations.command.service.ts`, `ref_vitest`, `IdempotencyKeyReusedError`, `storefront-policy-images.test.tsx`, `reservations.ts`, `reservations.quote.ts`, `HIGH (P0) — owner workspace transactional core`?**
-  _High betweenness centrality (0.045) - this node is a cross-community bridge._
+  _Cohesion score 0.06965174129353234 - nodes in this community are weakly interconnected._
+- **Why does `withTenantTransaction()` connect `withTenantTransaction` to `ValidationError`, `reservations.review.service.ts`, `fittings.controller.ts`, `catalogue-import.routes.ts`, `files.service.ts`, `ValidationError`, `storefront-cms.service.ts`, `createApp`, `app.ts`, `onboarding.service.ts`, `drezivo-api.ts`, `fittings-phase2-integrity.test.ts`, `catalogue-lifecycle-propagation.test.ts`, `ref_zod`, `PermissionCode`, `storefront.service.ts`, `fittings.finance.service.ts`, `fittings.mutation.service.ts`, `settings.service.ts`, `membership-invitations.service.ts`, `draft-store.ts`, `access.ts`, `catalogue-scale-bounds.test.ts`, `api/src/modules/operations/operations.service.ts`, `billing.service.ts`, `payment-methods.service.ts`, `reservations.command.service.ts`, `catalogue-add-clothing-route.test.ts`, `catalogue-edit-clothing-route.test.ts`, `catalogue-backup.service.ts`, `ref_vitest`, `IdempotencyKeyReusedError`, `reservation-list-read-model.test.ts`, `auth.ts`, `ForbiddenError`, `integration/dashboard-overview.test.ts`, `storefront-policy-images.test.tsx`, `files.service.ts`, `storefront-guest-booking.test.ts`, `reservations.ts`, `reservations.quote.ts`, `HIGH (P0) — owner workspace transactional core`?**
+  _High betweenness centrality (0.065) - this node is a cross-community bridge._
 - **Should `reservations.review.service.ts` be split into smaller, more focused modules?**
-  _Cohesion score 0.03462686567164179 - nodes in this community are weakly interconnected._
-- **Why does `ValidationError` connect `storefront-policy-images.test.tsx` to `clerk.routes.ts`, `ValidationError`, `reservations.review.service.ts`, `ForbiddenError`, `catalogue-import.routes.ts`, `reservations.service.ts`, `ValidationError`, `storefront-cms.service.ts`, `onboarding.controller.ts`, `fittings-phase2-integrity.test.ts`, `ref_zod`, `reservations.routes.ts`, `customers.repository.ts`, `ids.ts`, `catalogue.read.repository.ts`, `fittings.finance.service.ts`, `fittings.mutation.service.ts`, `settings.service.ts`, `storefront.routes.ts`, `tenancy.repository.ts`, `membership-invitations.service.ts`, `catalogue-import.routes.ts`, `clerk.adapter.ts`, `tenancy.service.ts`, `platform-payment-methods.service.ts`, `payment-methods.service.ts`, `api/src/modules/operations/operations.service.ts`, `billing.service.ts`, `operations.middleware.ts`, `fittings-phase8-integrations.test.ts`, `reservations.command.service.ts`, `import.ts`, `ref_vitest`, `IdempotencyKeyReusedError`, `customers.routes.ts`, `clerk-webhook-reconciler.ts`, `dashboard.middleware.ts`, `_shared.ts`, `clerk.schemas.ts`, `reservations-page.test.tsx`, `onboarding.persistence.ts`, `reservations.ts`, `reservations.quote.ts`, `Drezivo Data Retention and Deletion Standard`?**
-  _High betweenness centrality (0.044) - this node is a cross-community bridge._
+  _Cohesion score 0.045378552663004536 - nodes in this community are weakly interconnected._
+- **Why does `ValidationError` connect `catalogue-import.routes.ts` to `webhook-inbox.repository.ts`, `ValidationError`, `reservations.review.service.ts`, `fittings.controller.ts`, `files.service.ts`, `ValidationError`, `storefront-cms.service.ts`, `shared/errors.ts`, `app.ts`, `onboarding.service.ts`, `drezivo-api.ts`, `fittings-phase2-integrity.test.ts`, `ref_zod`, `fittings-phase7-finance.test.ts`, `catalogue.read.repository.ts`, `fittings.finance.service.ts`, `fittings.mutation.service.ts`, `settings.service.ts`, `membership-invitations.routes.ts`, `entitlements.service.ts`, `membership-invitations.service.ts`, `catalogue-import.routes.ts`, `clerk.adapter.ts`, `sendSuccess`, `DependencyUnavailableError`, `payment-methods.service.ts`, `api/src/modules/operations/operations.service.ts`, `billing.service.ts`, `withTenantTransaction`, `billing.routes.ts`, `reservations.command.service.ts`, `IdempotencyKeyReusedError`, `auth.ts`, `tenancy.service.ts`, `clerk-webhook-reconciler.ts`, `ForbiddenError`, `_shared.ts`, `storefront-policy-images.test.tsx`, `clerk.schemas.ts`, `files.service.ts`, `onboarding.persistence.ts`, `reservations.ts`, `reservations.quote.ts`, `Drezivo Data Retention and Deletion Standard`?**
+  _High betweenness centrality (0.028) - this node is a cross-community bridge._

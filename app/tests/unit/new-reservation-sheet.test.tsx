@@ -1443,7 +1443,7 @@ describe("NewReservationSheet", () => {
     );
   });
 
-  it("requires the full cash tendered before recording an unpaid past cash booking as Completed", async () => {
+  it("requires the full cash received before recording an unpaid past cash booking as Completed", async () => {
     api.createStaffReservation.mockResolvedValueOnce({
       data: staffReservationCreateResponse.parse({
         ...heldResponse,
@@ -1480,12 +1480,12 @@ describe("NewReservationSheet", () => {
     fireEvent.change(screen.getByLabelText("Address"), { target: { value: "123 Past Street" } });
     // No separate tick boxes: confirming records the terms and the cash tendered.
     expect(screen.queryByRole("checkbox", { name: /accepted|Cash received/i })).not.toBeInTheDocument();
-    expect(screen.getByText(/Enter the cash tendered before recording this past booking/i)).toBeVisible();
-    fireEvent.change(screen.getByLabelText("Cash tendered"), { target: { value: "" } });
+    expect(screen.getByText(/Enter the cash received before recording this past booking/i)).toBeVisible();
+    fireEvent.change(screen.getByLabelText("Cash received"), { target: { value: "" } });
     expect(screen.getByRole("button", { name: "Record as Completed" })).toBeDisabled();
-    fireEvent.change(screen.getByLabelText("Cash tendered"), { target: { value: "1000" } });
+    fireEvent.change(screen.getByLabelText("Cash received"), { target: { value: "1000" } });
     expect(screen.getByRole("button", { name: "Record as Completed" })).toBeDisabled();
-    fireEvent.change(screen.getByLabelText("Cash tendered"), { target: { value: "2000" } });
+    fireEvent.change(screen.getByLabelText("Cash received"), { target: { value: "2000" } });
     expect(screen.getByRole("button", { name: "Record as Completed" })).toBeEnabled();
     fireEvent.click(screen.getByRole("button", { name: "Record as Completed" }));
 
@@ -1803,48 +1803,8 @@ describe("NewReservationSheet", () => {
     fireEvent.click(screen.getByRole("button", { name: "Reserve" }));
     await screen.findByText("RSV-WALKIN-001");
 
-    fireEvent.click(screen.getByRole("button", { name: "Existing customer" }));
-    fireEvent.change(screen.getByLabelText("Search existing customer"), {
-      target: { value: "Maria" },
-    });
-    await screen.findByRole("button", { name: /Maria Existing/i });
-
-    fireEvent.change(screen.getByLabelText("Search existing customer"), {
-      target: { value: "Another" },
-    });
-    expect(screen.queryByRole("button", { name: /Maria Existing/i })).not.toBeInTheDocument();
-    expect(screen.getByText("Waiting to search customers…")).toBeVisible();
-    await waitFor(() =>
-      expect(api.getStaffReservationIntakeOptions).toHaveBeenLastCalledWith({
-        customer_search: "Another",
-      })
-    );
-    await screen.findByRole("button", { name: /Maria Existing/i });
-
-    const requestCountBeforeShortQuery = api.getStaffReservationIntakeOptions.mock.calls.length;
-    fireEvent.change(screen.getByLabelText("Search existing customer"), {
-      target: { value: "A" },
-    });
-    expect(screen.queryByRole("button", { name: /Maria Existing/i })).not.toBeInTheDocument();
-    expect(
-      screen.getByText("Type at least 2 characters to find an existing customer.")
-    ).toBeVisible();
-    expect(screen.queryByText("Waiting to search customers…")).not.toBeInTheDocument();
-    expect(api.getStaffReservationIntakeOptions).toHaveBeenCalledTimes(
-      requestCountBeforeShortQuery
-    );
-
-    fireEvent.change(screen.getByLabelText("Search existing customer"), {
-      target: { value: "Another" },
-    });
-    await waitFor(() =>
-      expect(api.getStaffReservationIntakeOptions).toHaveBeenLastCalledWith({
-        customer_search: "Another",
-      })
-    );
-    const refreshedCustomer = await screen.findByRole("button", { name: /Maria Existing/i });
-    fireEvent.click(refreshedCustomer);
-    expect(refreshedCustomer).toHaveAttribute("aria-pressed", "true");
+    fireEvent.change(screen.getByLabelText("Full name"), { target: { value: "Maria" } });
+    fireEvent.click(await screen.findByRole("button", { name: /Maria Existing/i }));
     expect(screen.getByText("Selected customer")).toBeVisible();
     await waitFor(() => expect(screen.getByLabelText("Address")).toHaveValue("1 Existing Street"));
     expect(screen.getByLabelText("Full name")).toHaveValue("Maria Existing");
@@ -1920,8 +1880,7 @@ describe("NewReservationSheet", () => {
     fireEvent.click(screen.getByRole("button", { name: "Reserve" }));
     await screen.findByText("RSV-WALKIN-001");
 
-    fireEvent.click(screen.getByRole("button", { name: "Existing customer" }));
-    fireEvent.change(screen.getByLabelText("Search existing customer"), {
+    fireEvent.change(screen.getByLabelText("Full name"), {
       target: { value: "Addressless" },
     });
     fireEvent.click(await screen.findByRole("button", { name: /Addressless Existing/i }));
@@ -2040,8 +1999,7 @@ describe("NewReservationSheet", () => {
       await fillDatesAndSelectProduct();
       fireEvent.click(screen.getByRole("button", { name: "Reserve" }));
       await screen.findByText("RSV-WALKIN-001");
-      fireEvent.click(screen.getByRole("button", { name: "Existing customer" }));
-      fireEvent.change(screen.getByLabelText("Search existing customer"), {
+      fireEvent.change(screen.getByLabelText("Full name"), {
         target: { value: "Contact" },
       });
       fireEvent.click(await screen.findByRole("button", { name: /Contact Missing Customer/i }));

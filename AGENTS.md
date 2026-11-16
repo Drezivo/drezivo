@@ -4,6 +4,10 @@ Read [ROOT-REPOSITORY-ARCHITECTURE.md](ROOT-REPOSITORY-ARCHITECTURE.md) before t
 workspace. It is the root source of truth for ownership, folder boundaries, setup, and release
 order. Then read the target workspace's `AGENTS.md` and `.codex/rules/`.
 
+Name branches `<type>/<short-kebab-slug>` using a purpose-based prefix such as `feat/`,
+`fix/`, `release/`, `chore/`, `refactor/`, `docs/`, or `test/`. Do not use `codex/`
+as a default branch prefix.
+
 For a complete first-turn protocol, read [AI-AGENT-ONBOARDING.md](AI-AGENT-ONBOARDING.md). It
 summarizes how to establish context, trace a feature across workspaces, use the shared Obsidian
 vault, validate changes, and leave durable handoff information.
