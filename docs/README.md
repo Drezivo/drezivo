@@ -1,15 +1,15 @@
 # Drezivo documentation
 
-Start with the [current PRD](product/Drezivo-PRD.md), [TRD](architecture/Drezivo-TRD.md),
-[logical data model](architecture/Drezivo-Data-Model.md), and [ERD input](architecture/Drezivo-ERD.dbml).
+Start with the [current PRD](second-brain/01-Product/Drezivo-PRD.md), [TRD](second-brain/02-Architecture/Drezivo-TRD.md),
+[logical data model](second-brain/02-Architecture/Drezivo-Data-Model.md), and [ERD input](architecture/Drezivo-ERD.dbml).
 Historical product documents remain available with precedence banners.
 
 ## Second Brain
 
 Open [`second-brain/`](second-brain/) as the project-only Obsidian vault and begin at
 [`00-Home/Drezivo Home.md`](second-brain/00-Home/Drezivo%20Home.md). It is a linked memory and
-navigation layer; the current specifications and accepted decisions in this workspace remain
-authoritative.
+navigation layer and home to the current specifications and accepted decisions. Code and
+migrations remain evidence of implemented behavior.
 
 ## Legal drafts
 
@@ -26,7 +26,7 @@ production deployment.
 ## Development
 
 Use Node 22 or 24. Run `npm ci`, `npm run lint:md`, and `npm run lint:links`.
-Read [contribution rules](CONTRIBUTING.md), [architecture decisions](decisions/0006-monorepo.md), and [runbooks](runbooks/).
+Read [contribution rules](CONTRIBUTING.md), [architecture decisions](second-brain/04-Decisions/ADRs/0006-monorepo.md), and [runbooks](runbooks/).
 Agent instructions live in `CLAUDE.md` / `.claude` and `AGENTS.md` / `.codex`.
 See [agent mirror utilities](scripts/README.md) for synchronization.
 

@@ -50,6 +50,7 @@ import {
   todayInTimeZone,
   type ReservationCalendarAvailabilityItem,
 } from "@/components/reservations/reservation-availability-calendar";
+import { CustomerSuggestions } from "./customer-suggestions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DatePickerField } from "@/components/ui/date-picker-field";
@@ -853,6 +854,7 @@ export function NewReservationSheet({
   }, [dueDate, eventDate, pickupDate]);
 
   useEffect(() => {
+    if (selectedCustomerId) return;
     if (
       !open ||
       step !== "held" ||
@@ -883,6 +885,7 @@ export function NewReservationSheet({
     isCustomerSearchPending,
     isCustomerSearchTooShort,
     open,
+    selectedCustomerId,
     step,
   ]);
 
@@ -899,6 +902,7 @@ export function NewReservationSheet({
       .then((result) => {
         if (cancelled) return;
         const profile = result.data;
+        setCustomerOptions([{ id: profile.id, full_name: profile.full_name, phone: profile.phone, email: profile.email, has_address: Boolean(profile.address) }]);
         const rebookCustomer =
           rebookFrom?.customer?.customerId === selectedCustomerId ? rebookFrom.customer : null;
         setSelectedCustomerProfile({
@@ -990,6 +994,7 @@ export function NewReservationSheet({
       setCustomerMode("existing");
       setCustomerSearch(customer.fullName);
       setSelectedCustomerId(customer.customerId);
+      setCustomerOptions([{ id: customer.customerId, full_name: customer.fullName, phone: customer.phone ?? null, email: customer.email ?? null, has_address: Boolean(customer.address) }]);
       setPhone(customer.phone ?? "");
       setEmail(customer.email ?? "");
       setAddress(customer.address ?? "");
@@ -1413,7 +1418,7 @@ export function NewReservationSheet({
       ) {
         setNotice({
           tone: "attention",
-          text: `Cash tendered must be at least the amount due (${formatMinorMoney(
+          text: `Cash received must be at least the amount due (${formatMinorMoney(
             held.reservation.price_snapshot.due_now_minor,
             held.reservation.price_snapshot.currency
           )}).`,
@@ -2442,14 +2447,14 @@ export function NewReservationSheet({
 
                 {held.paymentInstructions.rail === "cash" ? (
                   <div className="mt-3 grid gap-3">
-                    <Field label="Cash tendered">
+                    <Field label="Cash received">
                       <div className="relative">
                         <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-dashboard-muted">
                           ₱
                         </span>
                         <Input
                           inputMode="decimal"
-                          aria-label="Cash tendered"
+                          aria-label="Cash received"
                           value={cashAmountReceived}
                           onChange={(event) => {
                             setCashAmountReceived(event.target.value.replace(/[^0-9.]/g, ""));
@@ -2552,47 +2557,13 @@ export function NewReservationSheet({
               <>
                 <section>
                   <SectionTitle icon={UserRound} title="Customer" />
-                  <div className="mt-3 flex gap-2">
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant={customerMode === "new" ? "default" : "secondary"}
-                      onClick={() => {
-                        setCustomerMode("new");
-                        setSelectedCustomerId("");
-                        setSelectedCustomerProfile(null);
-                        setCustomerProfileError(null);
-                        setFullName("");
-                        setPhone("");
-                        setEmail("");
-                        setAddress("");
-                        setSocialMedia("");
-                        setNotes("");
-                        completeGuard.resetIntent();
-                      }}
-                    >
-                      New customer
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant={customerMode === "existing" ? "default" : "secondary"}
-                      onClick={() => {
-                        setCustomerMode("existing");
-                        setSelectedCustomerId("");
-                        setSelectedCustomerProfile(null);
-                        setCustomerProfileError(null);
-                        setFullName("");
-                        setPhone("");
-                        setEmail("");
-                        setAddress("");
-                        setSocialMedia("");
-                        completeGuard.resetIntent();
-                      }}
-                    >
-                      Existing customer
-                    </Button>
-                  </div>
+                  {customerMode === "existing" ? (
+                    <Button type="button" variant="secondary" size="sm" onClick={() => {
+                      setCustomerMode("new"); setSelectedCustomerId(""); setSelectedCustomerProfile(null);
+                      setCustomerProfileError(null); setFullName(""); setPhone(""); setEmail("");
+                      setAddress(""); setSocialMedia(""); setNotes(""); completeGuard.resetIntent();
+                    }}>Use a different customer</Button>
+                  ) : null}
 
                   {customerMode === "new" ? (
                     <div className="mt-3 grid gap-3 sm:grid-cols-2">
@@ -2695,6 +2666,14 @@ export function NewReservationSheet({
                           }}
                         />
                       </Field>
+                      <CustomerSuggestions name={fullName} disabled={completeGuard.isSubmitting} onSelect={(customer) => {
+                        setCustomerOptions([customer]); setCustomerSearch(customer.full_name);
+                        setSelectedCustomerId(customer.id); setSelectedCustomerProfile(null);
+                        setCustomerProfileError(null); setFullName(customer.full_name);
+                        setPhone(customer.phone ?? ""); setEmail(customer.email ?? "");
+                        setAddress(""); setSocialMedia(""); setNotes("");
+                        setCustomerMode("existing"); setNotice(null); completeGuard.resetIntent();
+                      }} />
                     </div>
                   ) : (
                     <div className="mt-3">
@@ -2949,7 +2928,7 @@ export function NewReservationSheet({
                 held.paymentInstructions.rail === "cash" &&
                 BigInt(held.reservation.price_snapshot.due_now_minor) > 0n ? (
                   <p className="text-xs text-dashboard-muted">
-                    Enter the cash tendered before recording this past booking as Completed.
+                    Enter the cash received before recording this past booking as Completed.
                   </p>
                 ) : null}
 

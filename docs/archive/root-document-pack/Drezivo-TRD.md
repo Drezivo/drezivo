@@ -5,7 +5,7 @@
 
 **Changes in 1.2.** The five former checkouts are now workspaces in one root Git repository. The root lockfile, license, review boundary, and release evidence are authoritative. Workspace ownership remains explicit: `contracts` provides shared schemas, `api` owns business transactions and the worker, `app` and `web` render user journeys, and `docs` owns specifications. The former polyrepo decision remains as a superseded ADR. Automatic CI is deferred until the scaffold gate is green, as recorded in `docs/runbooks/ci-baseline.md`. Security controls, tenant context, and migration windows now apply across workspaces in one pull request.
 
-Read with [PRD](../../product/Drezivo-PRD.md), [market research](../../product/Drezivo-Market-Research.md), and [logical data model](Drezivo-Data-Model.md). Product release V1 is distinct from document revision numbers. The DBML describes relationships; SQL migrations must implement constraints it cannot express.
+Read with [PRD](../../second-brain/01-Product/Drezivo-PRD.md), [market research](../../second-brain/01-Product/Drezivo-Market-Research.md), and [logical data model](Drezivo-Data-Model.md). Product release V1 is distinct from document revision numbers. The DBML describes relationships; SQL migrations must implement constraints it cannot express.
 
 ## 1. Architecture decision
 
@@ -18,7 +18,7 @@ Retain the team's familiar stack. Use a **modular monolith**: one Express busine
 | Database | Neon PostgreSQL | Shared schema with tenant keys, constraints, row-level security, transaction locks. One production project initially; separate nonproduction environment. |
 | Authentication | Clerk | Staff authentication and organization identity. Drezivo owns domain permissions, branch grants and subscription entitlements. |
 | Files | Private S3 buckets; separate public catalogue derivatives | Original evidence is private; controlled upload, quarantine, short-lived downloads. |
-| Query/migrations | **Decided: Drizzle + node-postgres (`pg`)** | Confirmed 15 September 2026. TypeScript queries with reviewed SQL migrations for exclusion constraints/RLS. See `docs/decisions/0002-drizzle-and-node-postgres.md`. Custom SQL and real transaction tests remain mandatory. |
+| Query/migrations | **Decided: Drizzle + node-postgres (`pg`)** | Confirmed 15 September 2026. TypeScript queries with reviewed SQL migrations for exclusion constraints/RLS. See `docs/second-brain/04-Decisions/ADRs/0002-drizzle-and-node-postgres.md`. Custom SQL and real transaction tests remain mandatory. |
 | Boundary validation | **Decided: Zod + OpenAPI 3.1, published as `@drezivo/contracts`** | Runtime input validation and one shared client shape. TypeScript alone cannot validate HTTP input. Because all surfaces share one monorepo (§2.1), the contract is a workspace package imported by every consumer; generated OpenAPI remains the external compatibility record. |
 | Durable work | Postgres outbox/job tables and polling worker | Avoid an additional queue service initially; add SQS when measured load or operational needs justify it. |
 | Email | Recommend an SES adapter, subject to deliverability pilot | Sender verification, bounce/complaint handling, queued sends. Provider-specific details stay behind an adapter. |

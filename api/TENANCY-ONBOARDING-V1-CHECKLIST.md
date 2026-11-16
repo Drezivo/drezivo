@@ -2,8 +2,8 @@
 
 **Status:** Phase 0 complete; Phase 1 onward remain staged and unimplemented
 **Canonical decision record:** [Second Brain architecture note](../docs/second-brain/02-Architecture/Tenancy%2C%20Onboarding%2C%20Clerk%2C%20Memberships%2C%20and%20Billing%20Foundation.md)
-**Canonical specifications to align first:** [PRD](../docs/product/Drezivo-PRD.md),
-[TRD](../docs/architecture/Drezivo-TRD.md), [Data Model](../docs/architecture/Drezivo-Data-Model.md),
+**Canonical specifications to align first:** [PRD](../docs/second-brain/01-Product/Drezivo-PRD.md),
+[TRD](../docs/second-brain/02-Architecture/Drezivo-TRD.md), [Data Model](../docs/second-brain/02-Architecture/Drezivo-Data-Model.md),
 and [ERD](../docs/architecture/Drezivo-ERD.dbml)
 
 ## How to use this checklist

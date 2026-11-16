@@ -1,7 +1,7 @@
 # Release
 
 This runbook moves a change from the root monorepo to a live environment. Read
-`docs/decisions/0006-monorepo.md` and `docs/architecture/Drezivo-TRD.md` first.
+`docs/second-brain/04-Decisions/ADRs/0006-monorepo.md` and `docs/second-brain/02-Architecture/Drezivo-TRD.md` first.
 
 ## Release sequence
 

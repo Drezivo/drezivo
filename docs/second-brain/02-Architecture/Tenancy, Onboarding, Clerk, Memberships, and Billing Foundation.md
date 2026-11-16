@@ -3,7 +3,7 @@ title: Tenancy, Onboarding, Clerk, Memberships, and Billing Foundation
 type: architecture
 status: accepted-for-staged-implementation
 owner: Drezivo platform team
-source: "Accepted product decisions, 2026-09-16; [[02-Architecture/Drezivo Architecture]]; [TRD](../../architecture/Drezivo-TRD.md); [Data Model](../../architecture/Drezivo-Data-Model.md); [ERD](../../architecture/Drezivo-ERD.dbml)"
+source: "Accepted product decisions, 2026-09-16; [[02-Architecture/Drezivo Architecture]]; [TRD](Drezivo-TRD.md); [Data Model](Drezivo-Data-Model.md); [ERD](../../architecture/Drezivo-ERD.dbml)"
 updated: 2026-10-28
 tags:
   [drezivo, architecture, tenancy, onboarding, clerk, memberships, billing, v1]
@@ -18,8 +18,8 @@ person, Clerk organization, Drezivo tenant, subscription, and Front Desk members
 existence, and what happens when any of them fails or changes.
 
 It is an implementation map, not a replacement for canonical specifications. The
-[PRD](../../product/Drezivo-PRD.md), [TRD](../../architecture/Drezivo-TRD.md),
-[Data Model](../../architecture/Drezivo-Data-Model.md), and
+[PRD](../01-Product/Drezivo-PRD.md), [TRD](Drezivo-TRD.md),
+[Data Model](Drezivo-Data-Model.md), and
 [ERD](../../architecture/Drezivo-ERD.dbml) remain authoritative. The first implementation
 slice must align them with this decision before code changes behavior.
 
@@ -296,7 +296,7 @@ Growth and Scale carry Standard's paid features and the same fourteen-day lifeti
 The public marketing page remains a static three-plan snapshot and does not show Growth or Scale.
 Entitlements are versioned with the plan, not copied as mutable browser configuration. The
 inactive Professional and Business rows remain historical. Owner-confirmed pricing on
-2026-10-28 is recorded in [ADR 0016](../../decisions/0016-app-only-growth-scale-plans.md).
+2026-10-28 is recorded in [ADR 0016](../04-Decisions/ADRs/0016-app-only-growth-scale-plans.md).
 
 Asset quota counts active physical assets only. Styles, variants, drafts, and archived assets are
 not quota units. Creation, activation, and CSV import commit check the limit under a tenant lock.
@@ -312,9 +312,9 @@ not consume a Front Desk seat.
   paid plan they choose. Growth allows 500 garments/5 Front Desk seats; Scale allows 1,000/8.
 - Plans are selected at onboarding or from Settings → Plan & billing. Current paid-plan changes
   are not self-service; the backend resolves limits and features from active versioned entitlements.
-- When a trial or paid period ends without approved payment, access is read-only for up to 30 days.
-  The storefront stays online without bookings or fittings for the first three days, then stays
-  offline for the rest of that period. The workspace locks after day 30 except for subscribing. An
+- When a trial or paid period ends without approved payment, access is read-only for up to 7 days.
+  The storefront stays online without bookings or fittings for the first day, then stays
+  offline for the rest of that period. The workspace locks after day 7 except for subscribing. An
   operator may grant a dated read-only extension.
 
 Request-time checks are authoritative. Access is derived from subscription dates for each request;
@@ -508,7 +508,7 @@ integration evidence.
   object storage integration complete.
 
 The plan tiers and seven-day billing grace above record the 16 September decision. They were
-superseded by the dated plan decisions: [ADR 0011](../../decisions/0011-single-standard-pilot-plan.md), [ADR 0015](../../decisions/0015-starter-and-standard-plans.md), and [ADR 0016](../../decisions/0016-app-only-growth-scale-plans.md).
+superseded by the dated plan decisions: [ADR 0011](../04-Decisions/ADRs/0011-single-standard-pilot-plan.md), [ADR 0015](../04-Decisions/ADRs/0015-starter-and-standard-plans.md), and [ADR 0016](../04-Decisions/ADRs/0016-app-only-growth-scale-plans.md).
 
 ## Related notes
 

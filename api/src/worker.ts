@@ -2,6 +2,7 @@ import { config } from './config/index.js';
 import { closePool } from './db/client.js';
 import { ACKNOWLEDGED_DOMAIN_EVENTS, acknowledgeDomainEvent } from './worker/handlers/domain-events.js';
 import { expireDueHoldsForAllTenants } from './worker/handlers/hold-expirer.js';
+import { createScheduledHoldExpirer } from './worker/handlers/scheduled-hold-expirer.js';
 import { handleTenantBootstrapped } from './worker/handlers/tenant-bootstrap.js';
 import { reconcileDueSubscriptionsForAllTenants } from './worker/handlers/subscription-lifecycle.js';
 import { handleMembershipInvitationDispatch } from './modules/membership-invitations/membership-invitations.dispatcher.js';
@@ -23,6 +24,8 @@ import {
 } from './worker/handlers/media-cache-invalidation.js';
 import { EMAIL_EVENT_TYPE } from './modules/notifications/email-notifications.js';
 import { logger } from './shared/logger.js';
+import { captureServerError, initMonitoring } from './shared/monitoring.js';
+import { flush } from '@sentry/node';
 import { SUBSCRIPTION_LIFECYCLE_SWEEP_ENABLED } from './modules/billing/billing.constants.js';
 import { sweepPlatformQrObject } from './modules/billing/platform-qr-cleanup.js';
 import {
@@ -46,6 +49,8 @@ import {
  * WORKER_MODE=continuous runs forever (polling + interval sweeps). WORKER_MODE=drain runs one
  * pass and exits, for a scheduled job; see docs/runbooks/worker-cloud-run.md.
  */
+initMonitoring();
+
 const handlers: Record<string, EventHandler> = {
   'tenant.bootstrapped': handleTenantBootstrapped,
   [EMAIL_EVENT_TYPE]: createEmailDeliveryHandler(),
@@ -61,10 +66,17 @@ const handlers: Record<string, EventHandler> = {
   ...Object.fromEntries(ACKNOWLEDGED_DOMAIN_EVENTS.map((eventType) => [eventType, acknowledgeDomainEvent])),
 };
 const runner = new WorkerRunner(handlers);
+const scheduledHoldExpirer = createScheduledHoldExpirer();
 
 const SWEEPS: readonly Sweep[] = [
   { name: 'platform QR cleanup', run: sweepPlatformQrObject, intervalMs: Math.max(config.WORKER_POLL_INTERVAL_MS, 60_000) },
-  { name: 'hold expiry', run: expireDueHoldsForAllTenants, intervalMs: config.WORKER_HOLD_SWEEP_INTERVAL_MS, fast: true },
+  {
+    name: 'hold expiry',
+    run: config.WORKER_HOLD_EXPIRY_MODE === 'scheduled' ? scheduledHoldExpirer.run : expireDueHoldsForAllTenants,
+    intervalMs: config.WORKER_HOLD_SWEEP_INTERVAL_MS,
+    runOnStart: config.WORKER_HOLD_EXPIRY_MODE === 'scheduled',
+    fast: true,
+  },
   // Off for the pilot: access is derived per request (modules/billing/access.ts). See the constant.
   ...(SUBSCRIPTION_LIFECYCLE_SWEEP_ENABLED
     ? [{ name: 'subscription lifecycle', run: reconcileDueSubscriptionsForAllTenants, intervalMs: config.WORKER_POLL_INTERVAL_MS }]
@@ -86,14 +98,17 @@ const SWEEPS: readonly Sweep[] = [
 function runContinuously(): void {
   const scheduler = startSweepScheduler(SWEEPS);
   logger.info({ sweeps: SWEEPS.map(({ name, intervalMs }) => ({ name, intervalMs })) }, 'worker sweep schedule');
-  const runnerTask = runner.start().catch((error: unknown) => {
-    logger.error({ err: error }, 'worker runner crashed');
+  const runnerTask = runner.start().catch(async (error: unknown) => {
+    captureServerError(error);
+    logger.error('worker runner crashed');
+    await flush(2_000);
     process.exit(1);
   });
 
   async function shutdown(signal: string): Promise<void> {
     logger.info({ signal }, 'worker shutting down');
     runner.stop();
+    scheduledHoldExpirer.stop();
     await Promise.all([scheduler.stop(), runnerTask]);
     await closePool();
     process.exit(0);
@@ -108,8 +123,9 @@ function runContinuously(): void {
  */
 async function runOnce(): Promise<number> {
   // A job timeout sends SIGTERM: finish the batch in hand, claim nothing new, and exit.
-  process.on('SIGTERM', () => runner.stop());
-  process.on('SIGINT', () => runner.stop());
+  const stop = (): void => { runner.stop(); scheduledHoldExpirer.stop(); };
+  process.on('SIGTERM', stop);
+  process.on('SIGINT', stop);
 
   const fast = config.WORKER_DRAIN_SCOPE === 'fast';
   const sweepFailures: string[] = [];
@@ -126,10 +142,11 @@ async function runOnce(): Promise<number> {
     ...(fast ? { eventTypes: [EMAIL_EVENT_TYPE] } : {}),
   });
   logger.info({ scope: config.WORKER_DRAIN_SCOPE, ...result, sweepFailures }, 'worker drain finished');
+  scheduledHoldExpirer.stop();
   return sweepFailures.length === 0 ? 0 : 1;
 }
 
-logger.info({ enabled: config.WORKER_ENABLED, mode: config.WORKER_MODE }, 'worker process starting');
+logger.info({ enabled: config.WORKER_ENABLED, mode: config.WORKER_MODE, holdExpiryMode: config.WORKER_HOLD_EXPIRY_MODE }, 'worker process starting');
 if (!config.WORKER_ENABLED) {
   logger.warn('worker disabled by configuration; no jobs will be claimed');
   if (config.WORKER_MODE === 'drain') process.exit(0);
@@ -137,8 +154,10 @@ if (!config.WORKER_ENABLED) {
   runContinuously();
 } else {
   void runOnce()
-    .catch((error: unknown) => {
-      logger.error({ err: error }, 'worker drain crashed');
+    .catch(async (error: unknown) => {
+      captureServerError(error);
+      logger.error('worker drain crashed');
+      await flush(2_000);
       return 1;
     })
     .then(async (code) => {

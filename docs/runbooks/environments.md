@@ -46,6 +46,9 @@ naming convention) once TRD §12's "remaining selection" of hosting plans/region
 - `NODE_ENV` — `development` | `staging` | `production`. Gates verbose logging and
   dev-only conveniences; never gates a security control on its own.
 - `PORT` — the port the HTTP server binds. The worker entrypoint does not need this.
+- `SENTRY_DSN` — optional Sentry ingest destination for the API and worker. Store it in the
+  deployment secret manager. With no value, Sentry reporting is disabled. `SENTRY_TRACES_SAMPLE_RATE`
+  accepts 0 through 1 and defaults to 0.1. `SENTRY_RELEASE` is an optional short release identifier.
 - `DATABASE_URL` — the runtime PostgreSQL connection string, or the loopback PostgreSQL URL during
   local Compose development. The API deployment authenticates as `drezivo_app`; the worker
   deployment uses the same variable name but authenticates as `drezivo_worker`. A persistent
@@ -108,6 +111,11 @@ naming convention) once TRD §12's "remaining selection" of hosting plans/region
   the configured maximum, the initial interval is also the effective maximum. During an outage,
   backlog, or an asleep host, jobs can take longer than the idle delay.
 - `WORKER_HOLD_SWEEP_INTERVAL_MS`: expired-hold sweep interval, default `10000` ms.
+- `WORKER_HOLD_EXPIRY_MODE`: `scan` (default/rollback) or `scheduled`. Apply migration
+  `0098_reservation_expiry_schedule.sql` before selecting `scheduled`. The embedded child inherits
+  this setting. Scheduled mode discovers at most ten due businesses per pass, processes at most
+  100 reservations per business, and skips idle business transactions. See the
+  [hold-expiry rollout](worker-hold-expiry.md) for bounds, measurements and rollback.
 - `WORKER_CLERK_RECONCILE_INTERVAL_MS`: Clerk webhook reconciliation interval, default `60000` ms.
 - `WORKER_ORG_CLEANUP_INTERVAL_MS`: abandoned-organization cleanup interval, default `300000` ms.
   These four new intervals accept integers from 250 to 3600000 ms. They apply to continuous mode;
@@ -208,12 +216,12 @@ naming convention) once TRD §12's "remaining selection" of hosting plans/region
 - `PAYMENT_REVIEW_MAX_HOURS` — proposed 24 hours maximum manual review deadline (TRD §5, PRD
   §11).
 - Trial and subscription access windows are code-owned policy, not environment overrides. The
-  current pilot uses a 14-day trial, 3-day reminder, 30-day read-only period, and 3-day storefront
+  current pilot uses a 14-day trial, 3-day reminder, 7-day read-only period, and 1-day storefront
   online window after a period ends. Do not add `TRIAL_PERIOD_DAYS` or `RENEWAL_GRACE_DAYS`; the API
   does not read them. See `contracts/src/tenancy/billing.ts` and `api/src/modules/billing/access.ts`.
 - `OUTBOX_MAX_ATTEMPTS` — proposed eight attempts before terminal failure (TRD §8).
 - `CONTRACTS_PACKAGE_VERSION` — not an env var but a `package.json` dependency pin on
-  `@drezivo/contracts` (`docs/decisions/0003-shared-contracts-package.md`); listed here as a
+  `@drezivo/contracts` (`docs/second-brain/04-Decisions/ADRs/0003-shared-contracts-package.md`); listed here as a
   reminder that the contract version in use is part of what "which environment is running what"
   means.
 
@@ -268,7 +276,7 @@ See [`private-media-delivery.md`](private-media-delivery.md) and
 ## `contracts` (`@drezivo/contracts`)
 
 - `GITHUB_PACKAGES_TOKEN` (or equivalent) — used only in CI to publish the package to GitHub
-  Packages (`docs/decisions/0003-shared-contracts-package.md`); never needed at runtime by any
+  Packages (`docs/second-brain/04-Decisions/ADRs/0003-shared-contracts-package.md`); never needed at runtime by any
   other repository beyond an ordinary package-registry auth token for `npm install`.
 
 ## `docs` (this repository)

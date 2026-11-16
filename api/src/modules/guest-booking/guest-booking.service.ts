@@ -4,11 +4,14 @@ import type { PoolClient } from 'pg';
 
 import {
   guestFittingCreated,
+  guestQuote,
   guestReceiptUploadResponse,
   branchOperatingHours,
   guestReservationView,
   type GuestFittingCreated,
   type GuestFittingRequest,
+  type GuestQuote,
+  type GuestQuoteRequest,
   type GuestReceiptUploadRequest,
   type GuestReceiptUploadResponse,
   type GuestReservationCreated,
@@ -27,11 +30,13 @@ import {
   DependencyUnavailableError,
   HoldExpiredError,
   NotFoundError,
+  PriceChangeNotAcceptedError,
   ScheduleConflictError,
   StateConflictError,
   ValidationError,
 } from '../../shared/errors.js';
 import { runIdempotentCommand, type CommandResult } from '../../shared/idempotent-command.js';
+import { logger } from '../../shared/logger.js';
 import { guestAccessExpiresAt, guestTokenFor, guestTokenHash } from '../../shared/guest-token.js';
 import { digestRecipientEmail } from '../../shared/protected-recipient.js';
 import { resolveTenantEntitlements } from '../entitlements/entitlements.service.js';
@@ -54,6 +59,7 @@ import {
   createHeldReservation,
   isAllocationOverlapViolation,
 } from '../reservations/reservations.command.service.js';
+import { resolveReservationQuote, type ReservationQuote } from '../reservations/reservations.quote.js';
 import {
   attachAcceptedReservationReceipt,
   lockReservationForReview,
@@ -79,6 +85,7 @@ import {
   appendGuestAudit,
   findOrCreateGuestCustomer,
   insertGuestAccessToken,
+  lockGuestQuoteVariant,
   readSharedRenterStepsSnapshot,
   readGuestReservation,
   readGuestTokenScopes,
@@ -106,6 +113,39 @@ export class GuestBookingService {
     private readonly storage: ObjectStorage = objectStorage,
   ) {}
 
+  /** Return only customer-facing amounts, without allocating a garment or collecting guest data. */
+  async quoteReservation(slug: string, request: GuestQuoteRequest): Promise<GuestQuote> {
+    const store = await this.requireStore(slug);
+    return withTenantTransaction(store.tenantId, 'anonymous:public', async (client) => {
+      const core = await readStoreCore(client, store);
+      if (!core) throw new NotFoundError(STORE_NOT_FOUND);
+      const entitlements = await resolveTenantEntitlements(client, store.tenantId);
+      if (!entitlements.features.storefront_reservations || !toDocument(core).checkout.reservation_requests) {
+        throw new BookingPausedError('This shop takes reservations by message. Please contact the shop to reserve.');
+      }
+      if (!(await isVisibleVariant(client, store.tenantId, request.variant_id))) {
+        throw new NotFoundError('This item is no longer available.');
+      }
+      const methods = await readStorefrontPaymentMethods(client, store.tenantId);
+      if (!methods.some((method) => method.id === request.payment_method_id)) {
+        throw new ValidationError('Choose one of the payment methods this shop accepts online.');
+      }
+      const quote = await resolveReservationQuote(client, {
+        tenantId: store.tenantId,
+        branchId: store.branchId,
+        request: {
+          variant_id: request.variant_id,
+          requested_interval: request.requested_interval,
+          ...(request.event_date ? { event_date: request.event_date } : {}),
+          fulfillment_method: request.fulfillment_method,
+          payment_method_id: request.payment_method_id,
+        },
+        deliveryHandling: 'shop_arranged',
+      });
+      return publicQuote(quote);
+    });
+  }
+
   /** A guest places a 15-minute hold on one size, then pays and uploads a receipt. */
   async createReservation(slug: string, meta: GuestRequestMeta, request: GuestReservationRequest): Promise<CommandResult<GuestReservationCreated>> {
     const store = await this.requireStore(slug);
@@ -123,6 +163,9 @@ export class GuestBookingService {
         },
         idempotencyRequest,
         async () => {
+          if (config.GUEST_QUOTE_CONFIRMATION_REQUIRED && !request.expected_quote) {
+            throw new StateConflictError('The checkout has changed. Refresh this page and review the current price.');
+          }
           const core = await readStoreCore(client, store);
           if (!core) throw new NotFoundError(STORE_NOT_FOUND);
           const entitlements = await resolveTenantEntitlements(client, store.tenantId);
@@ -149,6 +192,9 @@ export class GuestBookingService {
           if (!(await isVisibleVariant(client, store.tenantId, request.variant_id))) {
             throw new NotFoundError('This item is no longer available.');
           }
+          if (!(await lockGuestQuoteVariant(client, store.tenantId, request.variant_id))) {
+            throw new NotFoundError('This item is no longer available.');
+          }
 
           try {
             const { quote, assetId } = await claimReservationAsset(client, {
@@ -164,6 +210,9 @@ export class GuestBookingService {
               },
               deliveryHandling: 'shop_arranged',
             });
+            if (request.expected_quote && !sameQuote(request.expected_quote, publicQuote(quote))) {
+              throw new PriceChangeNotAcceptedError('The price changed. Review and confirm the current price before continuing.');
+            }
             const customer = await findOrCreateGuestCustomer(client, store.tenantId, request.email, request.customer);
             const renterStepsSnapshot = await readSharedRenterStepsSnapshot(client, store.tenantId);
             const { graph } = await createHeldReservation(client, {
@@ -203,6 +252,9 @@ export class GuestBookingService {
         201,
       ),
     );
+    if (!result.body.success && result.body.error.code === 'PRICE_CHANGE_NOT_ACCEPTED') {
+      logger.info({ event: 'guest_quote_price_conflict', requestId: meta.requestId }, 'Guest quote changed before hold');
+    }
     return result;
   }
 
@@ -559,6 +611,18 @@ export class GuestBookingService {
     const scopes = await readGuestTokenScopes(client, tenantId, reservationId, guestTokenHash(capability));
     if (!scopes?.includes(scope)) throw new NotFoundError(GUEST_NOT_FOUND);
   }
+}
+
+function publicQuote(quote: ReservationQuote): GuestQuote {
+  const { rental_total_minor, security_required_minor, delivery_total_minor, due_now_minor, currency } = quote.price_snapshot;
+  return guestQuote.parse({ rental_total_minor, security_required_minor, delivery_total_minor, due_now_minor, currency });
+}
+
+function sameQuote(expected: GuestQuote, current: GuestQuote): boolean {
+  return expected.rental_total_minor === current.rental_total_minor &&
+    expected.security_required_minor === current.security_required_minor &&
+    expected.delivery_total_minor === current.delivery_total_minor &&
+    expected.due_now_minor === current.due_now_minor && expected.currency === current.currency;
 }
 
 function assertAwaitingReceipt(reservation: GuestReservationRow): void {

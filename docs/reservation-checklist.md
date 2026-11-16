@@ -550,8 +550,8 @@ app/tests/unit/drezivo-api-reservations-list.test.ts
 contracts/src/availability/availability.ts
 contracts/tests/availability-staff.test.ts
 contracts/openapi/generate.ts
-docs/product/Drezivo-PRD.md
-docs/architecture/Drezivo-TRD.md
+docs/second-brain/01-Product/Drezivo-PRD.md
+docs/second-brain/02-Architecture/Drezivo-TRD.md
 ```
 
 ---

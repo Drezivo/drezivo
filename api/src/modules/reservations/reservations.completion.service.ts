@@ -91,7 +91,7 @@ export async function completeStaffReservationCommand(
       BigInt(request.cash_collection.amount_tendered_minor) <
       BigInt(current.price_snapshot.due_now_minor)
     ) {
-      throw new ValidationError('Cash tendered cannot be less than the amount due.');
+      throw new ValidationError('Cash received cannot be less than the amount due.');
     }
     if ((await readReservationPaymentStatus(context, reservationId)) === 'paid') {
       return completionSuccess(context, current, 'none');
@@ -129,7 +129,7 @@ export async function completeStaffReservationCommand(
     BigInt(request.cash_collection.amount_tendered_minor) <
       BigInt(current.price_snapshot.due_now_minor)
   ) {
-    throw new ValidationError('Cash tendered cannot be less than the amount due.');
+    throw new ValidationError('Cash received cannot be less than the amount due.');
   }
   const pastPaymentRequirement = await assertPastCashCollectionConfirmed(
     context,

@@ -14,10 +14,10 @@ contains the same orientation in a visual Word document.
 
 ## Read in this order
 
-1. [Enhanced PRD](docs/product/Drezivo-PRD.md) — V1 scope, V1.1/V2/V3 progression, workflows, permissions, prices and release gates.
-2. [Market research](docs/product/Drezivo-Market-Research.md) — competitor/Philippine evidence, original gaps, assumptions and validation plan.
-3. [TRD](docs/architecture/Drezivo-TRD.md) — recommended implementation using Next.js/TypeScript, Express/TypeScript, Supabase PostgreSQL, Clerk, S3 and REST.
-4. [Logical data model](docs/architecture/Drezivo-Data-Model.md) — entity dictionary, invariants, state transitions and transaction rules.
+1. [Enhanced PRD](docs/second-brain/01-Product/Drezivo-PRD.md) — V1 scope, V1.1/V2/V3 progression, workflows, permissions, prices and release gates.
+2. [Market research](docs/second-brain/01-Product/Drezivo-Market-Research.md) — competitor/Philippine evidence, original gaps, assumptions and validation plan.
+3. [TRD](docs/second-brain/02-Architecture/Drezivo-TRD.md) — recommended implementation using Next.js/TypeScript, Express/TypeScript, Supabase PostgreSQL, Clerk, S3 and REST.
+4. [Logical data model](docs/second-brain/02-Architecture/Drezivo-Data-Model.md) — entity dictionary, invariants, state transitions and transaction rules.
 5. [ERD input](docs/architecture/Drezivo-ERD.dbml) — 50 entities and 132 relationships, grouped by release. Import into a DBML-compatible diagram tool. Do not treat exported SQL as complete production migrations.
 6. [Legal drafts](docs/product/legal/) — Philippines-first Terms of Service and Privacy Policy for counsel and Data Protection Officer review.
 7. [Security foundation template](SECURITY-FOUNDATION.template.md) — instructions for obtaining the private session, tenant isolation, risk, bot, monitoring, and incident guidance.

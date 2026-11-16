@@ -29,7 +29,7 @@ transfer plus a receipt), and customer accounts.
 1. **Public fitting requests ship now.** The PRD deferred customer self-booking of fittings. The
    product owner asked for it on 29 September 2026. The existing channel-neutral fitting
    transaction is reused, and every public request starts as `pending` for staff review. This
-   is recorded in `docs/decisions/0010-storefront-cms-and-guest-requests.md`.
+   is recorded in `docs/second-brain/04-Decisions/ADRs/0010-storefront-cms-and-guest-requests.md`.
 2. **CMS content lives on the existing `storefront` row.** It uses the `branding`, `contact`,
    and a new `content` JSONB column. A strict Zod schema in `contracts` validates it, so nothing
    free-form reaches the database. Nothing is stored as raw HTML: text is plain and escaped on
@@ -393,7 +393,7 @@ MinIO community builds are no longer published, so a small local S3 stand-in out
 
 ## Milestone 8 — Documentation and hand-off
 
-- [x] `docs/decisions/0010-storefront-cms-and-guest-requests.md` (the planned "0026" number was
+- [x] `docs/second-brain/04-Decisions/ADRs/0010-storefront-cms-and-guest-requests.md` (the planned "0026" number was
       wrong; the repo's decisions are numbered from 0001, so it is 0010).
 - [x] New variables in `docs/runbooks/environments.md`:
   - `TRUST_PROXY_HOPS`, `EMAIL_PROVIDER`, `EMAIL_FROM`, `RESEND_API_KEY`, `EMAIL_FILE_SINK_DIR`,
@@ -661,7 +661,7 @@ Runbook: `docs/runbooks/pilot-operation.md`.
 | 2026-09-29 | 4 | Scaffold 501 test replaced with the real boundary behaviour | `api/src/__tests__/app.test.ts` |
 | 2026-09-29 | 6 | Public storefront rebuilt on the live API; static demo removed | `web/src/app/s/[slug]/**`, `web/src/components/store/**`, `web/src/lib/{storefront-api,storefront-format,receipt-upload,seo}.ts`, `web/src/app/{globals.css,robots.ts}`, `web/tests/unit/storefront-format.test.ts` |
 | 2026-09-29 | 6 | Garment size order in public reads; guest status link in renter emails | `api/src/modules/storefront/storefront.repository.ts`, `api/src/modules/notifications/email-notifications.ts`, `api/src/shared/guest-token.ts`, `api/src/config/index.ts` |
-| 2026-09-29 | 8 | Decision record and environment variables | `docs/decisions/0010-storefront-cms-and-guest-requests.md`, `docs/runbooks/environments.md` |
+| 2026-09-29 | 8 | Decision record and environment variables | `docs/second-brain/04-Decisions/ADRs/0010-storefront-cms-and-guest-requests.md`, `docs/runbooks/environments.md` |
 | 2026-09-29 | 7 | Catalogue size expectation updated to garment order; full suite green on a fresh test database | `api/tests/integration/storefront-public-read.test.ts`, `docs/storefront-checklist.md` |
 | 2026-09-29 | 9 | Development accept-any-code guest verification, refused in production | `api/src/config/index.ts`, `api/src/modules/guest-booking/guest-verification.service.ts`, `api/src/config/__tests__/guest-verification-mode.test.ts`, `api/tests/integration/storefront-guest-booking.test.ts`, `docs/runbooks/environments.md` |
 | 2026-09-29 | 9 | Clear pickup/delivery tiles; minimum rental enforced in the calendar; real 409 reasons | `web/src/components/store/booking/booking-drawer.tsx`, `web/src/components/store/booking/availability-calendar.tsx` |

@@ -105,7 +105,7 @@ Keep these protected or versioned references intact:
 ## Related notes and sources
 
 - [[00-Home/Drezivo Home]]
-- [Accepted R2 storage decision](../../decisions/0010-cloudflare-r2-object-storage.md)
+- [Accepted R2 storage decision](../04-Decisions/ADRs/0010-cloudflare-r2-object-storage.md)
 - [Replacement cleanup rollout and operations runbook](../../runbooks/file-object-cleanup.md)
 - [File-object schema](../../../api/src/db/schema/files.ts)
 - [Object-storage interface](../../../api/src/integrations/storage/object-storage.ts)

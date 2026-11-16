@@ -483,7 +483,7 @@ function ReservationDetails({
                 />
                 {detail.payment.rail === "cash" && detail.payment.cash_tendered_minor !== null ? (
                   <DetailValue
-                    label="Cash tendered"
+                    label="Cash received"
                     value={formatMinorMoney(
                       detail.payment.cash_tendered_minor,
                       detail.payment.currency

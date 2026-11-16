@@ -12,7 +12,7 @@ tags: [drezivo, fittings, archive]
 
 This document records the completed frontend review and the handoff boundary into production backend implementation.
 
-The frontend prototype remains the UX reference for `/fittings` and `/fittings/schedule`. Prototype fixture shapes and local-only types are not backend contracts. Canonical production behavior is now frozen in [[Fittings Backend Decision Record]] and aligned with the [PRD](../../product/Drezivo-PRD.md), [TRD](../../architecture/Drezivo-TRD.md), [Data Model](../../architecture/Drezivo-Data-Model.md), and [ERD](../../architecture/Drezivo-ERD.dbml).
+The frontend prototype remains the UX reference for `/fittings` and `/fittings/schedule`. Prototype fixture shapes and local-only types are not backend contracts. Canonical production behavior is now frozen in [[Fittings Backend Decision Record]] and aligned with the [PRD](../01-Product/Drezivo-PRD.md), [TRD](../02-Architecture/Drezivo-TRD.md), [Data Model](../02-Architecture/Drezivo-Data-Model.md), and [ERD](../../architecture/Drezivo-ERD.dbml).
 
 ## Current gate status
 

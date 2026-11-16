@@ -13,7 +13,7 @@ tags: [drezivo, calendar, schedule, reservations, fittings, operations, checklis
 
 **Implementation order:** **Backend first → frontend API client → existing Calendar UI wiring → shared detail sheets → tests/release gate.**
 
-**Canonical specifications:** [PRD](../../product/Drezivo-PRD.md), [TRD](../../architecture/Drezivo-TRD.md), [Data Model](../../architecture/Drezivo-Data-Model.md), [ERD](../../architecture/Drezivo-ERD.dbml), [[Reservations Checklist]], [[Fittings Implementation Checklist]], and [[Availability Checklist]].
+**Canonical specifications:** [PRD](../01-Product/Drezivo-PRD.md), [TRD](../02-Architecture/Drezivo-TRD.md), [Data Model](../02-Architecture/Drezivo-Data-Model.md), [ERD](../../architecture/Drezivo-ERD.dbml), [[Reservations Checklist]], [[Fittings Implementation Checklist]], and [[Availability Checklist]].
 
 ## Goal
 

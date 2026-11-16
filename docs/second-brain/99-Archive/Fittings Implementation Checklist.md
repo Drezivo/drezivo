@@ -13,7 +13,7 @@ tags: [drezivo, v1.1, fittings, frontend, backend, implementation, checklist]
 
 This file is the historical feature-wide implementation record for Fittings. The original frontend prototype and backend phases are retained below as implementation history; current scheduling ownership is defined by the canonical specifications and the Business Hours refactor record.
 
-**Canonical specifications:** [[Fittings Backend Decision Record]], [PRD](../../product/Drezivo-PRD.md), [TRD](../../architecture/Drezivo-TRD.md), [Data Model](../../architecture/Drezivo-Data-Model.md), and [ERD](../../architecture/Drezivo-ERD.dbml).
+**Canonical specifications:** [[Fittings Backend Decision Record]], [PRD](../01-Product/Drezivo-PRD.md), [TRD](../02-Architecture/Drezivo-TRD.md), [Data Model](../02-Architecture/Drezivo-Data-Model.md), and [ERD](../../architecture/Drezivo-ERD.dbml).
 
 **Related operational checklists:** [[Schedule Calendar Checklist]], [[Dashboard Checklist]], [[Availability Checklist]], [[Reservations Checklist]], and [[Core Rental Operations Checklist]].
 

@@ -3,7 +3,7 @@ title: Frontend Tenant Auth and Onboarding Flow
 type: architecture
 status: current
 owner: Drezivo platform team
-source: "[Tenancy checklist](../../../api/TENANCY-ONBOARDING-V1-CHECKLIST.md); [Backend checklist](../../../api/V1-BACKEND-CHECKLIST.md); [[02-Architecture/Tenancy Checklist - What Why How]]; [TRD](../../architecture/Drezivo-TRD.md); [Data Model](../../architecture/Drezivo-Data-Model.md); [ERD](../../architecture/Drezivo-ERD.dbml); [Migration plan](../../architecture/Tenancy-Onboarding-Migration-Plan.md)"
+source: "[Tenancy checklist](../../../api/TENANCY-ONBOARDING-V1-CHECKLIST.md); [Backend checklist](../../../api/V1-BACKEND-CHECKLIST.md); [[02-Architecture/Tenancy Checklist - What Why How]]; [TRD](Drezivo-TRD.md); [Data Model](Drezivo-Data-Model.md); [ERD](../../architecture/Drezivo-ERD.dbml); [Migration plan](Tenancy-Onboarding-Migration-Plan.md)"
 updated: 2026-10-28
 tags:
   - drezivo

@@ -3,8 +3,8 @@ title: Drezivo Architecture
 type: architecture
 status: current
 owner: Drezivo team
-source: "../../architecture/Drezivo-TRD.md, ../../decisions/0009-supabase-managed-postgresql.md, and ../../decisions/0010-cloudflare-r2-object-storage.md"
-updated: 2026-09-30
+source: "Drezivo-TRD.md and ../04-Decisions/ADRs/"
+updated: 2026-11-15
 tags: [drezivo, architecture, trd]
 ---
 
@@ -24,8 +24,8 @@ flowchart LR
 ```
 
 The API is the authority for authorization, tenant scope, money, availability, and state
-transitions. The browser is a client, never a trust boundary. The [TRD](../../architecture/Drezivo-TRD.md)
-and [data model](../../architecture/Drezivo-Data-Model.md) contain the complete technical contract.
+transitions. The browser is a client, never a trust boundary. The [TRD](Drezivo-TRD.md)
+and [data model](Drezivo-Data-Model.md) contain the complete technical contract.
 
 Customer address and optional social-profile handling follows the tenant-scoped, API-owned
 boundary described in [[02-Architecture/Customer Address and Social Profile Fields]].
@@ -39,6 +39,10 @@ administrative connection. See [[Supabase Managed PostgreSQL]].
 The backend follows explicit feature boundaries between routes, controllers, services,
 repositories, DTOs, and schemas. See [[02-Architecture/API Module Boundaries and Layering]] for
 the accepted cleanup policy and infrastructure-module exception.
+
+Public media and optional anonymous storefront caching use the Cloudflare Worker with live API
+visibility checks; see [[02-Architecture/object-storage-image-delivery-evolution]] and the
+[Worker guide](../../../api/edge/media-worker/README.md).
 
 The staff Calendar's Clothing Availability tab is documented in
 [[02-Architecture/Clothing Availability Timeline - Backend]]. It is a bounded asset-lane

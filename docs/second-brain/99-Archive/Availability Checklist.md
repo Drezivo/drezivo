@@ -10,7 +10,7 @@ tags: [drezivo, v1, availability, allocations, calendar, checklist]
 # Availability V1 End-to-End Checklist
 
 **Status:** Planned; current Clothing Availability calendar is prototype/mock-data driven.
-**Canonical specifications:** [PRD](../../product/Drezivo-PRD.md), [TRD](../../architecture/Drezivo-TRD.md), [Data Model](../../architecture/Drezivo-Data-Model.md), and [ERD](../../architecture/Drezivo-ERD.dbml).
+**Canonical specifications:** [PRD](../01-Product/Drezivo-PRD.md), [TRD](../02-Architecture/Drezivo-TRD.md), [Data Model](../02-Architecture/Drezivo-Data-Model.md), and [ERD](../../architecture/Drezivo-ERD.dbml).
 **Dependencies:** [[Clothing Checklist]] and [[Reservations Checklist]].
 
 ## How to use this checklist

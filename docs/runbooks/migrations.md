@@ -6,7 +6,7 @@ schema evolution") directly — read that section if you need the reasoning behi
 just the step.
 
 For the additive account, onboarding, membership, and subscription rollout, also follow the
-[Tenancy and onboarding migration plan](../architecture/Tenancy-Onboarding-Migration-Plan.md).
+[Tenancy and onboarding migration plan](../second-brain/02-Architecture/Tenancy-Onboarding-Migration-Plan.md).
 
 ## The rule that governs everything below
 
@@ -73,7 +73,7 @@ options." Concretely:
   scans without blocking writes for the whole duration), then convert to a true `NOT NULL` once
   validated, over a single blocking `SET NOT NULL` on a large table.
 - Adding the `EXCLUDE USING gist` constraint this system depends on for availability correctness
-  (`docs/decisions/0002-drizzle-and-node-postgres.md`) is exactly the kind of change this budget
+  (`docs/second-brain/04-Decisions/ADRs/0002-drizzle-and-node-postgres.md`) is exactly the kind of change this budget
   applies to — test its lock behavior and duration against realistic data in the isolated Supabase
   staging project (TRD §9) before running it against production.
 - DECISION NEEDED: set an explicit maximum acceptable lock duration (e.g., "no migration step

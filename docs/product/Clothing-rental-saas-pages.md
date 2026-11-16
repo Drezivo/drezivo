@@ -1,4 +1,4 @@
-> Historical reference: where this document conflicts, [current PRD](Drezivo-PRD.md) governs. Original content preserved below.
+> Historical reference: where this document conflicts, [current PRD](../second-brain/01-Product/Drezivo-PRD.md) governs. Original content preserved below.
 
 	# Clothing Rental SaaS — Customer & Business Pages
 

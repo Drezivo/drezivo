@@ -12,6 +12,13 @@ function issuePaths(env: Record<string, string | undefined>): string[] {
 }
 
 describe('worker configuration', () => {
+  it('requires an explicit scheduled-expiry rollout and rejects unknown expiry modes', () => {
+    const defaults = parse({ WORKER_HOLD_EXPIRY_MODE: undefined });
+    expect(defaults.success && defaults.data.WORKER_HOLD_EXPIRY_MODE).toBe('scan');
+    expect(issuePaths({ WORKER_HOLD_EXPIRY_MODE: 'scheduled' })).not.toContain('WORKER_HOLD_EXPIRY_MODE');
+    expect(issuePaths({ WORKER_HOLD_EXPIRY_MODE: 'unknown' })).toContain('WORKER_HOLD_EXPIRY_MODE');
+  });
+
   it('defaults to separate sweep intervals and a bounded idle outbox delay', () => {
     const parsed = parse({
       WORKER_OUTBOX_IDLE_MAX_MS: undefined,

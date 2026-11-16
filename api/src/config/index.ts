@@ -59,10 +59,15 @@ export const envSchema = z
     OBJECT_STORAGE_UPLOADS_ENABLED: strictBooleanEnv('OBJECT_STORAGE_UPLOADS_ENABLED').optional(),
 
     LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
+    SENTRY_DSN: z.string().url().optional(),
+    SENTRY_TRACES_SAMPLE_RATE: z.coerce.number().min(0).max(1).default(0.1),
+    SENTRY_RELEASE: z.string().min(1).max(100).regex(/^[a-zA-Z0-9._-]+$/).optional(),
 
     WORKER_POLL_INTERVAL_MS: z.coerce.number().int().min(250).default(2000),
     WORKER_OUTBOX_IDLE_MAX_MS: z.coerce.number().int().min(250).max(3_600_000).default(60_000),
     WORKER_HOLD_SWEEP_INTERVAL_MS: z.coerce.number().int().min(250).max(3_600_000).default(10_000),
+    // Switch only after 0098 and staging verification; scan remains the rollback path.
+    WORKER_HOLD_EXPIRY_MODE: z.enum(['scan', 'scheduled']).default('scan'),
     WORKER_CLERK_RECONCILE_INTERVAL_MS: z.coerce.number().int().min(250).max(3_600_000).default(60_000),
     WORKER_ORG_CLEANUP_INTERVAL_MS: z.coerce.number().int().min(250).max(3_600_000).default(300_000),
     WORKER_LEASE_SECONDS: z.coerce.number().int().min(5).default(60),
@@ -110,6 +115,8 @@ export const envSchema = z
     // Cloudflare Turnstile secret for storefront guest submissions. Unset (local development)
     // skips the check with one startup warning; when set, missing or rejected tokens are refused.
     TURNSTILE_SECRET_KEY: z.string().min(1).max(200).optional(),
+    // Enable only after the public web app has deployed quote confirmation support.
+    GUEST_QUOTE_CONFIRMATION_REQUIRED: strictBooleanEnv('GUEST_QUOTE_CONFIRMATION_REQUIRED').default(false),
     // Shared with the operator API: signs 5-minute links that open a business's proof of payment
     // (modules/billing/operator-proof-link.ts). Unset = proof links are off.
     OPERATOR_PROOF_LINK_SECRET: z

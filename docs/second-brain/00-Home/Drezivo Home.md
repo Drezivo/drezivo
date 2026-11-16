@@ -4,7 +4,7 @@ type: index
 status: active
 owner: Drezivo team
 source: "ROOT-REPOSITORY-ARCHITECTURE.md and linked second-brain notes"
-updated: 2026-10-28
+updated: 2026-11-15
 tags: [drezivo, index]
 ---
 
@@ -12,34 +12,22 @@ tags: [drezivo, index]
 
 The navigation hub for the Drezivo second brain.
 
-## Canonical maps
+## Start here
 
-- [[01-Product/Drezivo Product Brief]]
-- [[02-Architecture/Drezivo Architecture]]
-- [[02-Architecture/Customer Address and Social Profile Fields]]
-- [[02-Architecture/API Module Boundaries and Layering]]
-- [[02-Architecture/Tenancy Checklist - What Why How]]
-- [[02-Architecture/Tenancy, Onboarding, Clerk, Memberships, and Billing Foundation]]
-- [[02-Architecture/Drezivo System Canvas]]
-- [[03-Repositories/Repository Map]]
-- [[04-Decisions/Decision Register]]
-- [[04-Decisions/Supabase Managed PostgreSQL]]
-- [[05-Operations/Operating Model]]
-- [[05-Operations/API Security Review 2026-09-23]]
-- [[99-Archive/README]]
-- [[06-Research/Research Register]]
-- [[07-Glossary/Glossary]]
-- [[08-Daily/2026-09-16]]
-- [[08-Daily/2026-09-17]]
-- [[08-Daily/2026-09-18]]
-- [[08-Daily/2026-09-23]]
-- [[08-Daily/2026-09-26]]
-- [[08-Daily/2026-09-28]]
-- [[08-Daily/2026-09-29]]
-- [[08-Daily/2026-10-02]]
-- [[08-Daily/2026-10-10]]
-- [[08-Daily/2026-10-11]]
-- [[08-Daily/2026-10-28]]
+- [[01-Product/Drezivo Product Brief]] — concise product and pricing orientation.
+- [[02-Architecture/Drezivo Architecture]] — system boundaries and implementation pointers.
+- [[04-Decisions/Decision Register]] — accepted decisions and supersession history.
+- [[03-Repositories/Repository Map]] and [[05-Operations/Operating Model]] — ownership and operations.
+- [[06-Research/Research Register]], [[07-Glossary/Glossary]], and [[99-Archive/README]] — supporting context.
+
+## Canonical specifications
+
+- [[01-Product/Drezivo-PRD|Product requirements]] and [[01-Product/Drezivo-Market-Research|market research]].
+- [[02-Architecture/Drezivo-TRD|Technical requirements]] and [[02-Architecture/Drezivo-Data-Model|data model]].
+- [[02-Architecture/Drezivo-Data-Model-v2|Data model v2 proposal]] is a proposal, not an applied migration.
+- [ERD sources](../../architecture/README.md) and [runbooks](../../runbooks/README.md) remain outside the vault.
+
+Daily notes in `08-Daily` and archived plans are historical working context, not automatic first reads.
 
 ## Current truth
 
