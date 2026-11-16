@@ -353,7 +353,7 @@ function isImmutableAcceptedReceipt(receipt: LockedReservationReceiptRow): boole
   );
 }
 
-async function requireMutationSummary(
+export async function requireMutationSummary(
   client: Parameters<typeof readReservationMutationSummary>[0],
   context: ReservationPickupContext,
   reservationId: string,
