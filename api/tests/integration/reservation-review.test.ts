@@ -84,6 +84,7 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
     createStaffReservation,
     getReservationDetail,
     pickupReservation,
+    undoPickupReservation,
     rejectReservation,
     returnReservation,
     inspectReturnedReservation,
@@ -2179,6 +2180,136 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
       .set('Idempotency-Key', 'route-cancel-foreign')
       .send({ version: 1 });
     expect(concealed.status).toBe(404);
+  });
+
+  it('undoes an accidental pickup, preserves allocation, and allows a later pickup and return', async () => {
+    const seed = await seedWorkspace('org_undo_pickup', 'user_undo_pickup', 'cash');
+    const pickedUp = await createPickedUpReservation(seed, 'undo-cycle');
+    const context = reviewContext(seed, 'req-undo', 'idem-undo');
+    const corrected = await undoPickupReservation(context, pickedUp.id, { version: pickedUp.version });
+    expect(corrected.status).toBe(200);
+    if (!corrected.body.success) throw new Error('Expected correction to succeed.');
+    expect(corrected.body.data.reservation.status).toBe('confirmed');
+    const state = await pickupState(seed, pickedUp.id);
+    expect(state.asset.custody_kind).toBe('at_branch');
+    expect(state.custodyEvents).toHaveLength(0);
+    expect(state.allocation).toMatchObject({ kind: 'reservation_confirmed', is_blocking: true, released_at: null });
+    const audit = await withTenantTransaction(seed.tenantId, seed.principalId, (client) =>
+      client.query<{ n: string }>(`SELECT count(*)::text AS n FROM audit_event WHERE tenant_id = $1 AND entity_id = $2 AND action = 'reservation.pickup_undone'`, [seed.tenantId, pickedUp.id]));
+    expect(audit.rows[0]?.n).toBe('1');
+    expect(await undoPickupReservation(context, pickedUp.id, { version: pickedUp.version })).toEqual(corrected);
+    const nextPickup = await pickupReservation(reviewContext(seed, 'req-new-pickup', 'idem-new-pickup'), pickedUp.id, { version: corrected.body.data.reservation.version });
+    expect(nextPickup.status).toBe(200);
+    if (!nextPickup.body.success) throw new Error('Expected new pickup to succeed.');
+    const returned = await returnReservation(reviewContext(seed, 'req-new-return', 'idem-new-return'), pickedUp.id, { version: nextPickup.body.data.reservation.version });
+    expect(returned.status).toBe(200);
+    if (!returned.body.success) throw new Error('Expected return to succeed.');
+    const afterReturn = await undoPickupReservation(reviewContext(seed, 'req-after-return', 'idem-after-return'), pickedUp.id, { version: returned.body.data.reservation.version });
+    expect(afterReturn.status).toBe(409);
+  });
+
+  it('rejects inconsistent garment custody without deleting the pickup or changing the reservation', async () => {
+    const seed = await seedWorkspace('org_undo_conflict', 'user_undo_conflict', 'cash');
+    const pickedUp = await createPickedUpReservation(seed, 'undo-conflict');
+    await withTenantTransaction(seed.tenantId, seed.principalId, (client) =>
+      client.query(`UPDATE physical_asset SET custody_kind = 'at_branch' WHERE tenant_id = $1 AND id = $2`, [seed.tenantId, seed.assetId]));
+    const result = await undoPickupReservation(reviewContext(seed, 'req-undo-conflict', 'idem-undo-conflict'), pickedUp.id, { version: pickedUp.version });
+    expect(result.status).toBe(409);
+    const state = await pickupState(seed, pickedUp.id);
+    expect(state.reservation_status).toBe('picked_up');
+    expect(state.custodyEvents).toHaveLength(1);
+  });
+
+  it('denies general custody deletion and rejects a stale undo version', async () => {
+    const seed = await seedWorkspace('org_undo_stale', 'user_undo_stale', 'cash');
+    const pickedUp = await createPickedUpReservation(seed, 'undo-stale');
+    await expect(withTenantTransaction(seed.tenantId, seed.principalId, (client) =>
+      client.query('DELETE FROM custody_event WHERE tenant_id = $1', [seed.tenantId]))).rejects.toMatchObject({ code: '42501' });
+    const { Pool } = await import('pg');
+    const admin = new Pool({ connectionString: adminUrl });
+    const worker = await admin.connect();
+    try {
+      await worker.query('BEGIN');
+      await worker.query('SET LOCAL ROLE drezivo_worker');
+      await worker.query(`SELECT set_config('app.tenant_id', $1, true)`, [seed.tenantId]);
+      await expect(worker.query('DELETE FROM custody_event WHERE tenant_id = $1', [seed.tenantId])).rejects.toMatchObject({ code: '42501' });
+      await worker.query('ROLLBACK');
+      await worker.query('BEGIN');
+      await worker.query('SET LOCAL ROLE drezivo_worker');
+      await expect(worker.query('SELECT reservation_private.undo_pickup($1, $2, $3, $4)', [pickedUp.id, seed.branchId, pickedUp.version, 'req-worker'])).rejects.toMatchObject({ code: '42501' });
+      await worker.query('ROLLBACK');
+    } finally {
+      worker.release();
+      await admin.end();
+    }
+    const result = await undoPickupReservation(reviewContext(seed, 'req-undo-stale', 'idem-undo-stale'), pickedUp.id, { version: pickedUp.version - 1 });
+    expect(result.status).toBe(409);
+    expect((await pickupState(seed, pickedUp.id)).custodyEvents).toHaveLength(1);
+  });
+
+  it('replays concurrent identical undo requests without a second correction', async () => {
+    const seed = await seedWorkspace('org_undo_race', 'user_undo_race', 'cash');
+    const pickedUp = await createPickedUpReservation(seed, 'undo-race');
+    const [first, second] = await Promise.all([
+      undoPickupReservation(reviewContext(seed, 'req-undo-race-a', 'idem-undo-race'), pickedUp.id, { version: pickedUp.version }),
+      undoPickupReservation(reviewContext(seed, 'req-undo-race-b', 'idem-undo-race'), pickedUp.id, { version: pickedUp.version }),
+    ]);
+    expect(first.status).toBe(200);
+    expect(second.status).toBe(200);
+    expect((await pickupState(seed, pickedUp.id)).custodyEvents).toHaveLength(0);
+  });
+
+  it('denies another tenant access to the database correction and reservation', async () => {
+    const owner = await seedWorkspace('org_undo_owner', 'user_undo_owner', 'cash');
+    const other = await seedWorkspace('org_undo_other', 'user_undo_other', 'cash');
+    const pickedUp = await createPickedUpReservation(owner, 'undo-isolation');
+    await expect(withTenantTransaction(other.tenantId, other.principalId, (client) =>
+      client.query('SELECT reservation_private.undo_pickup($1, $2, $3, $4)', [pickedUp.id, owner.branchId, pickedUp.version, 'req-isolation']))).rejects.toMatchObject({ code: '42501' });
+    const result = await undoPickupReservation(reviewContext(other, 'req-undo-foreign', 'idem-undo-foreign'), pickedUp.id, { version: pickedUp.version });
+    expect(result.status).toBe(404);
+    expect((await pickupState(owner, pickedUp.id)).custodyEvents).toHaveLength(1);
+  });
+
+  it('requires pickup permissions to undo a pickup', async () => {
+    const seed = await seedWorkspace('org_undo_permission', 'user_undo_permission', 'cash');
+    const pickedUp = await createPickedUpReservation(seed, 'undo-permission');
+    await expect(undoPickupReservation({ ...reviewContext(seed, 'req-undo-denied', 'idem-undo-denied'), permissionCodes: ['reservations.manage'] }, pickedUp.id, { version: pickedUp.version })).rejects.toMatchObject({ status: 403 });
+    expect((await pickupState(seed, pickedUp.id)).custodyEvents).toHaveLength(1);
+  });
+
+  it('denies correction from another branch within the same tenant', async () => {
+    const seed = await seedWorkspace('org_undo_branch', 'user_undo_branch', 'cash');
+    const pickedUp = await createPickedUpReservation(seed, 'undo-branch');
+    const otherBranch = await withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
+      const result = await client.query<{ id: string }>(`INSERT INTO branch (tenant_id, name, code, is_default, timezone, status) VALUES ($1, 'Other branch', 'OTHER', false, 'Asia/Manila', 'active') RETURNING id`, [seed.tenantId]);
+      const id = result.rows[0]?.id;
+      if (!id) throw new Error('Expected another branch to be created.');
+      return id;
+    });
+    await expect(withTenantTransaction(seed.tenantId, seed.principalId, (client) =>
+      client.query('SELECT reservation_private.undo_pickup($1, $2, $3, $4)', [pickedUp.id, otherBranch, pickedUp.version, 'req-other-branch']))).rejects.toMatchObject({ code: '42501' });
+    expect((await pickupState(seed, pickedUp.id)).custodyEvents).toHaveLength(1);
+  });
+
+  it('allows only one of a concurrent return and undo to change custody', async () => {
+    const seed = await seedWorkspace('org_undo_return_race', 'user_undo_return_race', 'cash');
+    const pickedUp = await createPickedUpReservation(seed, 'undo-return-race');
+    const outcomes = await Promise.all([
+      undoPickupReservation(reviewContext(seed, 'req-undo-race', 'idem-undo-return'), pickedUp.id, { version: pickedUp.version }),
+      returnReservation(reviewContext(seed, 'req-return-race', 'idem-return-undo'), pickedUp.id, { version: pickedUp.version }),
+    ]);
+    expect(outcomes.map((outcome) => outcome.status).sort()).toEqual([200, 409]);
+  });
+
+  it('requires authentication, an idempotency key and a strict body for the undo route', async () => {
+    const seed = await seedWorkspace('org_undo_route', 'user_undo_route', 'cash');
+    const pickedUp = await createPickedUpReservation(seed, 'undo-route');
+    clerk.getAuth.mockReturnValue({ userId: null, orgId: null });
+    expect((await request(createApp()).post(`/api/v1/reservations/${pickedUp.id}/undo-pickup`).set('Idempotency-Key', 'undo-unauth').send({ version: pickedUp.version })).status).toBe(401);
+    useClerk(seed);
+    expect((await request(createApp()).post(`/api/v1/reservations/${pickedUp.id}/undo-pickup`).send({ version: pickedUp.version })).status).toBe(422);
+    expect((await request(createApp()).post(`/api/v1/reservations/${pickedUp.id}/undo-pickup`).set('Idempotency-Key', 'undo-extra').send({ version: pickedUp.version, condition_note: 'unexpected' })).status).toBe(422);
+    expect((await request(createApp()).post(`/api/v1/reservations/${pickedUp.id}/undo-pickup`).set('Idempotency-Key', 'undo-success').send({ version: pickedUp.version })).status).toBe(200);
   });
 
   it('picks up a confirmed reservation once, moves physical custody to the customer, and preserves the confirmed allocation', async () => {

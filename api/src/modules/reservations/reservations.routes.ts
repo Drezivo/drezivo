@@ -23,6 +23,7 @@ import {
   getStaffReservationIntakeOptionsController,
   listReservationsController,
   pickupReservationController,
+  undoPickupReservationController,
   rejectReservationController,
   verifyReservationPaymentController,
   returnReservationController,
@@ -43,6 +44,7 @@ import {
   validateReservationPaymentVerify,
   validateReservationListQuery,
   validateReservationPickup,
+  validateReservationUndoPickup,
   validateReservationReject,
   validateReservationReturn,
   validateReservationInspection,
@@ -185,6 +187,19 @@ reservationsRouter.post(
   validateReservationPickup,
   requireReservationIdempotencyKey,
   pickupReservationController,
+);
+
+reservationsRouter.post(
+  '/reservations/:reservationId/undo-pickup',
+  requireStaffAuth,
+  requireTenantContext,
+  writeRateLimit,
+  requireTenantAction('settlement'),
+  requireReservationCustodyPermission,
+  validateReservationId,
+  validateReservationUndoPickup,
+  requireReservationIdempotencyKey,
+  undoPickupReservationController,
 );
 
 reservationsRouter.post(

@@ -49,6 +49,8 @@ import {
   reservationListResponse,
   reservationPickupRequest,
   reservationPickupResponse,
+  reservationUndoPickupRequest,
+  reservationUndoPickupResponse,
   reservationRejectRequest,
   reservationRejectResponse,
   reservationReturnRequest,
@@ -210,6 +212,7 @@ import {
   type ReservationListResponse,
   type ReservationPickupRequest,
   type ReservationPickupResponse,
+  type ReservationUndoPickupResponse,
   type ReservationRejectRequest,
   type ReservationRejectResponse,
   type ReservationReturnRequest,
@@ -1000,6 +1003,15 @@ export function createDrezivoApiClient(getToken: TokenGetter) {
         method: "POST",
         path: `/api/v1/reservations/${encodeURIComponent(reservationId)}/pickup`,
         responseSchema: apiEnvelope(reservationPickupResponse),
+      }),
+    undoPickupReservation: (reservationId: string, version: number, idempotencyKey: string) =>
+      request<ReservationUndoPickupResponse>({
+        getToken,
+        body: reservationUndoPickupRequest.parse({ version }),
+        idempotencyKey,
+        method: "POST",
+        path: `/api/v1/reservations/${encodeURIComponent(reservationId)}/undo-pickup`,
+        responseSchema: apiEnvelope(reservationUndoPickupResponse),
       }),
     returnReservation: (
       reservationId: string,
