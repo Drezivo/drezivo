@@ -5,14 +5,15 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 /**
- * Cursor pagination footer shared by workspace lists. The API pages by cursor, so there is no
- * total count: the footer shows the page number and how many rows this page holds.
+ * Cursor pagination footer shared by workspace lists. Older APIs may omit the matching total.
  */
 export function ListPagination({
   label,
   noun,
   pageIndex,
   shown,
+  total,
+  pageSize,
   hasMore,
   onNext,
   onPrevious,
@@ -22,6 +23,8 @@ export function ListPagination({
   noun: { one: string; other: string };
   pageIndex: number;
   shown: number;
+  total?: number | undefined;
+  pageSize: number;
   hasMore: boolean;
   onNext: () => void;
   onPrevious: () => void;
@@ -34,7 +37,8 @@ export function ListPagination({
       className="flex flex-wrap items-center justify-between gap-2 border-t border-dashboard-border px-3 py-3 text-sm text-dashboard-muted sm:px-4"
     >
       <span aria-live="polite">
-        Page {currentPage} · {shown} {shown === 1 ? noun.one : noun.other}
+        Showing {shown ? pageIndex * pageSize + 1 : 0}–{shown ? pageIndex * pageSize + shown : 0}
+        {total === undefined ? "" : ` of ${total}`} {(total ?? shown) === 1 ? noun.one : noun.other}
       </span>
       <div className="flex items-center gap-1">
         <Button type="button" variant="ghost" size="sm" disabled={pageIndex === 0} onClick={onPrevious}>

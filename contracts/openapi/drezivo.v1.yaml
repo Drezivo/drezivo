@@ -532,6 +532,9 @@ components:
               minLength: 1
             has_more:
               type: boolean
+            total:
+              type: integer
+              minimum: 0
           required:
             - next_cursor
             - has_more
@@ -677,6 +680,9 @@ components:
               minLength: 1
             has_more:
               type: boolean
+            total:
+              type: integer
+              minimum: 0
           required:
             - next_cursor
             - has_more
@@ -991,6 +997,9 @@ components:
               minLength: 1
             has_more:
               type: boolean
+            total:
+              type: integer
+              minimum: 0
           required:
             - next_cursor
             - has_more
@@ -1668,6 +1677,9 @@ components:
               minLength: 1
             has_more:
               type: boolean
+            total:
+              type: integer
+              minimum: 0
           required:
             - next_cursor
             - has_more
@@ -3289,6 +3301,9 @@ components:
               minLength: 1
             has_more:
               type: boolean
+            total:
+              type: integer
+              minimum: 0
           required:
             - next_cursor
             - has_more
@@ -3503,6 +3518,9 @@ components:
               minLength: 1
             has_more:
               type: boolean
+            total:
+              type: integer
+              minimum: 0
           required:
             - next_cursor
             - has_more
@@ -3568,6 +3586,9 @@ components:
               minLength: 1
             has_more:
               type: boolean
+            total:
+              type: integer
+              minimum: 0
           required:
             - next_cursor
             - has_more
@@ -5189,6 +5210,9 @@ paths:
                             minLength: 1
                           has_more:
                             type: boolean
+                          total:
+                            type: integer
+                            minimum: 0
                         required:
                           - next_cursor
                           - has_more
@@ -6475,6 +6499,9 @@ paths:
                             minLength: 1
                           has_more:
                             type: boolean
+                          total:
+                            type: integer
+                            minimum: 0
                         required:
                           - next_cursor
                           - has_more
@@ -15733,6 +15760,9 @@ paths:
                             minLength: 1
                           has_more:
                             type: boolean
+                          total:
+                            type: integer
+                            minimum: 0
                         required:
                           - next_cursor
                           - has_more
@@ -16714,6 +16744,9 @@ paths:
                             minLength: 1
                           has_more:
                             type: boolean
+                          total:
+                            type: integer
+                            minimum: 0
                         required:
                           - next_cursor
                           - has_more
@@ -17206,6 +17239,9 @@ paths:
                             minLength: 1
                           has_more:
                             type: boolean
+                          total:
+                            type: integer
+                            minimum: 0
                         required:
                           - next_cursor
                           - has_more
@@ -17981,6 +18017,9 @@ paths:
                             minLength: 1
                           has_more:
                             type: boolean
+                          total:
+                            type: integer
+                            minimum: 0
                         required:
                           - next_cursor
                           - has_more
@@ -19383,6 +19422,9 @@ paths:
                             minLength: 1
                           has_more:
                             type: boolean
+                          total:
+                            type: integer
+                            minimum: 0
                         required:
                           - next_cursor
                           - has_more
@@ -27414,6 +27456,9 @@ paths:
                             minLength: 1
                           has_more:
                             type: boolean
+                          total:
+                            type: integer
+                            minimum: 0
                         required:
                           - next_cursor
                           - has_more

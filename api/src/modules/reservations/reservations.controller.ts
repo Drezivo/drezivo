@@ -18,6 +18,7 @@ import {
   getStaffReservationAvailabilityCheck,
   getStaffReservationIntakeOptions,
   pickupReservation,
+  undoPickupReservation,
   rejectReservation,
   verifyReservationPayment,
   returnReservation,
@@ -142,6 +143,17 @@ export async function pickupReservationController(req: Request, res: Response): 
     { ...requireContext(req), requestId: req.requestId, idempotencyKey },
     reservationId,
     request,
+  );
+  res.status(result.status).json(result.body);
+}
+
+export async function undoPickupReservationController(req: Request, res: Response): Promise<void> {
+  if (!req.reservationId || !req.reservationUndoPickupRequest || !req.reservationIdempotencyKey) {
+    throw new ValidationError('A valid reservation, version and Idempotency-Key are required.');
+  }
+  const result = await undoPickupReservation(
+    { ...requireContext(req), requestId: req.requestId, idempotencyKey: req.reservationIdempotencyKey },
+    req.reservationId, req.reservationUndoPickupRequest,
   );
   res.status(result.status).json(result.body);
 }

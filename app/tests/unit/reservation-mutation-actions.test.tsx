@@ -21,6 +21,7 @@ const api = vi.hoisted(() => ({
   verifyReservationPayment: vi.fn(),
   inspectReservationReturn: vi.fn(),
   pickupReservation: vi.fn(),
+  undoPickupReservation: vi.fn(),
   rejectReservation: vi.fn(),
   returnReservation: vi.fn(),
 }));
@@ -194,6 +195,23 @@ describe("ReservationMutationActions", () => {
       },
       requestId: "req-customer",
     }));
+  });
+
+  it("asks staff to confirm an erroneous pickup and refreshes after correction", async () => {
+    api.undoPickupReservation.mockResolvedValueOnce(mutationResult("confirmed", 5));
+    const pickedUp = reservationDetail.parse({ ...confirmedDetail, status: "picked_up", version: 4 });
+    const callbacks = renderActions(pickedUp);
+    fireEvent.click(screen.getByRole("button", { name: "Undo pickup" }));
+    expect(screen.getByText(/garment never left the shop/i)).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Confirm undo pickup" }));
+    await waitFor(() => expect(callbacks.onMutationSuccess).toHaveBeenCalledTimes(1));
+    expect(api.undoPickupReservation).toHaveBeenCalledWith(pickedUp.id, 4, expect.any(String));
+  });
+
+  it("does not offer pickup correction without custody permission", () => {
+    const pickedUp = reservationDetail.parse({ ...confirmedDetail, status: "picked_up", version: 4 });
+    renderActions(pickedUp, ["reservations.manage"]);
+    expect(screen.queryByRole("button", { name: "Undo pickup" })).not.toBeInTheDocument();
   });
 
   it("blocks a rapid Pick Up double-submit and sends one versioned intent", async () => {

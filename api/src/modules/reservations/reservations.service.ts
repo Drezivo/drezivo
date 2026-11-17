@@ -18,6 +18,7 @@ import {
   type ReservationPaymentProjection,
   type ReservationPickupRequest,
   type ReservationPickupResponse,
+  type ReservationUndoPickupRequest,
   type ReservationReturnRequest,
   type ReservationReturnResponse,
   type ReservationInspectionRequest,
@@ -81,6 +82,7 @@ import {
   inspectReturnedReservationByStaff,
 } from './reservations.completion-gate.service.js';
 import { pickupReservationByStaff } from './reservations.pickup.service.js';
+import { undoPickupByStaff } from './reservations.undo-pickup.service.js';
 import { returnReservationByStaff } from './reservations.return.service.js';
 import {
   attachReservationPaymentReceipt,
@@ -378,6 +380,16 @@ export async function pickupReservation(
   );
 }
 
+export async function undoPickupReservation(
+  input: ReservationReadContext & { requestId: string; idempotencyKey: string },
+  reservationId: string,
+  request: ReservationUndoPickupRequest,
+): Promise<ReservationReviewCommandResponse<ReservationPickupResponse>> {
+  assertReservationCustodyContext(input);
+  return undoPickupByStaff({ tenantId: input.tenantId, branchId: input.branchId, membershipId: input.membershipId,
+    principalId: input.principalId, requestId: input.requestId, idempotencyKey: input.idempotencyKey }, reservationId, request);
+}
+
 export async function returnReservation(
   input: ReservationReadContext & { requestId: string; idempotencyKey: string },
   reservationId: string,
@@ -524,6 +536,7 @@ export async function getReservationList(
     page_meta: {
       next_cursor: page.nextCursor,
       has_more: page.hasMore,
+      total: page.total,
     },
   });
 }

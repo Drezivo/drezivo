@@ -27,6 +27,7 @@ export function MembersSettingsPage() {
   const requestUpgrade = useRequestPlanUpgrade();
   const [roster, setRoster] = useState<MemberRosterResponse | null>(null);
   const [invitations, setInvitations] = useState<Invitation[]>([]);
+  const [invitationTotal, setInvitationTotal] = useState<number | undefined>();
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -65,6 +66,7 @@ export function MembersSettingsPage() {
         if (!active) return;
         setRoster(rosterResult.data);
         setInvitations(invitationResult.data.items);
+        setInvitationTotal(invitationResult.data.page_meta.total);
         setNextCursor(invitationResult.data.page_meta.next_cursor);
         setHasMore(invitationResult.data.page_meta.has_more);
       })
@@ -87,6 +89,7 @@ export function MembersSettingsPage() {
     try {
       const result = await api.getMembershipInvitations({ limit: PAGE_SIZE, cursor: nextCursor });
       setInvitations((current) => [...current, ...result.data.items]);
+      setInvitationTotal(result.data.page_meta.total);
       setNextCursor(result.data.page_meta.next_cursor);
       setHasMore(result.data.page_meta.has_more);
     } catch (error) {
@@ -342,6 +345,11 @@ export function MembersSettingsPage() {
             ))}
           </ul>
         )}
+        {invitations.length > 0 ? (
+          <p className="text-sm text-dashboard-muted" aria-live="polite">
+            Showing 1–{invitations.length}{invitationTotal === undefined ? "" : ` of ${invitationTotal}`} {invitationTotal === 1 ? "invitation" : "invitations"}
+          </p>
+        ) : null}
         {hasMore ? (
           <Button
             className="mt-4"

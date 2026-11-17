@@ -211,6 +211,37 @@ describe('multi-garment reservations', async () => {
     expect(await reservationCount(seed)).toBe(1);
   });
 
+  it('undoes a multi-garment pickup and permits the real pickup afterward', async () => {
+    const seed = await seedWorkspace('org_multi_undo', 'user_multi_undo');
+    const booking = await createBooking(seed, 'undo', [seed.celestineId, seed.amaraId]);
+    const confirmed = await confirm(seed, booking);
+    const picked = await service.pickupReservation(context(seed, 'undo-pick'), booking.id, { version: confirmed });
+    if (!picked.body.success) throw new Error('Expected pickup to succeed.');
+    const undone = await service.undoPickupReservation(context(seed, 'undo-action'), booking.id, { version: picked.body.data.reservation.version });
+    expect(undone.status).toBe(200);
+    if (!undone.body.success) throw new Error('Expected correction to succeed.');
+    expect((await lineState(seed, booking.id)).map((line) => line.custody_kind)).toEqual(['at_branch', 'at_branch']);
+    expect(await custodyEvents(seed, booking.id, 'pickup')).toBe(0);
+    const again = await service.pickupReservation(context(seed, 'undo-pick-again'), booking.id, { version: undone.body.data.reservation.version });
+    expect(again.status).toBe(200);
+    expect(await custodyEvents(seed, booking.id, 'pickup')).toBe(2);
+  });
+
+  it('does not partially undo a multi-garment pickup when one garment has inconsistent custody', async () => {
+    const seed = await seedWorkspace('org_multi_undo_conflict', 'user_multi_undo_conflict');
+    const booking = await createBooking(seed, 'undo-conflict', [seed.celestineId, seed.amaraId]);
+    const confirmed = await confirm(seed, booking);
+    const picked = await service.pickupReservation(context(seed, 'undo-conflict-pick'), booking.id, { version: confirmed });
+    if (!picked.body.success) throw new Error('Expected pickup to succeed.');
+    const lines = await lineState(seed, booking.id);
+    await withTenantTransaction(seed.tenantId, seed.principalId, (client) =>
+      client.query(`UPDATE physical_asset SET custody_kind = 'at_branch' WHERE tenant_id = $1 AND id = $2`, [seed.tenantId, lines[0]?.asset_id]));
+    const undone = await service.undoPickupReservation(context(seed, 'undo-conflict-action'), booking.id, { version: picked.body.data.reservation.version });
+    expect(undone.status).toBe(409);
+    expect((await lineState(seed, booking.id)).map((line) => line.custody_kind)).toEqual(['at_branch', 'with_customer']);
+    expect(await custodyEvents(seed, booking.id, 'pickup')).toBe(2);
+  });
+
   it('confirms, hands over, receives back, inspects, and completes every garment together', async () => {
     const seed = await seedWorkspace('org_multi_life', 'user_multi_life');
     const booking = await createBooking(seed, 'life', [seed.celestineId, seed.amaraId]);

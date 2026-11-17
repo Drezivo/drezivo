@@ -26,11 +26,17 @@ const body = Jost({
 const CLERK_ORIGIN = clerkFrontendApiOrigin(process.env["NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY"]);
 
 export const metadata: Metadata = {
+  metadataBase: new URL(
+    process.env["NEXT_PUBLIC_PARTNERS_URL"] ||
+      (process.env.NODE_ENV === "production" ? "https://partners.drezivo.shop" : "http://localhost:3000"),
+  ),
   title: {
     default: "Drezivo",
     template: "%s · Drezivo",
   },
   description: "Drezivo staff authentication.",
+  openGraph: { images: ["/marketing/drezivo_logo.png"] },
+  twitter: { card: "summary_large_image", images: ["/marketing/drezivo_logo.png"] },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

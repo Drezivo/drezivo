@@ -10,6 +10,7 @@ import {
   reservationPaymentVerifyRequest,
   reservationListQuery,
   reservationPickupRequest,
+  reservationUndoPickupRequest,
   reservationRejectRequest,
   reservationReturnRequest,
   reservationInspectionRequest,
@@ -27,6 +28,7 @@ import {
   type ReservationPaymentVerifyRequest,
   type ReservationListQuery,
   type ReservationPickupRequest,
+  type ReservationUndoPickupRequest,
   type ReservationRejectRequest,
   type ReservationReturnRequest,
   type ReservationInspectionRequest,
@@ -53,6 +55,7 @@ declare module 'express-serve-static-core' {
     reservationCancelRequest?: ReservationCancelRequest;
     reservationEditRequest?: ReservationEditRequest;
     reservationPickupRequest?: ReservationPickupRequest;
+    reservationUndoPickupRequest?: ReservationUndoPickupRequest;
     reservationReturnRequest?: ReservationReturnRequest;
     reservationInspectionRequest?: ReservationInspectionRequest;
     reservationRentalCompleteRequest?: ReservationCompleteRequest;
@@ -206,6 +209,16 @@ export const validateReservationPickup: RequestHandler = (req, _res, next): void
   }
   req.body = parsed.data;
   req.reservationPickupRequest = parsed.data;
+  next();
+};
+
+export const validateReservationUndoPickup: RequestHandler = (req, _res, next): void => {
+  const parsed = reservationUndoPickupRequest.safeParse(req.body);
+  if (!parsed.success) {
+    next(new ValidationError('Undo pickup request is invalid.'));
+    return;
+  }
+  req.reservationUndoPickupRequest = parsed.data;
   next();
 };
 

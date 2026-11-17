@@ -23,23 +23,13 @@ import {
 import { PageHero } from "@/components/shell/page-hero";
 import { addCalendarDays, calendarDateKeyAt } from "@/components/calendar/calendar-schedule-data";
 import { createDrezivoApiClient, DrezivoApiError } from "@/lib/drezivo-api";
-import { cn } from "@/lib/utils";
 
 import {
   DASHBOARD_METRIC_PRESENTATION,
   type DashboardMetricKey,
-  type DashboardTone,
   type ScheduleEventType,
 } from "./dashboard-data";
 import { DashboardLoadingState } from "./dashboard-loading-state";
-
-const metricToneClasses: Record<DashboardTone, string> = {
-  purple: "dashboard-tone-purple",
-  mint: "dashboard-tone-mint",
-  blue: "dashboard-tone-blue",
-  orange: "dashboard-tone-orange",
-  lavender: "dashboard-tone-lavender",
-};
 
 const eventToneClasses: Record<ScheduleEventType, string> = {
   Fitting: "dashboard-event-fitting",
@@ -240,7 +230,6 @@ export function DashboardOverview() {
         >
           {metricEntries.map(({ key, value }) => {
             const metric = DASHBOARD_METRIC_PRESENTATION[key];
-            const Icon = metric.icon;
             return (
               <Link
                 key={key}
@@ -253,15 +242,7 @@ export function DashboardOverview() {
                   className="min-h-36 justify-between py-4 transition-colors group-hover:border-dashboard-accent/50 group-focus-visible:border-dashboard-accent max-xl:h-full sm:min-h-[166px] sm:py-5"
                 >
                   <CardContent className="flex h-full flex-col justify-between px-4 sm:px-5 max-xl:h-auto max-xl:justify-start max-xl:gap-4">
-                    <div className="flex items-center justify-between">
-                      <div
-                        className={cn(
-                          "flex h-10 w-10 items-center justify-center rounded-xl",
-                          metricToneClasses[metric.tone]
-                        )}
-                      >
-                        <Icon className="h-5 w-5" strokeWidth={1.8} aria-hidden="true" />
-                      </div>
+                    <div className="flex justify-end">
                       <ChevronRight
                         className="h-5 w-5 text-dashboard-navy transition-transform group-hover:translate-x-0.5"
                         aria-hidden="true"

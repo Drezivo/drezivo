@@ -12,7 +12,8 @@ import {
   Truck,
   UserRound,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
+import Link from "next/link";
 
 import {
   normalizeVariantFitRange,
@@ -26,7 +27,6 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
 import type { DrezivoApiError } from "@/lib/drezivo-api";
-import { displaySizeLabel } from "@/lib/catalogue-display";
 import { isPastBooking } from "@/lib/past-booking";
 import { mediaImageSrcSet } from "@/lib/media-image-srcset";
 import { cn } from "@/lib/utils";
@@ -151,6 +151,9 @@ function ReservationDetails({
   const effectiveTimeZone = detail.timezone_snapshot || timeZone;
   const [failedImageLines, setFailedImageLines] = useState<Set<string>>(() => new Set());
   const [editing, setEditing] = useState(false);
+  const [activeTab, setActiveTab] = useState<ReservationDetailTab>("price");
+  const tabGroupId = useId();
+  const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const [paymentReceiptViewerOpen, setPaymentReceiptViewerOpen] = useState(false);
   const canViewPaymentReceipts =
     detail.payment !== null &&
@@ -166,6 +169,7 @@ function ReservationDetails({
   useEffect(() => {
     setFailedImageLines(new Set());
     setEditing(false);
+    setActiveTab("price");
     setPaymentReceiptViewerOpen(false);
   }, [detail.id]);
 
@@ -200,7 +204,10 @@ function ReservationDetails({
             </Badge>
           ) : null}
           {isPastBooking(detail) ? (
-            <Badge variant="outline" className="whitespace-nowrap px-2 py-1 text-xs text-dashboard-muted">
+            <Badge
+              variant="outline"
+              className="whitespace-nowrap px-2 py-1 text-xs text-dashboard-muted"
+            >
               Past booking
             </Badge>
           ) : null}
@@ -261,10 +268,6 @@ function ReservationDetails({
               <DetailValue label="Phone" value={customer.phone ?? "Not provided"} />
               <DetailValue label="Email" value={customer.email ?? "Not provided"} />
               <DetailValue label="Address" value={customer.address ?? "Not recorded"} />
-              <DetailValue
-                label="Customer record"
-                value={detail.customer.customer_id ? "Linked customer" : "Snapshot only"}
-              />
             </dl>
           ) : (
             <div className="rounded-lg border border-dashboard-border bg-dashboard-active/40 p-3">
@@ -304,29 +307,17 @@ function ReservationDetails({
                   </div>
                   <div className="min-w-0">
                     <p className="font-semibold text-dashboard-navy">{line.name_snapshot}</p>
-                    <p className="mt-1 text-xs text-dashboard-muted">Line {line.line_number}</p>
+                    {line.product_id ? (
+                      <Link
+                        href={`/inventory/${line.product_id}`}
+                        aria-label={`View clothing details for ${line.name_snapshot}`}
+                        className="mt-1 inline-flex text-sm font-medium text-dashboard-accent underline underline-offset-2"
+                      >
+                        View clothing details
+                      </Link>
+                    ) : null}
                   </div>
                   <div className="col-span-2 min-w-0 sm:col-span-1 sm:col-start-2">
-                    <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
-                      <DetailValue
-                        label="Variant"
-                        value={`${displaySizeLabel(line.variant.size_label)}${line.variant.color_label ? ` · ${line.variant.color_label}` : ""}`}
-                      />
-                      <DetailValue
-                        label="Rental"
-                        value={formatMinorMoney(
-                          line.pricing_snapshot.rental_minor,
-                          line.pricing_snapshot.currency
-                        )}
-                      />
-                      <DetailValue
-                        label="Deposit"
-                        value={formatMinorMoney(
-                          line.pricing_snapshot.deposit_minor,
-                          line.pricing_snapshot.currency
-                        )}
-                      />
-                    </div>
                     {line.fit_range_snapshot ||
                     Object.keys(line.measurements_snapshot).length > 0 ? (
                       <div className="mt-3">
@@ -385,202 +376,267 @@ function ReservationDetails({
           <DeliveryCard detail={detail} />
         ) : null}
 
-        <DetailCard title="Price and payment" icon={CreditCard}>
-          <dl className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-3">
-            <DetailValue
-              label="Rental total"
-              value={formatMinorMoney(
-                detail.price_snapshot.rental_total_minor,
-                detail.price_snapshot.currency
+        <div
+          role="tablist"
+          aria-label="Reservation details"
+          className="flex gap-1 overflow-x-auto border-b border-dashboard-border"
+          onKeyDown={(event) => {
+            const current = RESERVATION_DETAIL_TABS.findIndex((tab) => tab.id === activeTab);
+            let next = current;
+            if (event.key === "ArrowRight") next = (current + 1) % RESERVATION_DETAIL_TABS.length;
+            else if (event.key === "ArrowLeft")
+              next =
+                (current - 1 + RESERVATION_DETAIL_TABS.length) % RESERVATION_DETAIL_TABS.length;
+            else if (event.key === "Home") next = 0;
+            else if (event.key === "End") next = RESERVATION_DETAIL_TABS.length - 1;
+            else return;
+            event.preventDefault();
+            const tab = RESERVATION_DETAIL_TABS[next];
+            if (tab) {
+              setActiveTab(tab.id);
+              tabRefs.current[next]?.focus();
+            }
+          }}
+        >
+          {RESERVATION_DETAIL_TABS.map((tab, index) => (
+            <button
+              key={tab.id}
+              ref={(element) => {
+                tabRefs.current[index] = element;
+              }}
+              type="button"
+              role="tab"
+              id={`${tabGroupId}-tab-${tab.id}`}
+              aria-controls={`${tabGroupId}-panel`}
+              aria-selected={activeTab === tab.id}
+              tabIndex={activeTab === tab.id ? 0 : -1}
+              onClick={() => setActiveTab(tab.id)}
+              className={cn(
+                "shrink-0 border-b-2 px-3 py-3 text-sm font-medium",
+                activeTab === tab.id
+                  ? "border-dashboard-accent bg-dashboard-active text-dashboard-navy"
+                  : "border-transparent text-dashboard-muted hover:text-dashboard-navy"
               )}
-            />
-            <DetailValue
-              label="Security deposit"
-              value={formatMinorMoney(
-                detail.price_snapshot.security_required_minor,
-                detail.price_snapshot.currency
-              )}
-            />
-            <div className="col-span-2 sm:col-span-1">
-              <DetailValue
-                label="Due now"
-                value={formatMinorMoney(
-                  detail.price_snapshot.due_now_minor,
-                  detail.price_snapshot.currency
-                )}
-              />
-            </div>
-          </dl>
-
-          <PaymentDifferenceNote detail={detail} />
-
-          <Separator className="my-4" />
-
-          {detail.payment ? (
-            <div className="grid gap-4 sm:grid-cols-[8rem_minmax(0,1fr)]">
-              {canViewPaymentReceipts ? (
-                <PaymentProof
-                  state={paymentProof}
-                  viewerOpen={paymentReceiptViewerOpen}
-                  onViewerOpenChange={setPaymentReceiptViewerOpen}
-                  heading="Payment receipt"
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+        <div
+          role="tabpanel"
+          id={`${tabGroupId}-panel`}
+          aria-labelledby={`${tabGroupId}-tab-${activeTab}`}
+          tabIndex={0}
+        >
+          {activeTab === "price" ? (
+            <DetailCard title="Price and payment" icon={CreditCard}>
+              <dl className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-3">
+                <DetailValue
+                  label="Rental total"
+                  value={formatMinorMoney(
+                    detail.price_snapshot.rental_total_minor,
+                    detail.price_snapshot.currency
+                  )}
                 />
-              ) : null}
-              <div
-                className={cn(
-                  "grid grid-cols-2 gap-3 sm:grid-cols-2",
-                  !canViewPaymentReceipts && "sm:col-span-2"
-                )}
-              >
+                <DetailValue
+                  label="Security deposit"
+                  value={formatMinorMoney(
+                    detail.price_snapshot.security_required_minor,
+                    detail.price_snapshot.currency
+                  )}
+                />
                 <div className="col-span-2 sm:col-span-1">
                   <DetailValue
-                    label="Payment method"
-                    value={`${detail.payment.method_name}${
-                      detail.payment.rail === "cash"
-                        ? " · Cash"
-                        : detail.payment.rail === "manual_qr"
-                          ? " · Manual QR"
-                          : " · Manual transfer"
-                    }`}
+                    label="Due now"
+                    value={formatMinorMoney(
+                      detail.price_snapshot.due_now_minor,
+                      detail.price_snapshot.currency
+                    )}
                   />
                 </div>
-                <div>
-                  <p className="text-xs text-dashboard-muted">Payment status</p>
-                  <Badge
-                    variant="outline"
+              </dl>
+
+              <PaymentDifferenceNote detail={detail} />
+
+              <Separator className="my-4" />
+
+              {detail.payment ? (
+                <div className="grid gap-4 sm:grid-cols-[8rem_minmax(0,1fr)]">
+                  {canViewPaymentReceipts ? (
+                    <PaymentProof
+                      state={paymentProof}
+                      viewerOpen={paymentReceiptViewerOpen}
+                      onViewerOpenChange={setPaymentReceiptViewerOpen}
+                      heading="Payment receipt"
+                    />
+                  ) : null}
+                  <div
                     className={cn(
-                      "mt-1.5 px-2 py-1 text-xs",
-                      PAYMENT_STATUS_CLASSES[detail.payment.status]
+                      "grid grid-cols-2 gap-3 sm:grid-cols-2",
+                      !canViewPaymentReceipts && "sm:col-span-2"
                     )}
                   >
-                    {PAYMENT_STATUS_LABELS[detail.payment.status]}
-                  </Badge>
+                    <div className="col-span-2 sm:col-span-1">
+                      <DetailValue
+                        label="Payment method"
+                        value={`${detail.payment.method_name}${
+                          detail.payment.rail === "cash"
+                            ? " · Cash"
+                            : detail.payment.rail === "manual_qr"
+                              ? " · Manual QR"
+                              : " · Manual transfer"
+                        }`}
+                      />
+                    </div>
+                    <div>
+                      <p className="text-xs text-dashboard-muted">Payment status</p>
+                      <Badge
+                        variant="outline"
+                        className={cn(
+                          "mt-1.5 px-2 py-1 text-xs",
+                          PAYMENT_STATUS_CLASSES[detail.payment.status]
+                        )}
+                      >
+                        {PAYMENT_STATUS_LABELS[detail.payment.status]}
+                      </Badge>
+                    </div>
+                    <DetailValue
+                      label="Evidence"
+                      value={
+                        detail.payment.rail !== "cash" &&
+                        detail.payment.status === "paid" &&
+                        detail.payment.verified_at &&
+                        detail.payment.evidence_status === "awaiting_upload"
+                          ? "Not provided (optional)"
+                          : PAYMENT_EVIDENCE_LABELS[detail.payment.evidence_status]
+                      }
+                    />
+                    <div className="col-span-2 sm:col-span-1">
+                      <DetailValue
+                        label="Verified at"
+                        value={
+                          detail.payment.verified_at
+                            ? formatDateTime(detail.payment.verified_at, effectiveTimeZone)
+                            : "Not verified"
+                        }
+                      />
+                    </div>
+                    <DetailValue
+                      label="Recorded amount"
+                      value={formatMinorMoney(detail.payment.amount_minor, detail.payment.currency)}
+                    />
+                    {detail.payment.rail === "cash" &&
+                    detail.payment.cash_tendered_minor !== null ? (
+                      <DetailValue
+                        label="Cash received"
+                        value={formatMinorMoney(
+                          detail.payment.cash_tendered_minor,
+                          detail.payment.currency
+                        )}
+                      />
+                    ) : null}
+                    {detail.payment.rail === "cash" && detail.payment.change_due_minor !== null ? (
+                      <DetailValue
+                        label="Change due"
+                        value={formatMinorMoney(
+                          detail.payment.change_due_minor,
+                          detail.payment.currency
+                        )}
+                      />
+                    ) : null}
+                  </div>
                 </div>
+              ) : (
+                <p className="text-sm text-dashboard-muted">No payment intent is recorded yet.</p>
+              )}
+            </DetailCard>
+          ) : activeTab === "lifecycle" ? (
+            <DetailCard title="Reservation lifecycle" icon={Clock3}>
+              <dl className="grid gap-3 text-sm sm:grid-cols-2">
                 <DetailValue
-                  label="Evidence"
+                  label="Hold acquired"
+                  value={formatDateTime(detail.hold_acquired_at, effectiveTimeZone)}
+                />
+                <DetailValue
+                  label="Hold expires"
                   value={
-                    detail.payment.rail !== "cash" &&
-                    detail.payment.status === "paid" &&
-                    detail.payment.verified_at &&
-                    detail.payment.evidence_status === "awaiting_upload"
-                      ? "Not provided (optional)"
-                      : PAYMENT_EVIDENCE_LABELS[detail.payment.evidence_status]
+                    detail.hold_expires_at
+                      ? formatDateTime(detail.hold_expires_at, effectiveTimeZone)
+                      : "No active hold deadline"
                   }
                 />
-                <div className="col-span-2 sm:col-span-1">
-                  <DetailValue
-                    label="Verified at"
-                    value={
-                      detail.payment.verified_at
-                        ? formatDateTime(detail.payment.verified_at, effectiveTimeZone)
-                        : "Not verified"
-                    }
-                  />
-                </div>
                 <DetailValue
-                  label="Recorded amount"
-                  value={formatMinorMoney(detail.payment.amount_minor, detail.payment.currency)}
+                  label="Terms accepted"
+                  value={formatOptionalDate(detail.terms_accepted_at, effectiveTimeZone)}
                 />
-                {detail.payment.rail === "cash" && detail.payment.cash_tendered_minor !== null ? (
-                  <DetailValue
-                    label="Cash received"
-                    value={formatMinorMoney(
-                      detail.payment.cash_tendered_minor,
-                      detail.payment.currency
-                    )}
-                  />
-                ) : null}
-                {detail.payment.rail === "cash" && detail.payment.change_due_minor !== null ? (
-                  <DetailValue
-                    label="Change due"
-                    value={formatMinorMoney(
-                      detail.payment.change_due_minor,
-                      detail.payment.currency
-                    )}
-                  />
-                ) : null}
-              </div>
-            </div>
+                <DetailValue
+                  label="Submitted"
+                  value={formatOptionalDate(detail.submitted_at, effectiveTimeZone)}
+                />
+                <DetailValue
+                  label="Confirmed"
+                  value={formatOptionalDate(detail.confirmed_at, effectiveTimeZone)}
+                />
+                <DetailValue
+                  label="Completed"
+                  value={formatOptionalDate(detail.completed_at, effectiveTimeZone)}
+                />
+              </dl>
+            </DetailCard>
           ) : (
-            <p className="text-sm text-dashboard-muted">No payment intent is recorded yet.</p>
+            <DetailCard title="Custody history" icon={Truck}>
+              {detail.custody_timeline.length > 0 ? (
+                <ol className="space-y-3">
+                  {detail.custody_timeline.map((event, index) => (
+                    <li
+                      key={`${event.asset_id}:${event.event_kind}:${event.occurred_at}`}
+                      className="flex gap-3"
+                    >
+                      <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-dashboard-active text-dashboard-accent">
+                        {event.event_kind === "pickup" ? (
+                          <PackageCheck className="h-4 w-4" aria-hidden="true" />
+                        ) : (
+                          <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
+                        )}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <p className="font-medium capitalize text-dashboard-navy">
+                            {event.event_kind === "pickup" ? "Picked up" : "Returned"}
+                          </p>
+                          <p className="text-xs text-dashboard-muted">
+                            {formatDateTime(event.occurred_at, effectiveTimeZone)}
+                          </p>
+                        </div>
+                        {event.condition_note ? (
+                          <p className="mt-1 text-sm text-dashboard-muted">
+                            {event.condition_note}
+                          </p>
+                        ) : null}
+                        <p className="mt-1 text-xs text-dashboard-muted">Event {index + 1}</p>
+                      </div>
+                    </li>
+                  ))}
+                </ol>
+              ) : (
+                <p className="text-sm text-dashboard-muted">
+                  No pickup or return events have been recorded yet.
+                </p>
+              )}
+            </DetailCard>
           )}
-        </DetailCard>
-
-        <DetailCard title="Reservation lifecycle" icon={Clock3}>
-          <dl className="grid gap-3 text-sm sm:grid-cols-2">
-            <DetailValue
-              label="Hold acquired"
-              value={formatDateTime(detail.hold_acquired_at, effectiveTimeZone)}
-            />
-            <DetailValue
-              label="Hold expires"
-              value={
-                detail.hold_expires_at
-                  ? formatDateTime(detail.hold_expires_at, effectiveTimeZone)
-                  : "No active hold deadline"
-              }
-            />
-            <DetailValue
-              label="Terms accepted"
-              value={formatOptionalDate(detail.terms_accepted_at, effectiveTimeZone)}
-            />
-            <DetailValue
-              label="Submitted"
-              value={formatOptionalDate(detail.submitted_at, effectiveTimeZone)}
-            />
-            <DetailValue
-              label="Confirmed"
-              value={formatOptionalDate(detail.confirmed_at, effectiveTimeZone)}
-            />
-            <DetailValue
-              label="Completed"
-              value={formatOptionalDate(detail.completed_at, effectiveTimeZone)}
-            />
-          </dl>
-        </DetailCard>
-
-        <DetailCard title="Custody history" icon={Truck}>
-          {detail.custody_timeline.length > 0 ? (
-            <ol className="space-y-3">
-              {detail.custody_timeline.map((event, index) => (
-                <li
-                  key={`${event.asset_id}:${event.event_kind}:${event.occurred_at}`}
-                  className="flex gap-3"
-                >
-                  <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-dashboard-active text-dashboard-accent">
-                    {event.event_kind === "pickup" ? (
-                      <PackageCheck className="h-4 w-4" aria-hidden="true" />
-                    ) : (
-                      <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
-                    )}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <p className="font-medium capitalize text-dashboard-navy">
-                        {event.event_kind === "pickup" ? "Picked up" : "Returned"}
-                      </p>
-                      <p className="text-xs text-dashboard-muted">
-                        {formatDateTime(event.occurred_at, effectiveTimeZone)}
-                      </p>
-                    </div>
-                    {event.condition_note ? (
-                      <p className="mt-1 text-sm text-dashboard-muted">{event.condition_note}</p>
-                    ) : null}
-                    <p className="mt-1 text-xs text-dashboard-muted">Event {index + 1}</p>
-                  </div>
-                </li>
-              ))}
-            </ol>
-          ) : (
-            <p className="text-sm text-dashboard-muted">
-              No pickup or return events have been recorded yet.
-            </p>
-          )}
-        </DetailCard>
+        </div>
       </div>
     </div>
   );
 }
+
+type ReservationDetailTab = "price" | "lifecycle" | "custody";
+const RESERVATION_DETAIL_TABS: ReadonlyArray<{ id: ReservationDetailTab; label: string }> = [
+  { id: "price", label: "Price and payment" },
+  { id: "lifecycle", label: "Reservation lifecycle" },
+  { id: "custody", label: "Custody history" },
+];
 
 const CONTINUABLE_STATUSES: ReadonlySet<ReservationDetail["status"]> = new Set([
   "cancelled",
