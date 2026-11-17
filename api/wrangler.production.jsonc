@@ -1,21 +1,21 @@
 {
-  "name": "drezivo-media-prod",
-  "main": "edge/media-worker/worker.mjs",
-  "compatibility_date": "2026-10-28",
-  "vars": {
-    "API_ORIGIN": "https://api.drezivo.shop",
-    "PUBLIC_STOREFRONT_CACHE_ENABLED": "false"
-  },
-  "routes": [
-    {
-      "pattern": "api.drezivo.shop/api/media/public/*",
-      "zone_name": "drezivo.shop"
-    },
-    {
-      "pattern": "api.drezivo.shop/api/v1/public/stores/*",
-      "zone_name": "drezivo.shop"
-    }
-  ],
-  "preview_urls": false,
-  "workers_dev": false
+	"name": "drezivo-media-prod",
+	"main": "edge/media-worker/worker.mjs",
+	"compatibility_date": "2026-10-28",
+	"vars": {
+		"API_ORIGIN": "https://api.drezivo.shop",
+		"PUBLIC_STOREFRONT_CACHE_ENABLED": "true"
+	},
+	"routes": [
+		{
+			"pattern": "api.drezivo.shop/api/media/public/*",
+			"zone_name": "drezivo.shop"
+		},
+		{
+			"pattern": "api.drezivo.shop/api/v1/public/stores/*",
+			"zone_name": "drezivo.shop"
+		}
+	],
+	"preview_urls": false,
+	"workers_dev": false
 }
