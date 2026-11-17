@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import Link from "next/link";
+import styles from "./reservation-details-sheet.module.css";
 
 import {
   normalizeVariantFitRange,
@@ -152,6 +153,7 @@ function ReservationDetails({
   const [failedImageLines, setFailedImageLines] = useState<Set<string>>(() => new Set());
   const [editing, setEditing] = useState(false);
   const [activeTab, setActiveTab] = useState<ReservationDetailTab>("price");
+  const [slideDirection, setSlideDirection] = useState<"forward" | "backward" | null>(null);
   const tabGroupId = useId();
   const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const [paymentReceiptViewerOpen, setPaymentReceiptViewerOpen] = useState(false);
@@ -172,6 +174,14 @@ function ReservationDetails({
     setActiveTab("price");
     setPaymentReceiptViewerOpen(false);
   }, [detail.id]);
+
+  const selectTab = (nextTab: ReservationDetailTab) => {
+    if (nextTab === activeTab) return;
+    const currentIndex = RESERVATION_DETAIL_TABS.findIndex((tab) => tab.id === activeTab);
+    const nextIndex = RESERVATION_DETAIL_TABS.findIndex((tab) => tab.id === nextTab);
+    setSlideDirection(nextIndex > currentIndex ? "forward" : "backward");
+    setActiveTab(nextTab);
+  };
 
   return (
     <div className="flex min-h-full flex-col">
@@ -318,6 +328,22 @@ function ReservationDetails({
                     ) : null}
                   </div>
                   <div className="col-span-2 min-w-0 sm:col-span-1 sm:col-start-2">
+                    <dl className="mt-3 grid grid-cols-2 gap-2 text-sm">
+                      <DetailValue
+                        label="Rental"
+                        value={formatMinorMoney(
+                          line.pricing_snapshot.rental_minor,
+                          line.pricing_snapshot.currency
+                        )}
+                      />
+                      <DetailValue
+                        label="Deposit"
+                        value={formatMinorMoney(
+                          line.pricing_snapshot.deposit_minor,
+                          line.pricing_snapshot.currency
+                        )}
+                      />
+                    </dl>
                     {line.fit_range_snapshot ||
                     Object.keys(line.measurements_snapshot).length > 0 ? (
                       <div className="mt-3">
@@ -393,7 +419,7 @@ function ReservationDetails({
             event.preventDefault();
             const tab = RESERVATION_DETAIL_TABS[next];
             if (tab) {
-              setActiveTab(tab.id);
+              selectTab(tab.id);
               tabRefs.current[next]?.focus();
             }
           }}
@@ -410,7 +436,7 @@ function ReservationDetails({
               aria-controls={`${tabGroupId}-panel`}
               aria-selected={activeTab === tab.id}
               tabIndex={activeTab === tab.id ? 0 : -1}
-              onClick={() => setActiveTab(tab.id)}
+              onClick={() => selectTab(tab.id)}
               className={cn(
                 "shrink-0 border-b-2 px-3 py-3 text-sm font-medium",
                 activeTab === tab.id
@@ -423,7 +449,15 @@ function ReservationDetails({
           ))}
         </div>
         <div
+          key={activeTab}
           role="tabpanel"
+          className={
+            slideDirection
+              ? slideDirection === "forward"
+                ? styles["slideForward"]
+                : styles["slideBackward"]
+              : undefined
+          }
           id={`${tabGroupId}-panel`}
           aria-labelledby={`${tabGroupId}-tab-${activeTab}`}
           tabIndex={0}

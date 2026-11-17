@@ -105,7 +105,7 @@ describe("Drezivo fittings API client", () => {
 
   it("serializes bounded fitting list filters and validates the response", async () => {
     fetchMock.mockResolvedValueOnce(
-      success({ items: [listItem()], page_meta: { next_cursor: "next", has_more: true } })
+      success({ items: [listItem()], page_meta: { next_cursor: "next", has_more: true, total: 12 } })
     );
 
     const result = await createDrezivoApiClient(getToken).getFittings({
@@ -130,7 +130,7 @@ describe("Drezivo fittings API client", () => {
     expect(url.searchParams.get("sort")).toBe("starts_at_asc");
     expect(init?.method).toBe("GET");
     expect(result.data.items[0]).toMatchObject({ id: fittingId, status: "pending" });
-    expect(result.data.page_meta).toEqual({ next_cursor: "next", has_more: true });
+    expect(result.data.page_meta).toEqual({ next_cursor: "next", has_more: true, total: 12 });
   });
 
   it("creates a fitting with an idempotency key and only canonical client-owned input", async () => {

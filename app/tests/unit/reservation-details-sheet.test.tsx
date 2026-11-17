@@ -124,7 +124,11 @@ describe("ReservationDetailsSheet", () => {
       detailWith({
         lines: [
           { ...first, measurements_snapshot: { bust: 32 }, measurement_unit_snapshot: "in" },
-          { ...second, product_id: undefined },
+          {
+            ...second,
+            product_id: undefined,
+            pricing_snapshot: { rental_minor: "123400", deposit_minor: "23400", currency: "PHP" },
+          },
         ],
       })
     );
@@ -140,8 +144,12 @@ describe("ReservationDetailsSheet", () => {
     expect(screen.queryByText("Customer record")).toBeNull();
     expect(screen.queryByText("Variant")).toBeNull();
     expect(screen.queryByText("Line 1")).toBeNull();
-    expect(screen.queryByText("Rental")).toBeNull();
-    expect(screen.queryByText("Deposit")).toBeNull();
+    expect(screen.getAllByText("Rental")).toHaveLength(2);
+    expect(screen.getAllByText("Deposit")).toHaveLength(2);
+    expect(screen.getAllByText("Rental")[0]?.parentElement).toHaveTextContent("5,500");
+    expect(screen.getAllByText("Deposit")[0]?.parentElement).toHaveTextContent("5,000");
+    expect(screen.getAllByText("Rental")[1]?.parentElement).toHaveTextContent("1,234");
+    expect(screen.getAllByText("Deposit")[1]?.parentElement).toHaveTextContent("234");
   });
 
   it("opens payment by default and supports keyboard navigation between detail tabs", () => {
@@ -166,6 +174,14 @@ describe("ReservationDetailsSheet", () => {
       screen.getByText("No pickup or return events have been recorded yet.")
     ).toBeInTheDocument();
     expect(screen.queryByText("Hold acquired")).toBeNull();
+    fireEvent.keyDown(custody, { key: "ArrowLeft" });
+    expect(lifecycle).toHaveFocus();
+    fireEvent.click(payment);
+    fireEvent.click(custody);
+    expect(custody).toHaveAttribute("aria-selected", "true");
+    expect(
+      screen.getByText("No pickup or return events have been recorded yet.")
+    ).toBeInTheDocument();
   });
 
   it("returns to payment when a different reservation opens", () => {

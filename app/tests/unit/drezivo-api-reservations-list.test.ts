@@ -75,7 +75,7 @@ describe("Drezivo reservations list API client", () => {
             created_at: "2026-10-10T02:00:00.000Z",
           },
         ],
-        page_meta: { next_cursor: "next-page", has_more: true },
+        page_meta: { next_cursor: "next-page", has_more: true, total: 31 },
       })
     );
 
@@ -106,7 +106,7 @@ describe("Drezivo reservations list API client", () => {
       status: "confirmed",
       customer: { snapshot: { full_name: "Maria Santos" } },
     });
-    expect(result.data.page_meta).toEqual({ next_cursor: "next-page", has_more: true });
+    expect(result.data.page_meta).toEqual({ next_cursor: "next-page", has_more: true, total: 31 });
   });
 
   it("fetches and validates one authoritative reservation detail", async () => {

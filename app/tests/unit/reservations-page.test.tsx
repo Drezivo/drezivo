@@ -493,7 +493,7 @@ describe("ReservationsPage", () => {
     await screen.findByRole("button", { name: realReservationRowName });
 
     expect(screen.getByRole("button", { name: "Previous reservations page" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Next reservations page" })).toHaveClass("text-dashboard-navy");
+    expect(screen.getByRole("button", { name: "Next reservations page" })).toBeEnabled();
     expect(screen.getByRole("button", { name: "Next reservations page" })).not.toHaveClass("bg-dashboard-active");
 
     fireEvent.click(screen.getByRole("button", { name: "Next reservations page" }));
@@ -506,7 +506,7 @@ describe("ReservationsPage", () => {
     );
     expect(await screen.findByRole("button", { name: holdReservationRowName })).toBeVisible();
     expect(screen.getByText("Showing 11–11 reservation")).toBeVisible();
-    expect(screen.getByRole("button", { name: "Previous reservations page" })).toHaveClass("text-dashboard-navy");
+    expect(screen.getByRole("button", { name: "Previous reservations page" })).toBeEnabled();
     expect(screen.getByRole("button", { name: "Next reservations page" })).toBeDisabled();
 
     fireEvent.click(screen.getByRole("button", { name: "Previous reservations page" }));

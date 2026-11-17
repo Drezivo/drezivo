@@ -41,7 +41,7 @@ describe("Drezivo customer API client", () => {
     fetchMock.mockResolvedValueOnce(
       success({
         items: [customer()],
-        page_meta: { next_cursor: "next-cursor", has_more: true },
+        page_meta: { next_cursor: "next-cursor", has_more: true, total: 23 },
       })
     );
 
@@ -53,6 +53,7 @@ describe("Drezivo customer API client", () => {
     });
 
     expect(result.data.items[0]?.id).toBe(customerId);
+    expect(result.data.page_meta.total).toBe(23);
     expect(result.requestId).toBe("request-customers");
     const [url, init] = fetchMock.mock.calls[0]!;
     expect(url).toBe(
