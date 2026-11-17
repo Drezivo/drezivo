@@ -103,6 +103,7 @@ describe('Customers read routes', async () => {
       expect(item).not.toHaveProperty('next_activity');
     }
     expect(firstBody.data.page_meta.has_more).toBe(true);
+    expect(firstBody.data.page_meta.total).toBe(3);
 
     const nextCursor = firstBody.data.page_meta.next_cursor;
     if (!nextCursor) throw new Error('expected next customer cursor');
@@ -111,8 +112,15 @@ describe('Customers read routes', async () => {
     );
     expect(second.status).toBe(200);
     const secondBody = successEnvelope(customerListResponse).parse(second.body);
+    expect(secondBody.data.page_meta.total).toBe(3);
     expect(secondBody.data.items).toHaveLength(1);
     expect(secondBody.data.items[0]?.full_name).toBe('Carla Cruz');
+
+    const filtered = await request(createApp()).get('/api/v1/customers?search=Anna');
+    expect(filtered.status).toBe(200);
+    expect(successEnvelope(customerListResponse).parse(filtered.body).data.page_meta.total).toBe(1);
+    const empty = await request(createApp()).get('/api/v1/customers?search=Not%20present');
+    expect(successEnvelope(customerListResponse).parse(empty.body).data.page_meta.total).toBe(0);
   });
 
   it('computes customer summary counts from active profiles and qualifying branch activity', async () => {
@@ -273,6 +281,7 @@ describe('Customers read routes', async () => {
       'Newest Snapshot Gown',
       'Middle Snapshot Gown',
     ]);
+    expect(firstBody.data.page_meta.total).toBe(3);
     expect(firstBody.data.page_meta.has_more).toBe(true);
 
     const cursor = firstBody.data.page_meta.next_cursor;
@@ -282,6 +291,7 @@ describe('Customers read routes', async () => {
     );
     expect(second.status).toBe(200);
     const secondBody = successEnvelope(customerReservationHistoryResponse).parse(second.body);
+    expect(secondBody.data.page_meta.total).toBe(3);
     expect(secondBody.data.items.map((item) => item.clothing_name_snapshot)).toEqual([
       'Oldest Snapshot Gown',
     ]);
@@ -341,6 +351,7 @@ describe('Customers read routes', async () => {
     expect(firstBody.data.items.map((item) => item.status)).toEqual(['confirmed', 'completed']);
     expect(firstBody.data.items.every((item) => item.garment_summary === 'Summary Garment')).toBe(true);
     expect(firstBody.data.items.every((item) => item.fee.payment_status === null)).toBe(true);
+    expect(firstBody.data.page_meta.total).toBe(3);
     expect(firstBody.data.page_meta.has_more).toBe(true);
     expect(JSON.stringify(firstBody.data)).not.toContain('evidence');
 
@@ -351,6 +362,7 @@ describe('Customers read routes', async () => {
     );
     expect(second.status).toBe(200);
     const secondBody = successEnvelope(customerFittingHistoryResponse).parse(second.body);
+    expect(secondBody.data.page_meta.total).toBe(3);
     expect(secondBody.data.items).toHaveLength(1);
     expect(secondBody.data.items[0]?.status).toBe('completed');
 

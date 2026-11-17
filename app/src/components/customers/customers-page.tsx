@@ -53,7 +53,7 @@ import { CustomerDetailsSheet } from "./customer-details-sheet";
 import { CustomerEditSheet, type CustomerEditValues } from "./customer-edit-sheet";
 
 type CustomerStatusFilter = CustomerListStatus;
-type CustomerPageMeta = { next_cursor: string | null; has_more: boolean };
+type CustomerPageMeta = { next_cursor: string | null; has_more: boolean; total?: number | undefined };
 
 const CUSTOMERS_PAGE_SIZE = 10;
 const CUSTOMER_HISTORY_PAGE_SIZE = 10;
@@ -510,12 +510,14 @@ export function CustomersPage() {
                     onView={openCustomerDetails}
                   />
                 )}
-                {!isLoading && rows.length > 0 ? (
+                {!isLoading ? (
                   <ListPagination
                     label="Customers pagination"
                     noun={{ one: "customer", other: "customers" }}
                     pageIndex={pageIndex}
                     shown={rows.length}
+                    pageSize={CUSTOMERS_PAGE_SIZE}
+                    total={pageMeta.total}
                     hasMore={pageMeta.has_more}
                     onNext={goNext}
                     onPrevious={goPrevious}

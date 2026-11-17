@@ -67,6 +67,7 @@ const MAX_PICKUP_WINDOW_DAYS = 31;
 type PageMeta = {
   next_cursor: string | null;
   has_more: boolean;
+  total?: number | undefined;
 };
 
 type DateRange = {
@@ -384,10 +385,11 @@ export function ReservationsPage() {
               </>
             )}
 
-            {!isLoading && !error && !dateRangeError && rows.length > 0 ? (
+            {!isLoading && !error && !dateRangeError ? (
               <ReservationPagination
                 pageIndex={pageIndex}
                 shown={rows.length}
+                total={pageMeta.total}
                 hasMore={pageMeta.has_more && Boolean(pageMeta.next_cursor)}
                 onNext={goNext}
                 onPrevious={goPrevious}
@@ -914,17 +916,19 @@ function ReservationPagination({
   onPrevious,
   pageIndex,
   shown,
+  total,
 }: {
   hasMore: boolean;
   onNext: () => void;
   onPrevious: () => void;
   pageIndex: number;
   shown: number;
+  total?: number | undefined;
 }) {
   return (
     <div className="flex flex-col gap-3 border-t border-dashboard-border px-4 py-3 text-xs text-dashboard-muted sm:flex-row sm:items-center sm:justify-between">
       <p>
-        Page {pageIndex + 1} · {shown} {shown === 1 ? "reservation" : "reservations"} loaded
+        Showing {shown ? pageIndex * PAGE_SIZE + 1 : 0}–{shown ? pageIndex * PAGE_SIZE + shown : 0}{total === undefined ? "" : ` of ${total}`} {(total ?? shown) === 1 ? "reservation" : "reservations"}
       </p>
       <div className="flex items-center gap-1">
         <Button

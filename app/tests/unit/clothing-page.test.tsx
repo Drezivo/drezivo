@@ -377,7 +377,7 @@ describe("ClothingPage", () => {
     expect(screen.getByText("Active Rental Items").parentElement).toHaveTextContent("42");
     expect(screen.getByText("Categories").parentElement).toHaveTextContent("6");
     expect(screen.getByText("Archived Clothing").parentElement).toHaveTextContent("3");
-    expect(screen.getByText("Showing 1–1 of 24")).toBeVisible();
+    expect(screen.getByText("Showing 1–1 of 24 clothing items")).toBeVisible();
     expect(screen.getByRole("button", { name: "Previous clothing page" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Next clothing page" })).toBeDisabled();
   });
@@ -673,7 +673,7 @@ describe("ClothingPage", () => {
         product_status: "draft",
       })
     );
-    expect(screen.getByText("Showing 1–1 of 1")).toBeVisible();
+    expect(screen.getByText("Showing 1–1 of 1 clothing item")).toBeVisible();
   });
 
   it("renders designed permission and empty states", async () => {
@@ -783,7 +783,7 @@ describe("ClothingPage", () => {
       product_status: "active",
       cursor: "cursor-page-2",
     });
-    expect(screen.getByText("Showing 11–11 of 11")).toBeVisible();
+    expect(screen.getByText("Showing 11–11 of 11 clothing items")).toBeVisible();
     expect(screen.getByRole("button", { name: "Previous clothing page" })).toBeEnabled();
     expect(screen.getByRole("button", { name: "Next clothing page" })).toBeDisabled();
   });

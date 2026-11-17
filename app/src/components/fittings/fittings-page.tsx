@@ -64,6 +64,7 @@ type FittingDateFilter = "all" | "today" | "upcoming";
 type PageMeta = {
   next_cursor: string | null;
   has_more: boolean;
+  total?: number | undefined;
 };
 
 const STATUS_OPTIONS: readonly FittingState[] = [
@@ -346,12 +347,14 @@ export function FittingsPage() {
               />
             )}
 
-            {!isLoading && !error && rows.length > 0 ? (
+            {!isLoading && !error ? (
               <ListPagination
                 label="Fittings pagination"
                 noun={{ one: "fitting", other: "fittings" }}
                 pageIndex={pageIndex}
                 shown={rows.length}
+                pageSize={FITTINGS_PAGE_SIZE}
+                total={pageMeta.total}
                 hasMore={pageMeta.has_more}
                 onNext={goNext}
                 onPrevious={goPrevious}

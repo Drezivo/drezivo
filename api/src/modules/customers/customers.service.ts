@@ -100,6 +100,7 @@ export async function getCustomerList(
     page_meta: {
       next_cursor: page.nextCursor,
       has_more: page.hasMore,
+      total: page.total,
     },
   });
 }
@@ -186,6 +187,7 @@ export async function getCustomerReservationHistory(
     page_meta: {
       next_cursor: page.nextCursor,
       has_more: page.hasMore,
+      total: page.total,
     },
   });
 }
@@ -222,6 +224,7 @@ export async function getCustomerFittingHistory(
     page_meta: {
       next_cursor: page.nextCursor,
       has_more: page.hasMore,
+      total: page.total,
     },
   });
 }

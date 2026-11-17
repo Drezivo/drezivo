@@ -210,6 +210,8 @@ describe('OPS-063 clothing availability timeline', async () => {
       }),
     );
     const firstIds = new Set(firstPage.rows.map((row) => row.asset.id));
+    expect(firstPage.page_meta.total).toBe(1007);
+    expect(secondPage.page_meta.total).toBe(firstPage.page_meta.total);
     expect(secondPage.rows.some((row) => firstIds.has(row.asset.id))).toBe(false);
 
     const reserved = await getClothingAvailabilityTimeline(
