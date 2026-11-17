@@ -53,7 +53,7 @@ export default async function CatalogPage({ params, searchParams }: { params: Pr
   };
 
   return (
-    <div className="mx-auto max-w-7xl px-5 pb-8 pt-12 sm:px-8 sm:pt-16">
+    <div className="mx-auto max-w-[71.25rem] px-5 pb-8 pt-12 sm:px-8 sm:pt-16">
       <header className="mb-10">
         <h1 className="font-sf-display text-5xl font-light sm:text-6xl">{category?.name ?? 'The collection'}</h1>
         <p className="mt-3 text-sf-muted" aria-live="polite">

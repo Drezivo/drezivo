@@ -13,6 +13,9 @@ export function themeStyle(theme: StorefrontTheme): CSSProperties {
     '--sf-line': palette.line,
     '--sf-accent': palette.accent,
     '--sf-accent-ink': palette.accentInk,
+    '--sf-steps-bg': `color-mix(in srgb, ${palette.background} 92%, ${palette.accent} 8%)`,
+    '--sf-footer-bg': theme === 'noir' ? palette.background : palette.ink,
+    '--sf-footer-ink': theme === 'noir' ? palette.ink : palette.background,
     colorScheme: theme === 'noir' ? 'dark' : 'light',
   } as CSSProperties;
 }

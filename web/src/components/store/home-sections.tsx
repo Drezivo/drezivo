@@ -8,7 +8,8 @@ import { formatMinor, formatTime } from '@/lib/storefront-format';
 
 import { ProductGrid } from './product-card';
 
-const container = 'mx-auto max-w-7xl px-5 sm:px-8';
+const container = 'mx-auto max-w-[71.25rem] px-5 sm:px-8';
+const heroContainer = 'mx-auto max-w-7xl px-5 sm:px-8';
 
 export function SectionHeading({ title, lead, action }: { title: string; lead?: string | null; action?: React.ReactNode }) {
   return (
@@ -49,7 +50,7 @@ export function Hero({ store }: { store: PublicStorefront }) {
 
   if (!image) {
     return (
-      <section data-hero className={`${container} py-20 sm:py-28`}>
+      <section data-hero className={`${heroContainer} py-20 sm:py-28`}>
         <div data-hero-content>
           {heading('max-w-4xl text-5xl leading-[1.05] sm:text-7xl')}
           {store.content.hero.body ? (
@@ -70,7 +71,7 @@ export function Hero({ store }: { store: PublicStorefront }) {
       </div>
       {/* Phones put the text over the busiest part of the photo, so the scrim is deeper there. */}
       <div aria-hidden="true" className="absolute inset-0 -z-10 bg-gradient-to-t from-black/85 via-black/45 to-black/10 sm:from-black/65 sm:via-black/20 sm:to-black/5" />
-      <div data-hero-content className={`${container} w-full pb-14 pt-32 text-white sm:pb-20`}>
+      <div data-hero-content className={`${heroContainer} w-full pb-14 pt-32 text-white sm:pb-20`}>
         {heading('max-w-3xl text-5xl leading-[1.02] sm:text-7xl')}
         {store.content.hero.body ? (
           <p data-hero-fade className="mt-5 max-w-lg text-base leading-7 text-white/85 sm:text-lg">
@@ -150,7 +151,8 @@ export function HowItWorks({ store }: { store: PublicStorefront }) {
     },
   ];
   return (
-    <section id="how-it-works" className={`${container} pt-20 sm:pt-28`}>
+    <section id="how-it-works" className="mt-20 bg-[color:var(--sf-steps-bg)] py-20 sm:mt-28 sm:py-24">
+      <div className={container}>
       <SectionHeading title="How renting works" />
       <ol data-reveal-group className="grid gap-10 border-t border-sf-line pt-10 md:grid-cols-3">
         {steps.map((step, index) => (
@@ -161,6 +163,7 @@ export function HowItWorks({ store }: { store: PublicStorefront }) {
           </li>
         ))}
       </ol>
+      </div>
     </section>
   );
 }

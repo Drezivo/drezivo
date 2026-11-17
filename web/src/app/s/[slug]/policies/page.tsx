@@ -39,7 +39,7 @@ export default async function PoliciesPage({ params }: { params: Promise<{ slug:
   const hasTerms = sections.some((section) => section.id !== 'delivery' && section.id !== 'privacy');
 
   return (
-    <div className="mx-auto max-w-7xl px-5 pb-8 pt-12 sm:px-8 sm:pt-16">
+    <div className="mx-auto max-w-[71.25rem] px-5 pb-8 pt-12 sm:px-8 sm:pt-16">
       <header className="max-w-3xl">
         <h1 className="font-sf-display text-5xl font-light sm:text-6xl">Rental info</h1>
         <p className="mt-4 text-sf-muted">
