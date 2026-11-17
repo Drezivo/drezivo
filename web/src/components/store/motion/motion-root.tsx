@@ -5,7 +5,7 @@ import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import Lenis from 'lenis';
 import { usePathname } from 'next/navigation';
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 
 import { registerLenis, scrollToSection, syncScrollPosition, whenScrollUnlocked } from './scroll';
 
@@ -36,7 +36,6 @@ function reducedMotion(): boolean {
  */
 export function MotionRoot() {
   const pathname = usePathname();
-  const firstPath = useRef(pathname);
 
   useEffect(() => {
     if (reducedMotion()) return;
@@ -97,10 +96,6 @@ export function MotionRoot() {
       // the page, or on the section named in the address (e.g. arriving at /s/shop#about).
       const section = window.location.hash ? document.getElementById(decodeURIComponent(window.location.hash.slice(1))) : null;
       requestAnimationFrame(() => (section ? scrollToSection(section, { immediate: true }) : syncScrollPosition()));
-
-      if (pathname !== firstPath.current) {
-        gsap.fromTo('#main', { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.5, ease: 'power2.out', clearProps: 'opacity,visibility' });
-      }
 
       const hero = document.querySelector<HTMLElement>('[data-hero]');
       if (hero) {

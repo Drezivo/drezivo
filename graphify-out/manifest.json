@@ -5748,9 +5748,9 @@
     "semantic_hash": ""
   },
   "web/src/components/store/catalog-controls.tsx": {
-    "mtime": 1794852607.5191991,
-    "seen": 1794914477.7305458,
-    "ast_hash": "5020e7b5fc2e59170d2695339147bb0c",
+    "mtime": 1794925288.8740757,
+    "seen": 1794926045.0019557,
+    "ast_hash": "82da0b8e49598c89eb9b1a6ff1bf55eb",
     "semantic_hash": ""
   },
   "web/src/components/store/catalog-pagination.tsx": {
@@ -5784,9 +5784,9 @@
     "semantic_hash": ""
   },
   "web/src/components/store/motion/motion-root.tsx": {
-    "mtime": 1794852608.4804516,
-    "seen": 1794914477.7305458,
-    "ast_hash": "a4cbe317e3e1ba3ddc67fd809a62f2d5",
+    "mtime": 1794923941.0778818,
+    "seen": 1794926045.0019557,
+    "ast_hash": "abeb0c02a59d2c33e830d852fabd1c45",
     "semantic_hash": ""
   },
   "web/src/components/store/motion/scroll.ts": {
@@ -5796,15 +5796,15 @@
     "semantic_hash": ""
   },
   "web/src/components/store/motion/store-transition.tsx": {
-    "mtime": 1794852608.481475,
-    "seen": 1794914477.7305458,
-    "ast_hash": "5ca8b980bda131a8dee82209f040ba10",
+    "mtime": 1794923938.886583,
+    "seen": 1794926045.0019557,
+    "ast_hash": "e972c681c2c250c393d3da74f8ba1420",
     "semantic_hash": ""
   },
   "web/src/components/store/policy-images.tsx": {
-    "mtime": 1794852608.5188932,
-    "seen": 1794914477.7305458,
-    "ast_hash": "b05dc49dc69244d806eae9b21cc4dcf4",
+    "mtime": 1794925370.660761,
+    "seen": 1794926045.0029535,
+    "ast_hash": "1758584eeec317ee8eb9f7fb55025cd9",
     "semantic_hash": ""
   },
   "web/src/components/store/preview-context.tsx": {
@@ -9117,6 +9117,18 @@
     "mtime": 1794852664.8327353,
     "seen": 1794914477.7305458,
     "ast_hash": "313847b857e9bf3aa9a0052c43127ec2",
+    "semantic_hash": ""
+  },
+  "web/tests/unit/catalog-live-search.test.tsx": {
+    "mtime": 1794925949.6978576,
+    "seen": 1794926045.0069547,
+    "ast_hash": "21d94ce8b1b9d9da470d90c872b5a694",
+    "semantic_hash": ""
+  },
+  "web/tests/unit/store-navigation-feedback.test.tsx": {
+    "mtime": 1794925483.0689592,
+    "seen": 1794926045.0079546,
+    "ast_hash": "745926cb6cece705466af9070e33b679",
     "semantic_hash": ""
   }
 }
