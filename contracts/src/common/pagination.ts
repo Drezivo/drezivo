@@ -29,6 +29,8 @@ export type PaginationRequest = z.infer<typeof paginationRequest>;
 export const pageMeta = z.object({
   next_cursor: z.string().min(1).nullable(),
   has_more: z.boolean(),
+  /** Exact number of records matching the current filters, before applying the cursor. */
+  total: z.number().int().nonnegative().optional(),
 });
 export type PageMeta = z.infer<typeof pageMeta>;
 

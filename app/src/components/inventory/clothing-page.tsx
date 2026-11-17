@@ -302,7 +302,7 @@ export function ClothingPage() {
     setPageIndex((current) => Math.max(0, current - 1));
   };
 
-  const pageRangeStart = summary.matching_products === 0 ? 0 : pageIndex * PAGE_SIZE + 1;
+  const pageRangeStart = rows.length === 0 ? 0 : pageIndex * PAGE_SIZE + 1;
   const pageRangeEnd = pageRangeStart === 0 ? 0 : pageRangeStart + rows.length - 1;
 
   return (
@@ -493,10 +493,10 @@ export function ClothingPage() {
               </>
             )}
 
-            {!isLoading && !error && rows.length > 0 ? (
+            {!isLoading && !error ? (
               <div className="flex flex-col gap-3 border-t border-dashboard-border px-4 py-3 text-xs text-dashboard-muted sm:flex-row sm:items-center sm:justify-between">
                 <p>
-                  Showing {pageRangeStart}–{pageRangeEnd} of {summary.matching_products}
+                  Showing {pageRangeStart}–{pageRangeEnd} of {summary.matching_products} {summary.matching_products === 1 ? "clothing item" : "clothing items"}
                 </p>
                 <div className="flex items-center gap-1">
                   <Button

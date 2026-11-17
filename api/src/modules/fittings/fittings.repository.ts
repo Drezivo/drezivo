@@ -21,6 +21,7 @@ export interface FittingListReadRow {
 
 export interface FittingListReadPage {
   rows: FittingListReadRow[];
+  total: number;
   nextCursor: string | null;
   hasMore: boolean;
 }
@@ -91,6 +92,12 @@ export async function listFittingsReadModel(
     )`);
   }
 
+  const count = await client.query<{ total: number }>(
+    `SELECT count(*)::int AS total FROM fitting_appointment fa
+     JOIN customer c ON c.tenant_id = fa.tenant_id AND c.id = fa.customer_id
+     WHERE ${where.join(' AND ')}`,
+    values,
+  );
   const cursor = decodeCursor(input.query.cursor, input.query.sort);
   if (cursor) {
     const key = bind(cursor.key);
@@ -111,6 +118,7 @@ export async function listFittingsReadModel(
   const last = rows.at(-1);
   return {
     rows,
+    total: count.rows[0]?.total ?? 0,
     hasMore,
     nextCursor: hasMore && last ? encodeCursor(last, input.query.sort) : null,
   };

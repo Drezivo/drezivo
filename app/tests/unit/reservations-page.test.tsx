@@ -505,7 +505,7 @@ describe("ReservationsPage", () => {
       })
     );
     expect(await screen.findByRole("button", { name: holdReservationRowName })).toBeVisible();
-    expect(screen.getByText("Page 2 · 1 reservation loaded")).toBeVisible();
+    expect(screen.getByText("Showing 11–11 reservation")).toBeVisible();
     expect(screen.getByRole("button", { name: "Previous reservations page" })).toHaveClass("text-dashboard-navy");
     expect(screen.getByRole("button", { name: "Next reservations page" })).toBeDisabled();
 

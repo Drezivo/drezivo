@@ -394,7 +394,7 @@ describe("FittingsPage production cutover", () => {
     await waitFor(() =>
       expect(api.getFittings).toHaveBeenCalledWith(expect.objectContaining({ cursor: "next-page" }))
     );
-    expect(await screen.findByText("Page 2 · 1 fitting")).toBeVisible();
+    expect(await screen.findByText("Showing 11–11 fitting")).toBeVisible();
   });
 
   it("shows fitting details without profile address or social media", async () => {

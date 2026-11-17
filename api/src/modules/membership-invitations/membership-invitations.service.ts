@@ -41,6 +41,7 @@ import {
   insertInvitationOutbox,
   insertInvitationRevokeOutbox,
   listOwnerInvitations,
+  countOwnerInvitations,
   lockInvitation,
   lockInvitationTenant,
   revokeInvitation,
@@ -174,11 +175,12 @@ export async function listMembershipInvitations(
   input: { tenantId: string; membershipId: string; principalId: string } & PaginationRequest,
 ): Promise<{
   items: OwnerMembershipInvitation[];
-  page_meta: { next_cursor: string | null; has_more: boolean };
+  page_meta: { next_cursor: string | null; has_more: boolean; total: number };
 }> {
   return withTenantTransaction(input.tenantId, input.principalId, async (client) => {
     await assertTenantOwnerMembership(client, input);
     await expirePendingInvitations(client, input.tenantId);
+    const total = await countOwnerInvitations(client, input.tenantId);
     const cursor = decodeCursor(input.cursor);
     const rows = await listOwnerInvitations(client, {
       tenantId: input.tenantId,
@@ -192,6 +194,7 @@ export async function listMembershipInvitations(
       items: pageRows.map(toOwnerContractInvitation),
       page_meta: {
         has_more: hasMore,
+        total,
         next_cursor: hasMore && last ? encodeCursor(last) : null,
       },
     };

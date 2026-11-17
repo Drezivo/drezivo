@@ -69,6 +69,7 @@ export interface ReservationListReadRow {
 
 export interface ReservationListReadPage {
   rows: ReservationListReadRow[];
+  total: number;
   nextCursor: string | null;
   hasMore: boolean;
 }
@@ -261,6 +262,10 @@ export async function listReservationsReadModel(
     )`);
   }
 
+  const count = await client.query<{ total: number }>(
+    `SELECT count(*)::int AS total FROM reservation r WHERE ${where.join(' AND ')}`,
+    values,
+  );
   const cursor = decodeListCursor(input.query.cursor, input.query.sort);
   if (cursor) {
     const keyPlaceholder = bind(cursor.key);
@@ -394,6 +399,7 @@ export async function listReservationsReadModel(
   return {
     rows,
     nextCursor: hasMore && last ? encodeListCursor(last, input.query.sort) : null,
+    total: count.rows[0]?.total ?? 0,
     hasMore,
   };
 }
