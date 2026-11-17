@@ -1,0 +1,32 @@
+@keyframes slideFromRight {
+  from {
+    opacity: 0;
+    transform: translateX(0.75rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+@keyframes slideFromLeft {
+  from {
+    opacity: 0;
+    transform: translateX(-0.75rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+.slideForward {
+  animation: slideFromRight 180ms ease-out;
+}
+.slideBackward {
+  animation: slideFromLeft 180ms ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .slideForward,
+  .slideBackward {
+    animation: none;
+  }
+}
