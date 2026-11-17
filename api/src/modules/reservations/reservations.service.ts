@@ -536,6 +536,7 @@ export async function getReservationList(
     page_meta: {
       next_cursor: page.nextCursor,
       has_more: page.hasMore,
+      total: page.total,
     },
   });
 }

@@ -195,7 +195,7 @@ describe("CustomersPage production wiring", () => {
         expect.objectContaining({ cursor: "next-cursor", limit: 10, status: "active" })
       )
     );
-    expect(screen.getByText("Page 2 · 1 customer")).toBeVisible();
+    expect(screen.getByText("Showing 11–11 customer")).toBeVisible();
 
     const requestCountBeforeSearch = api.getCustomers.mock.calls.length;
     fireEvent.change(screen.getByRole("textbox", { name: "Search customers" }), {
@@ -209,7 +209,7 @@ describe("CustomersPage production wiring", () => {
         status: "active",
       })
     );
-    expect(screen.getByText("Page 1 · 1 customer")).toBeVisible();
+    expect(screen.getByText("Showing 1–1 customer")).toBeVisible();
 
     fireEvent.pointerDown(screen.getByRole("button", { name: "Status: Active" }), {
       button: 0,
@@ -236,7 +236,7 @@ describe("CustomersPage production wiring", () => {
     fireEvent.click(within(screen.getByRole("navigation", { name: "Customers pagination" })).getByRole("button", { name: /Next/ }));
 
     await waitFor(() => expect(api.getCustomers).toHaveBeenCalledTimes(3));
-    expect(await screen.findByText("Page 1 · 1 customer")).toBeVisible();
+    expect(await screen.findByText("Showing 1–1 customer")).toBeVisible();
     expect(within(screen.getByRole("table", { name: "Customers" })).getByText("Real Database Customer")).toBeVisible();
   });
 

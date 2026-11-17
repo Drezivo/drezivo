@@ -366,6 +366,14 @@ export async function listOwnerInvitations(
   return result.rows;
 }
 
+export async function countOwnerInvitations(client: PoolClient, tenantId: string): Promise<number> {
+  const result = await client.query<{ total: number }>(
+    'SELECT count(*)::int AS total FROM membership_invitation WHERE tenant_id = $1',
+    [tenantId],
+  );
+  return result.rows[0]?.total ?? 0;
+}
+
 export function toSafeInvitation(row: InvitationRow | SafeInvitationRow): SafeInvitationRow {
   return {
     id: row.id,

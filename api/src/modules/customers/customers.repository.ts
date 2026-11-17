@@ -17,6 +17,7 @@ export interface CustomerListReadRow {
 
 export interface CustomerListReadPage {
   rows: CustomerListReadRow[];
+  total: number;
   nextCursor: string | null;
   hasMore: boolean;
 }
@@ -86,6 +87,7 @@ export interface CustomerFittingHistoryReadRow {
 
 export interface CustomerHistoryReadPage<T> {
   rows: T[];
+  total: number;
   nextCursor: string | null;
   hasMore: boolean;
 }
@@ -124,6 +126,11 @@ export async function listCustomersReadModel(
     ) LIKE lower(${search}) ESCAPE '\\'`);
   }
 
+  // Keep the count predicates identical to the list filters and exclude the cursor.
+  const count = await client.query<{ total: number }>(
+    `SELECT count(*)::int AS total FROM customer c WHERE $2::uuid IS NOT NULL AND ${where.join(' AND ')}`,
+    values,
+  );
   const cursor = decodeCustomerListCursor(input.query.cursor);
   if (cursor) {
     const key = bind(cursor.key);
@@ -175,6 +182,7 @@ export async function listCustomersReadModel(
   const last = rows.at(-1);
   return {
     rows,
+    total: count.rows[0]?.total ?? 0,
     hasMore,
     nextCursor: hasMore && last ? encodeCustomerListCursor(last) : null,
   };
@@ -467,6 +475,11 @@ export async function listCustomerReservationHistory(
 ): Promise<CustomerHistoryReadPage<CustomerReservationHistoryReadRow> | null> {
   if (!(await customerIsReadable(client, input.tenantId, input.customerId))) return null;
 
+  const count = await client.query<{ total: number }>(
+    'SELECT count(*)::int AS total FROM reservation WHERE tenant_id = $1 AND branch_id = $2 AND customer_id = $3::uuid',
+    [input.tenantId, input.branchId, input.customerId],
+  );
+
   const values: unknown[] = [input.tenantId, input.branchId, input.customerId];
   const cursor = decodeReservationHistoryCursor(input.cursor);
   const cursorClause = cursor
@@ -506,6 +519,7 @@ export async function listCustomerReservationHistory(
   const last = rows.at(-1);
   return {
     rows,
+    total: count.rows[0]?.total ?? 0,
     hasMore,
     nextCursor: hasMore && last ? encodeReservationHistoryCursor(last) : null,
   };
@@ -522,6 +536,11 @@ export async function listCustomerFittingHistory(
   },
 ): Promise<CustomerHistoryReadPage<CustomerFittingHistoryReadRow> | null> {
   if (!(await customerIsReadable(client, input.tenantId, input.customerId))) return null;
+
+  const count = await client.query<{ total: number }>(
+    'SELECT count(*)::int AS total FROM fitting_appointment WHERE tenant_id = $1 AND branch_id = $2 AND customer_id = $3::uuid',
+    [input.tenantId, input.branchId, input.customerId],
+  );
 
   const values: unknown[] = [input.tenantId, input.branchId, input.customerId];
   const cursor = decodeFittingHistoryCursor(input.cursor);
@@ -570,6 +589,7 @@ export async function listCustomerFittingHistory(
   const last = rows.at(-1);
   return {
     rows,
+    total: count.rows[0]?.total ?? 0,
     hasMore,
     nextCursor: hasMore && last ? encodeFittingHistoryCursor(last) : null,
   };

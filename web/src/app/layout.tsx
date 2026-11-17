@@ -9,6 +9,8 @@ export const metadata: Metadata = {
   title: { default: 'Drezivo', template: '%s | Drezivo' },
   description:
     'Drezivo — clothing rental management software for Philippine businesses, and the storefronts they publish.',
+  openGraph: { images: ['/marketing/drezivo_logo.png'] },
+  twitter: { card: 'summary_large_image', images: ['/marketing/drezivo_logo.png'] },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

@@ -16,7 +16,7 @@ import { Separator } from "@/components/ui/separator";
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
 import type { DrezivoApiError } from "@/lib/drezivo-api";
 
-type PageMeta = { next_cursor: string | null; has_more: boolean };
+type PageMeta = { next_cursor: string | null; has_more: boolean; total?: number | undefined };
 
 export function CustomerDetailsSheet({
   detail,
@@ -203,6 +203,8 @@ function CustomerDetails({
           items={reservationHistory}
           emptyLabel="No reservation history yet."
           meta={reservationMeta}
+          pageIndex={reservationPageIndex}
+          noun="reservation"
           canPrevious={reservationPageIndex > 0}
           onNext={onReservationNext}
           onPrevious={onReservationPrevious}
@@ -233,6 +235,8 @@ function CustomerDetails({
           items={fittingHistory}
           emptyLabel="No fitting history yet."
           meta={fittingMeta}
+          pageIndex={fittingPageIndex}
+          noun="fitting"
           canPrevious={fittingPageIndex > 0}
           onNext={onFittingNext}
           onPrevious={onFittingPrevious}
@@ -268,6 +272,8 @@ function HistorySection<T>({
   items,
   loading,
   meta,
+  pageIndex,
+  noun,
   onNext,
   onPrevious,
   onRetry,
@@ -281,6 +287,8 @@ function HistorySection<T>({
   items: readonly T[];
   loading: boolean;
   meta: PageMeta;
+  pageIndex: number;
+  noun: string;
   onNext: () => void;
   onPrevious: () => void;
   onRetry: () => void;
@@ -300,8 +308,9 @@ function HistorySection<T>({
       ) : null}
       {!loading && !error && items.length === 0 ? <p className="text-sm text-dashboard-muted">{emptyLabel}</p> : null}
       {!loading && !error && items.length > 0 ? <div className="space-y-2">{items.map((item, index) => <Card key={index} className="gap-0 py-0"><CardContent className="p-4">{renderItem(item)}</CardContent></Card>)}</div> : null}
-      {!loading && !error && items.length > 0 ? (
+      {!loading && !error ? (
         <div className="mt-3 flex items-center justify-between text-xs text-dashboard-muted">
+          <span>Showing {items.length ? pageIndex * 10 + 1 : 0}–{items.length ? pageIndex * 10 + items.length : 0}{meta.total === undefined ? "" : ` of ${meta.total}`} {noun}{meta.total === 1 ? "" : "s"}</span>
           <Button type="button" variant="ghost" size="sm" onClick={onPrevious} disabled={!canPrevious}>Previous</Button>
           <Button type="button" variant="ghost" size="sm" onClick={onNext} disabled={!meta.has_more || !meta.next_cursor}>Next</Button>
         </div>

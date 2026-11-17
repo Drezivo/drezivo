@@ -384,6 +384,7 @@ export function CalendarAvailabilityPage() {
           error={error}
           hasCatalogueFilter={hasCatalogueFilter}
           hasMore={timeline?.page_meta.has_more ?? false}
+          total={timeline?.page_meta.total}
           isLoading={isLoading}
           items={timeline?.rows ?? []}
           onNextPage={goNextPage}
@@ -688,6 +689,7 @@ function AvailabilityLegend() {
 
 function AvailabilityTimeline({
   currentPage,
+  total,
   days,
   error,
   hasCatalogueFilter,
@@ -713,6 +715,7 @@ function AvailabilityTimeline({
   error: DrezivoApiError | null;
   hasCatalogueFilter: boolean;
   hasMore: boolean;
+  total?: number | undefined;
   isLoading: boolean;
   items: readonly ClothingAvailabilityTimelineRow[];
   onNextPage: () => void;
@@ -730,7 +733,7 @@ function AvailabilityTimeline({
   windowStart: string | null;
 }) {
   const firstShown = items.length === 0 ? 0 : pageIndex * pageSize + 1;
-  const lastShown = pageIndex * pageSize + items.length;
+  const lastShown = items.length === 0 ? 0 : pageIndex * pageSize + items.length;
 
   return (
     <Card className="gap-0 overflow-hidden py-0">
@@ -820,10 +823,10 @@ function AvailabilityTimeline({
           </div>
         </div>
 
-        {!isLoading && !error && items.length > 0 ? (
+        {!isLoading && !error ? (
           <div className="flex flex-col gap-3 border-t border-dashboard-border px-4 py-3 text-xs text-dashboard-muted sm:flex-row sm:items-center sm:justify-between">
             <p>
-              Showing {firstShown}–{lastShown} clothing items · Page {currentPage}
+              Showing {firstShown}–{lastShown}{total === undefined ? "" : ` of ${total}`} {total === 1 ? "clothing item" : "clothing items"}
             </p>
 
             <div className="flex flex-wrap items-center gap-1">

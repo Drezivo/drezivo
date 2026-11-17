@@ -345,6 +345,7 @@ export interface ClothingAvailabilityTimelineFacets {
 }
 
 export interface ClothingAvailabilityTimelinePage {
+  total: number;
   rows: ClothingAvailabilityTimelineAssetRow[];
   nextCursor: string | null;
   hasMore: boolean;
@@ -429,18 +430,6 @@ export async function listClothingAvailabilityTimelineAssets(
     where.push(`pv.size_label IS ${input.query.size_kind === 'free_size' ? '' : 'NOT '}NULL`);
   }
 
-  const cursor = decodeClothingAvailabilityTimelineCursor(input.query.cursor);
-  if (cursor) {
-    const productName = bind(cursor.productName);
-    const sizeLabel = bind(cursor.sizeLabel);
-    const colorLabel = bind(cursor.colorLabel);
-    const assetId = bind(cursor.assetId);
-    where.push(
-      `(lower(p.name), COALESCE(lower(pv.size_label), ''), lower(COALESCE(pv.color_label, '')), pa.id) >
-         (${productName}, ${sizeLabel}, ${colorLabel}, ${assetId}::uuid)`,
-    );
-  }
-
   const hasCatalogueFilter = Boolean(
     input.query.search || input.query.category_id || input.query.size_label || input.query.size_kind,
   );
@@ -450,9 +439,7 @@ export async function listClothingAvailabilityTimelineAssets(
     where.push('(activity.has_reserved OR activity.has_rented OR activity.has_unavailable)');
   }
 
-  const limit = bind(input.query.limit + 1);
-  const result = await client.query<ClothingAvailabilityTimelineAssetRow>(
-    `WITH candidate_assets AS MATERIALIZED (
+  const candidates = `WITH candidate_assets AS NOT MATERIALIZED (
        SELECT
          pa.id AS asset_id,
          p.id AS product_id,
@@ -552,8 +539,24 @@ export async function listClothingAvailabilityTimelineAssets(
          -- mode switch must not hide an existing rental/recovery lane, but archived stock should
          -- not appear as an idle selectable asset after the switch.
          AND (pv.status = 'active' OR activity.has_reserved OR activity.has_rented OR activity.has_unavailable)
-       ORDER BY lower(p.name) ASC, COALESCE(lower(pv.size_label), '') ASC,
-                lower(COALESCE(pv.color_label, '')) ASC, pa.id ASC
+     )`;
+  const count = await client.query<{ total: number }>(
+    `${candidates} SELECT count(*)::int AS total FROM candidate_assets`, values,
+  );
+  const cursor = decodeClothingAvailabilityTimelineCursor(input.query.cursor);
+  let cursorClause = '';
+  if (cursor) {
+    const productName = bind(cursor.productName);
+    const sizeLabel = bind(cursor.sizeLabel);
+    const colorLabel = bind(cursor.colorLabel);
+    const assetId = bind(cursor.assetId);
+    cursorClause = `WHERE (sort_product_name, sort_size_label, sort_color_label, asset_id) > (${productName}, ${sizeLabel}, ${colorLabel}, ${assetId}::uuid)`;
+  }
+  const limit = bind(input.query.limit + 1);
+  const result = await client.query<ClothingAvailabilityTimelineAssetRow>(
+    `${candidates}, paged_assets AS MATERIALIZED (
+       SELECT * FROM candidate_assets ${cursorClause}
+       ORDER BY sort_product_name, sort_size_label, sort_color_label, asset_id
        LIMIT ${limit}
      )
      SELECT
@@ -573,7 +576,7 @@ export async function listClothingAvailabilityTimelineAssets(
        candidate.sort_product_name,
        candidate.sort_size_label,
        candidate.sort_color_label
-     FROM candidate_assets candidate
+     FROM paged_assets candidate
      LEFT JOIN LATERAL (
        SELECT f.id AS file_id, f.storage_key, f.version_id
        FROM product_image pi
@@ -602,6 +605,7 @@ export async function listClothingAvailabilityTimelineAssets(
     rows,
     hasMore,
     nextCursor: hasMore && last ? encodeClothingAvailabilityTimelineCursor(last) : null,
+    total: count.rows[0]?.total ?? 0,
   };
 }
 

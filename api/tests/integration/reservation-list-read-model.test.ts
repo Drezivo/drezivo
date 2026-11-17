@@ -145,6 +145,7 @@ describe('RSV Phase 1 reservation read model', async () => {
       search: '09171234567',
     });
     expect(byPhone.items.map((item) => item.id)).toEqual([alphaId]);
+    expect(byPhone.page_meta.total).toBe(1);
 
     const byReference = await getReservationList(context, {
       limit: 20,

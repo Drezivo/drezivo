@@ -27,8 +27,9 @@ export function buildStorefrontMetadata(store: PublicStorefront): Metadata {
       url: canonicalUrl,
       siteName: store.name,
       type: 'website',
-      ...(image ? { images: [{ url: image }] } : {}),
+      images: [{ url: image ?? '/marketing/drezivo_logo.png' }],
     },
+    twitter: { card: 'summary_large_image', images: [image ?? '/marketing/drezivo_logo.png'] },
     robots: { index: true, follow: true },
   };
 }
@@ -41,7 +42,8 @@ export function buildItemMetadata(store: PublicStorefront, item: ItemDetail): Me
     title: item.name,
     description,
     alternates: { canonical: canonicalUrl },
-    openGraph: { title: `${item.name} · ${store.name}`, description, url: canonicalUrl, ...(item.image_urls[0] ? { images: [{ url: item.image_urls[0] }] } : {}) },
+    openGraph: { title: `${item.name} · ${store.name}`, description, url: canonicalUrl, images: [{ url: item.image_urls[0] ?? '/marketing/drezivo_logo.png' }] },
+    twitter: { card: 'summary_large_image', images: [item.image_urls[0] ?? '/marketing/drezivo_logo.png'] },
   };
 }
 
@@ -63,6 +65,8 @@ export function buildMarketingMetadata(title: string, description: string): Meta
 export function buildGuestFlowMetadata(title: string): Metadata {
   return {
     title: `${title} | ${SITE_NAME}`,
+    openGraph: null,
+    twitter: null,
     robots: { index: false, follow: false, nocache: true },
   };
 }
