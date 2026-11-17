@@ -14,7 +14,7 @@ export default async function BookingPage({ params, searchParams }: { params: Pr
   const store = await readStore(slug);
   if (!store) notFound();
   return (
-    <div className="mx-auto max-w-7xl px-5 pb-8 pt-12 sm:px-8 sm:pt-16">
+    <div className="mx-auto max-w-[71.25rem] px-5 pb-8 pt-12 sm:px-8 sm:pt-16">
       <BookingStatus store={store} reservationId={parsedReservationId.data} />
     </div>
   );

@@ -5,6 +5,7 @@ import type { PublicStorefront } from '@drezivo/contracts';
 import { SITE_URL } from '@/lib/site-urls';
 
 import { storeNav } from './store-nav';
+import { FooterWordmark } from './footer-wordmark';
 
 export function StoreFooter({ store }: { store: PublicStorefront }) {
   const { contact } = store;
@@ -15,15 +16,15 @@ export function StoreFooter({ store }: { store: PublicStorefront }) {
   ].filter((link): link is { label: string; href: string } => link !== null);
 
   return (
-    <footer id="contact" className="mt-24 border-t border-sf-line">
-      <div className="mx-auto grid max-w-7xl gap-12 px-5 py-16 sm:px-8 md:grid-cols-[1.4fr_1fr_1fr_1fr]">
+    <footer id="contact" className="mt-24 overflow-hidden bg-[color:var(--sf-footer-bg)] text-[color:var(--sf-footer-ink)] [--sf-muted:var(--sf-footer-ink)] [--sf-ink:var(--sf-footer-ink)] [--sf-line:color-mix(in_srgb,var(--sf-footer-ink)_35%,transparent)]">
+      <div className="mx-auto grid max-w-[71.25rem] gap-12 px-5 py-16 sm:px-8 md:grid-cols-[1.4fr_1fr_1fr_1fr]">
         <div className="max-w-sm">
           <p className="font-sf-display text-3xl font-light">{store.name}</p>
           {store.description ? <p className="mt-4 whitespace-pre-line text-sm leading-7 text-sf-muted">{store.description}</p> : null}
         </div>
 
         <div>
-          <h2 className="text-sm font-medium">Visit</h2>
+          <h2 className="font-sf-display text-2xl">Visit Us</h2>
           <ul className="mt-4 space-y-2 text-sm text-sf-muted">
             {contact.address ? <li className="whitespace-pre-line">{contact.address}</li> : null}
             {contact.phone ? (
@@ -44,10 +45,9 @@ export function StoreFooter({ store }: { store: PublicStorefront }) {
         </div>
 
         <div>
-          <h2 className="text-sm font-medium">Shop</h2>
+          <h2 className="font-sf-display text-2xl">Shop</h2>
           <ul className="mt-4 space-y-2 text-sm text-sf-muted">
             {storeNav(store)
-              .filter((item) => item.label !== 'Contact')
               .map((item) => (
                 <li key={item.href}>
                   <Link href={item.href} className="hover:text-sf-ink">
@@ -60,7 +60,7 @@ export function StoreFooter({ store }: { store: PublicStorefront }) {
 
         {socials.length > 0 ? (
           <div>
-            <h2 className="text-sm font-medium">Follow</h2>
+            <h2 className="font-sf-display text-2xl">Follow</h2>
             <ul className="mt-4 space-y-2 text-sm text-sf-muted">
               {socials.map((social) => (
                 <li key={social.href}>
@@ -74,7 +74,7 @@ export function StoreFooter({ store }: { store: PublicStorefront }) {
         ) : null}
       </div>
       <div className="border-t border-sf-line">
-        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-2 px-5 py-6 text-xs text-sf-muted sm:px-8">
+        <div className="mx-auto flex max-w-[71.25rem] flex-wrap items-center justify-between gap-2 px-5 py-6 text-xs text-sf-muted sm:px-8">
           <p>
             © {new Date().getFullYear()} {store.name}
           </p>
@@ -86,6 +86,7 @@ export function StoreFooter({ store }: { store: PublicStorefront }) {
           </p>
         </div>
       </div>
+      <FooterWordmark name={store.name} />
     </footer>
   );
 }
