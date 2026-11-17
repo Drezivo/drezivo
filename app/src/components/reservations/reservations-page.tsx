@@ -5,8 +5,6 @@ import { useAuth } from "@clerk/nextjs";
 import {
   CalendarDays,
   ChevronDown,
-  ChevronLeft,
-  ChevronRight,
   Plus,
   Search,
   Shirt,
@@ -35,6 +33,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import { ListPagination } from "@/components/ui/list-pagination";
 import {
   Table,
   TableBody,
@@ -386,7 +385,10 @@ export function ReservationsPage() {
             )}
 
             {!isLoading && !error && !dateRangeError ? (
-              <ReservationPagination
+              <ListPagination
+                label="Reservations pagination"
+                noun={{ one: "reservation", other: "reservations" }}
+                pageSize={PAGE_SIZE}
                 pageIndex={pageIndex}
                 shown={rows.length}
                 total={pageMeta.total}
@@ -906,63 +908,6 @@ function DateCell({ value, timeZone }: { value: string; timeZone: string }) {
           timeZone,
         }).format(date)}
       </p>
-    </div>
-  );
-}
-
-function ReservationPagination({
-  hasMore,
-  onNext,
-  onPrevious,
-  pageIndex,
-  shown,
-  total,
-}: {
-  hasMore: boolean;
-  onNext: () => void;
-  onPrevious: () => void;
-  pageIndex: number;
-  shown: number;
-  total?: number | undefined;
-}) {
-  return (
-    <div className="flex flex-col gap-3 border-t border-dashboard-border px-4 py-3 text-xs text-dashboard-muted sm:flex-row sm:items-center sm:justify-between">
-      <p>
-        Showing {shown ? pageIndex * PAGE_SIZE + 1 : 0}–{shown ? pageIndex * PAGE_SIZE + shown : 0}{total === undefined ? "" : ` of ${total}`} {(total ?? shown) === 1 ? "reservation" : "reservations"}
-      </p>
-      <div className="flex items-center gap-1">
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          aria-label="Previous reservations page"
-          disabled={pageIndex === 0}
-          onClick={onPrevious}
-          className={cn(
-            "h-8 w-8 bg-transparent hover:bg-transparent",
-            pageIndex === 0 ? "cursor-not-allowed text-dashboard-muted opacity-35" : "text-dashboard-navy hover:text-dashboard-accent"
-          )}
-        >
-          <ChevronLeft className="h-4 w-4" aria-hidden="true" />
-        </Button>
-        <span className="min-w-8 px-2 text-center font-medium text-dashboard-navy">
-          {pageIndex + 1}
-        </span>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          aria-label="Next reservations page"
-          disabled={!hasMore}
-          onClick={onNext}
-          className={cn(
-            "h-8 w-8 bg-transparent hover:bg-transparent",
-            !hasMore ? "cursor-not-allowed text-dashboard-muted opacity-35" : "text-dashboard-navy hover:text-dashboard-accent"
-          )}
-        >
-          <ChevronRight className="h-4 w-4" aria-hidden="true" />
-        </Button>
-      </div>
     </div>
   );
 }

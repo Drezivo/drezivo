@@ -12,6 +12,8 @@ describe("list pagination ranges", () => {
     expect(screen.getByRole("button", { name: /next/i })).toBeDisabled();
     fireEvent.click(screen.getByRole("button", { name: /previous/i }));
     expect(previous).toHaveBeenCalledOnce();
+    expect(screen.getByRole("button", { name: "Previous customers page" })).toHaveTextContent("");
+    expect(screen.getByRole("button", { name: "Next customers page" })).toHaveTextContent("");
 
     rerender(<ListPagination label="Customers pagination" noun={{ one: "customer", other: "customers" }} pageIndex={0} pageSize={10} shown={1} total={1} hasMore={false} onNext={next} onPrevious={previous} />);
     expect(screen.getByText("Showing 1–1 of 1 customer")).toBeVisible();

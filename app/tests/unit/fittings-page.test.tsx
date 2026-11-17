@@ -390,7 +390,7 @@ describe("FittingsPage production cutover", () => {
       expect(api.getFittings).toHaveBeenCalledWith(expect.objectContaining({ status: "pending" }))
     );
 
-    fireEvent.click(await screen.findByRole("button", { name: "Next" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Next fittings page" }));
     await waitFor(() =>
       expect(api.getFittings).toHaveBeenCalledWith(expect.objectContaining({ cursor: "next-page" }))
     );
