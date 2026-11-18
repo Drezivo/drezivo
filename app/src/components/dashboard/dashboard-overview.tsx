@@ -239,26 +239,24 @@ export function DashboardOverview() {
               >
                 <Card
                   data-mobile-card="keep"
-                  className="min-h-36 justify-between py-4 transition-colors group-hover:border-dashboard-accent/50 group-focus-visible:border-dashboard-accent max-xl:h-full sm:min-h-[166px] sm:py-5"
+                  className="h-full min-h-28 justify-between py-4 transition-colors group-hover:border-dashboard-accent/50 group-focus-visible:border-dashboard-accent sm:min-h-32 sm:py-5"
                 >
-                  <CardContent className="flex h-full flex-col justify-between px-4 sm:px-5 max-xl:h-auto max-xl:justify-start max-xl:gap-4">
-                    <div className="flex justify-end">
+                  <CardContent className="flex flex-1 flex-col justify-between gap-4 px-4 sm:px-5">
+                    <div className="flex items-center justify-between gap-2">
+                      <CardTitle as="h2" className="min-w-0 text-3xl tabular-nums text-dashboard-navy">
+                        {value.toLocaleString("en-PH")}
+                      </CardTitle>
                       <ChevronRight
-                        className="h-5 w-5 text-dashboard-navy transition-transform group-hover:translate-x-0.5"
+                        className="h-5 w-5 shrink-0 text-dashboard-navy transition-transform group-hover:translate-x-0.5"
                         aria-hidden="true"
                       />
                     </div>
-                    <div className="mt-5 max-xl:mt-0">
-                      <CardTitle as="h2" className="text-3xl tabular-nums text-dashboard-navy">
-                        {value.toLocaleString("en-PH")}
-                      </CardTitle>
-                      <CardTitle
-                        as="h3"
-                        className="mt-1 text-sm font-medium text-dashboard-navy/80"
-                      >
-                        {metric.label}
-                      </CardTitle>
-                    </div>
+                    <CardTitle
+                      as="h3"
+                      className="mt-1 text-sm font-medium text-dashboard-navy/80"
+                    >
+                      {metric.label}
+                    </CardTitle>
                   </CardContent>
                 </Card>
               </Link>
