@@ -368,8 +368,8 @@ export function BookingDrawer({ store, item, variant, onClose }: { store: Public
           {state.step === 'details' ? (
             <div className="space-y-5">
               <h3 className="font-sf-display text-2xl">Your details</h3>
-              <TextField id="booking-email" label="Email address" error={fieldErrors.email} type="email" autoComplete="email" inputMode="email" value={state.customer.email} onChange={(email) => updateCustomer('email', email)} />
               <TextField id="booking-full_name" label="Full name" error={fieldErrors.full_name} autoComplete="name" value={state.customer.full_name} onChange={(full_name) => updateCustomer('full_name', full_name)} />
+              <TextField id="booking-email" label="Email address" error={fieldErrors.email} type="email" autoComplete="email" inputMode="email" value={state.customer.email} onChange={(email) => updateCustomer('email', email)} />
               {requirements.phone !== 'hidden' ? (
                 <TextField id="booking-phone" label={`Mobile number${requirements.phone === 'optional' ? ' (optional)' : ''}`} error={fieldErrors.phone} autoComplete="tel" inputMode="numeric" placeholder="09171234567" value={state.customer.phone} onChange={(phone) => updateCustomer('phone', phone.replace(/\D/g, '').slice(0, 11))} />
               ) : null}
@@ -553,7 +553,7 @@ export function BookingDrawer({ store, item, variant, onClose }: { store: Public
                 onClick={() => {
                   const { fieldErrors: errors, formError } = detailsProblems();
                   setFieldErrors(errors);
-                  const firstInvalidField = (['email', 'full_name', 'phone', 'address', 'social_handle', 'event_date'] as const)
+                  const firstInvalidField = (['full_name', 'email', 'phone', 'address', 'social_handle', 'event_date'] as const)
                     .find((field) => errors[field]);
                   if (firstInvalidField) {
                     focusRequest.current += 1;
