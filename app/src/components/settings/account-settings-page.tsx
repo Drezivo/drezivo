@@ -86,6 +86,16 @@ export function AccountSettingsPage() {
           }}
         />
       </div>
+      {hash === SECURITY_HASH ? (
+        <Section title="Delete account">
+          <p className="text-sm text-dashboard-muted">
+            To request deletion of your account, contact Drezivo support at{" "}
+            <a className="break-all font-medium text-dashboard-accent underline underline-offset-2" href="mailto:drezivoshop@gmail.com">
+              drezivoshop@gmail.com
+            </a>.
+          </p>
+        </Section>
+      ) : null}
     </div>
   );
 }
