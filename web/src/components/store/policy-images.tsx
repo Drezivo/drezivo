@@ -12,8 +12,8 @@ export function PolicyImages({ urls, shopName }: { urls: readonly string[]; shop
         return (
           <li key={url}>
             <figure>
-              <a href={url} target="_blank" rel="noopener noreferrer" className="mx-auto block w-fit max-w-full">
-                <StorefrontMediaImage src={url} srcSet={mediaImageSrcSet(url)} sizes="(min-width: 1024px) 60vw, 100vw" alt={label} loading={index === 0 ? 'eager' : 'lazy'} className="mx-auto block h-auto max-h-[85svh] w-auto max-w-full border border-sf-line bg-white object-contain" />
+              <a href={url} target="_blank" rel="noopener noreferrer" className="block w-fit max-w-full">
+                <StorefrontMediaImage src={url} srcSet={mediaImageSrcSet(url)} sizes="(min-width: 1024px) 60vw, 100vw" alt={label} loading={index === 0 ? 'eager' : 'lazy'} className="block h-auto max-h-[65svh] w-auto max-w-full border border-sf-line bg-white object-contain" />
               </a>
               <figcaption className="mt-3 flex flex-wrap items-center justify-between gap-2 text-sm text-sf-muted">
                 <span>

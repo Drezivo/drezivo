@@ -92,6 +92,16 @@ describe('reservation details validation', () => {
     vi.mocked(getGuestQuote).mockResolvedValue({ rental_total_minor: '60000', security_required_minor: '50000', delivery_total_minor: '0', due_now_minor: '110000', currency: 'PHP' });
   });
 
+  it('places full name before email in keyboard order', async () => {
+    openDetails();
+    const name = screen.getByLabelText('Full name');
+    const email = screen.getByLabelText('Email address');
+    expect(name.compareDocumentPosition(email) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    name.focus();
+    await userEvent.setup().tab();
+    expect(document.activeElement).toBe(email);
+  });
+
   it('shows an invalid email beside the field, focuses it into view, and clears it when corrected', async () => {
     openDetails();
     fireEvent.change(screen.getByLabelText('Full name'), { target: { value: 'QA Test' } });
@@ -142,6 +152,7 @@ describe('reservation details validation', () => {
       }),
     ).toEqual(invalidFields.map(([, errorId]) => ['true', errorId, errorId]));
     expect(await screen.findByText('Enter your full name.')).not.toBeNull();
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByLabelText('Full name')));
 
     fireEvent.change(screen.getByLabelText('Full name'), { target: { value: 'QA Test' } });
     expect(screen.queryByText('Enter your full name.')).toBeNull();
