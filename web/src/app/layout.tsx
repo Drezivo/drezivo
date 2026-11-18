@@ -9,7 +9,11 @@ export const metadata: Metadata = {
   title: { default: 'Drezivo', template: '%s | Drezivo' },
   description:
     'Drezivo — clothing rental management software for Philippine businesses, and the storefronts they publish.',
-  openGraph: { images: ['/marketing/drezivo_logo.png'] },
+  openGraph: {
+    type: 'website',
+    siteName: 'Drezivo',
+    images: [{ url: '/marketing/drezivo_logo.png', width: 1254, height: 1254, type: 'image/png', alt: 'Drezivo logo' }],
+  },
   twitter: { card: 'summary_large_image', images: ['/marketing/drezivo_logo.png'] },
 };
 
