@@ -28,6 +28,16 @@ export async function routeAccess(
   auth: MiddlewareAuth,
   request: NextRequest
 ): Promise<NextResponse | undefined> {
+  // Send unauthenticated visitors and link crawlers to a public page with preview metadata.
+  // The root workspace remains protected for signed-in visitors.
+  if (request.nextUrl.pathname === "/" && (request.method === "GET" || request.method === "HEAD")) {
+    const { userId } = await auth();
+    if (!userId) {
+      const response = NextResponse.redirect(new URL("/sign-in", request.url));
+      response.headers.set("Cache-Control", "private, no-store");
+      return response;
+    }
+  }
   if (isAuthPage(request)) {
     const { userId } = await auth();
     return userId ? NextResponse.redirect(new URL("/auth/resolve", request.url)) : undefined;
