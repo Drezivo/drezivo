@@ -5,7 +5,6 @@ import { useAuth } from "@clerk/nextjs";
 import {
   Archive,
   Boxes,
-  ChevronLeft,
   ChevronRight,
   Layers3,
   MoreHorizontal,
@@ -39,6 +38,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import { ListPagination } from "@/components/ui/list-pagination";
 import {
   Table,
   TableBody,
@@ -302,9 +302,6 @@ export function ClothingPage() {
     setPageIndex((current) => Math.max(0, current - 1));
   };
 
-  const pageRangeStart = summary.matching_products === 0 ? 0 : pageIndex * PAGE_SIZE + 1;
-  const pageRangeEnd = pageRangeStart === 0 ? 0 : pageRangeStart + rows.length - 1;
-
   return (
     <div className="min-h-full bg-dashboard-canvas px-ws-gutter py-6">
       <div className="mx-auto flex w-full max-w-screen-2xl flex-col gap-4">
@@ -493,47 +490,19 @@ export function ClothingPage() {
               </>
             )}
 
-            {!isLoading && !error && rows.length > 0 ? (
-              <div className="flex flex-col gap-3 border-t border-dashboard-border px-4 py-3 text-xs text-dashboard-muted sm:flex-row sm:items-center sm:justify-between">
-                <p>
-                  Showing {pageRangeStart}–{pageRangeEnd} of {summary.matching_products}
-                </p>
-                <div className="flex items-center gap-1">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    aria-label="Previous clothing page"
-                    disabled={pageIndex === 0}
-                    onClick={goPrevious}
-                    className={cn(
-                      "h-8 w-8",
-                      pageIndex === 0
-                        ? "cursor-not-allowed text-dashboard-muted opacity-35"
-                        : "text-dashboard-navy hover:bg-transparent hover:text-dashboard-accent"
-                    )}
-                  >
-                    <ChevronLeft className="h-4 w-4" />
-                  </Button>
-                  <span className="min-w-8 px-2 text-center font-medium text-dashboard-navy">
-                    {pageIndex + 1}
-                  </span>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    aria-label="Next clothing page"
-                    disabled={!pageMeta.has_more || !pageMeta.next_cursor}
-                    onClick={goNext}
-                    className={cn(
-                      "h-8 w-8",
-                      !pageMeta.has_more || !pageMeta.next_cursor
-                        ? "cursor-not-allowed text-dashboard-muted opacity-35"
-                        : "text-dashboard-navy hover:bg-transparent hover:text-dashboard-accent"
-                    )}
-                  >
-                    <ChevronRight className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
+            {!isLoading && !error ? (
+              <ListPagination
+                label="Clothing pagination"
+                noun={{ one: "clothing item", other: "clothing items" }}
+                controlLabel="clothing"
+                pageIndex={pageIndex}
+                pageSize={PAGE_SIZE}
+                shown={rows.length}
+                total={summary.matching_products}
+                hasMore={pageMeta.has_more && Boolean(pageMeta.next_cursor)}
+                onNext={goNext}
+                onPrevious={goPrevious}
+              />
             ) : null}
           </CardContent>
         </Card>

@@ -2,9 +2,7 @@ import { StorefrontMediaImage } from '@/components/store/storefront-media-image'
 import { mediaImageSrcSet } from '@/lib/media-image-srcset';
 
 /**
- * A shop's rental terms published as pictures of its own policy. Each page is shown at the full
- * reading width so printed text stays legible, never cropped, and opens at full resolution for
- * zooming on a phone.
+ * A shop's rental terms published as uncropped pictures, with full-size links for reading.
  */
 export function PolicyImages({ urls, shopName }: { urls: readonly string[]; shopName: string }) {
   return (
@@ -14,9 +12,8 @@ export function PolicyImages({ urls, shopName }: { urls: readonly string[]; shop
         return (
           <li key={url}>
             <figure>
-              {/* Edge to edge on phones (the page gutter is 20px) and the whole page opens full size, so small print can be zoomed. */}
-              <a href={url} target="_blank" rel="noopener noreferrer" className="-mx-5 block sm:mx-0">
-                <StorefrontMediaImage src={url} srcSet={mediaImageSrcSet(url)} sizes="100vw" alt={label} loading={index === 0 ? 'eager' : 'lazy'} className="h-auto w-full border-y border-sf-line bg-white object-contain sm:border" />
+              <a href={url} target="_blank" rel="noopener noreferrer" className="block w-fit max-w-full">
+                <StorefrontMediaImage src={url} srcSet={mediaImageSrcSet(url)} sizes="(min-width: 1024px) 60vw, 100vw" alt={label} loading={index === 0 ? 'eager' : 'lazy'} className="block h-auto max-h-[65svh] w-auto max-w-full border border-sf-line bg-white object-contain" />
               </a>
               <figcaption className="mt-3 flex flex-wrap items-center justify-between gap-2 text-sm text-sf-muted">
                 <span>

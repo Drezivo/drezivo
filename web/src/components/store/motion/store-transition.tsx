@@ -1,121 +1,94 @@
 'use client';
 
+import { usePathname } from 'next/navigation';
+import { useEffect, useRef, useState } from 'react';
 import gsap from 'gsap';
-import { usePathname, useRouter } from 'next/navigation';
-import { useCallback, useEffect, useRef } from 'react';
 
-import { lockPageScroll } from './scroll';
+const MIN_VISIBLE_MS = 1200;
+const MAX_VISIBLE_MS = 8000;
+const TILE_COUNT = 96;
 
-/** Enough cells for the largest grid (12 × 8); the grid itself is sized by CSS breakpoints (globals.css). */
-const CELL_COUNT = 96;
-/** A page that never arrives must not leave the shop covered. */
-const MAX_COVER_MS = 8000;
-
-/**
- * The landing page's mosaic, in the shop's own colours: on a link to another page of this
- * storefront the screen breaks into blocks that appear in random order, holds while the next page
- * renders, then clears block by block. Blocks are painted with the shop's --sf-* tokens (see
- * .sf-mosaic in globals.css), so every theme gets its own transition. Reduced motion, modified
- * clicks, other sites, and links within the same page navigate normally.
- */
+/** Show the store's mosaic without delaying or intercepting navigation. */
 export function StoreTransition({ slug }: { slug: string }) {
-  const router = useRouter();
   const pathname = usePathname();
+  const currentPath = useRef(pathname);
+  const startedAt = useRef<number | null>(null);
+  const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const fallbackTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const overlay = useRef<HTMLDivElement>(null);
-  const pending = useRef<null | (() => void)>(null);
-  const busy = useRef(false);
+  const [phase, setPhase] = useState<'cover' | 'reveal' | null>(null);
 
-  const cells = () => Array.from(overlay.current?.children ?? []) as HTMLElement[];
-
-  const cover = useCallback(
-    () =>
-      new Promise<void>((resolve) => {
-        const root = overlay.current;
-        if (!root) return resolve();
-        root.dataset['active'] = '';
-        gsap.killTweensOf(cells());
-        gsap.fromTo(
-          cells(),
-          { autoAlpha: 0 },
-          { autoAlpha: 1, duration: 0.16, ease: 'none', stagger: { amount: 0.42, from: 'random' }, onComplete: resolve },
-        );
-      }),
-    [],
-  );
-
-  const reveal = useCallback(
-    () =>
-      new Promise<void>((resolve) => {
-        const root = overlay.current;
-        if (!root) return resolve();
-        gsap.to(cells(), {
-          autoAlpha: 0,
-          duration: 0.2,
-          ease: 'none',
-          stagger: { amount: 0.5, from: 'random' },
-          onComplete: () => {
-            delete root.dataset['active'];
-            resolve();
-          },
-        });
-      }),
-    [],
-  );
+  useEffect(() => {
+    if (pathname === currentPath.current) return;
+    currentPath.current = pathname;
+    if (startedAt.current === null) return;
+    const remaining = Math.max(0, MIN_VISIBLE_MS - (Date.now() - startedAt.current));
+    if (hideTimer.current !== null) clearTimeout(hideTimer.current);
+    hideTimer.current = setTimeout(() => {
+      startedAt.current = null;
+      if (fallbackTimer.current !== null) clearTimeout(fallbackTimer.current);
+      setPhase('reveal');
+    }, remaining);
+  }, [pathname]);
 
   useEffect(() => {
     const base = `/s/${slug}`;
+    const isStorePage = (path: string) => (path === base || path.startsWith(`${base}/`)) && !path.startsWith(`${base}/preview`);
+    const show = () => {
+      if (hideTimer.current !== null) clearTimeout(hideTimer.current);
+      if (fallbackTimer.current !== null) clearTimeout(fallbackTimer.current);
+      startedAt.current = Date.now();
+      setPhase('cover');
+      fallbackTimer.current = setTimeout(() => {
+        startedAt.current = null;
+        setPhase('reveal');
+      }, MAX_VISIBLE_MS);
+    };
     const onClick = (event: MouseEvent) => {
-      if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
       if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-      const link = (event.target as Element | null)?.closest?.('a[href]');
+      if (!(event.target instanceof Element)) return;
+      const link = event.target.closest('a[href]');
       if (!(link instanceof HTMLAnchorElement) || (link.target && link.target !== '_self') || link.hasAttribute('download')) return;
       const url = new URL(link.href, window.location.href);
-      if (url.origin !== window.location.origin) return;
-      if (url.pathname !== base && !url.pathname.startsWith(`${base}/`)) return;
-      // Leaving preview is a server redirect, not a page of the shop.
-      if (url.pathname.startsWith(`${base}/preview`)) return;
-      // Same page (catalogue filters, in-page sections): no transition.
-      if (url.pathname === window.location.pathname) return;
-      event.preventDefault();
-      if (busy.current) return;
-      busy.current = true;
-      void (async () => {
-        const unlock = lockPageScroll();
-        try {
-          await cover();
-          const arrived = new Promise<void>((resolve) => {
-            pending.current = resolve;
-            window.setTimeout(resolve, MAX_COVER_MS);
-          });
-          router.push(`${url.pathname}${url.search}${url.hash}`);
-          await arrived;
-        } finally {
-          pending.current = null;
-          unlock();
-          await reveal();
-          busy.current = false;
-        }
-      })();
+      if (url.origin !== window.location.origin || !isStorePage(url.pathname) || url.pathname === window.location.pathname) return;
+      show();
     };
-    // Capture phase: runs before Next's Link handler, which then sees the prevented event and skips
-    // its own navigation while the mosaic takes over.
+    const onPopState = () => {
+      // The booking proof intercepts history navigation to ask for confirmation.
+      if (currentPath.current === `${base}/booking`) return;
+      if (window.location.pathname !== currentPath.current && isStorePage(window.location.pathname)) show();
+    };
     document.addEventListener('click', onClick, true);
-    return () => document.removeEventListener('click', onClick, true);
-  }, [cover, reveal, router, slug]);
+    window.addEventListener('popstate', onPopState);
+    return () => {
+      document.removeEventListener('click', onClick, true);
+      window.removeEventListener('popstate', onPopState);
+      if (hideTimer.current !== null) clearTimeout(hideTimer.current);
+      if (fallbackTimer.current !== null) clearTimeout(fallbackTimer.current);
+    };
+  }, [slug]);
 
-  // The new page has rendered: release the waiting transition after two frames of layout.
   useEffect(() => {
-    const resolve = pending.current;
-    if (!resolve) return;
-    pending.current = null;
-    requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
-  }, [pathname]);
+    const tiles = overlay.current?.querySelectorAll<HTMLElement>('.sf-mosaic-tile');
+    if (!tiles || !phase) return;
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      if (phase === 'cover') gsap.set(tiles, { autoAlpha: 1 });
+      else setPhase(null);
+      return;
+    }
+    if (phase === 'cover') {
+      gsap.fromTo(tiles, { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.2, ease: 'none', stagger: { amount: 0.3, from: 'random' } });
+    } else {
+      gsap.to(tiles, { autoAlpha: 0, duration: 0.2, ease: 'none', stagger: { amount: 0.3, from: 'random' }, onComplete: () => setPhase(null) });
+    }
+    return () => { gsap.killTweensOf(tiles); };
+  }, [phase]);
 
+  if (!phase) return null;
   return (
-    <div ref={overlay} aria-hidden="true" className="sf-mosaic">
-      {Array.from({ length: CELL_COUNT }, (_, index) => (
-        <span key={index} />
-      ))}
+    <div ref={overlay} className="sf-mosaic" data-active role="status">
+      <span className="sr-only">Loading page</span>
+      {Array.from({ length: TILE_COUNT }, (_, index) => <span key={index} aria-hidden="true" className="sf-mosaic-tile" />)}
     </div>
   );
 }

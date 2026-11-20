@@ -9,7 +9,10 @@ import { buildEditBody } from "@/components/reservations/reservation-edit-form";
 // A stable token getter: a new function per render would re-run every effect that depends on it.
 const auth = vi.hoisted(() => ({ value: { getToken: () => Promise.resolve("token") } }));
 vi.mock("@clerk/nextjs", () => ({ useAuth: () => auth.value }));
-const api = vi.hoisted(() => ({ editReservation: vi.fn(), getReservationPaymentReceipts: vi.fn() }));
+const api = vi.hoisted(() => ({
+  editReservation: vi.fn(),
+  getReservationPaymentReceipts: vi.fn(),
+}));
 vi.mock("@/lib/drezivo-api", () => ({
   DrezivoApiError: class DrezivoApiError extends Error {
     code: string;
@@ -113,16 +116,102 @@ function renderSheet(detail: ReservationDetail, permissionCodes: PermissionCode[
 }
 
 describe("ReservationDetailsSheet", () => {
-  it("omits SKU and lays out the remaining rental details in two columns", () => {
-    renderSheet(detailWith({}));
+  it("keeps booking measurements and links each item to clothing details", () => {
+    const initial = detailWith({});
+    const first = initial.lines[0]!;
+    const second = initial.lines[1]!;
+    renderSheet(
+      detailWith({
+        lines: [
+          { ...first, measurements_snapshot: { bust: 32 }, measurement_unit_snapshot: "in" },
+          {
+            ...second,
+            product_id: undefined,
+            pricing_snapshot: { rental_minor: "123400", deposit_minor: "23400", currency: "PHP" },
+          },
+        ],
+      })
+    );
 
-    expect(screen.queryByText("SKU")).not.toBeInTheDocument();
-    expect(screen.getAllByText("Variant")).toHaveLength(2);
+    expect(screen.getByText("Measurements at booking")).toBeInTheDocument();
+    expect(screen.getByText(/Bust:.*32 in/)).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "View clothing details for Celestine" })
+    ).toHaveAttribute("href", "/inventory/00000000-0000-4000-8000-000000000107");
+    expect(
+      screen.queryByRole("link", { name: "View clothing details for Celestine Petite" })
+    ).toBeNull();
+    expect(screen.queryByText("Customer record")).toBeNull();
+    expect(screen.queryByText("Variant")).toBeNull();
+    expect(screen.queryByText("Line 1")).toBeNull();
     expect(screen.getAllByText("Rental")).toHaveLength(2);
     expect(screen.getAllByText("Deposit")).toHaveLength(2);
+    expect(screen.getAllByText("Rental")[0]?.parentElement).toHaveTextContent("5,500");
+    expect(screen.getAllByText("Deposit")[0]?.parentElement).toHaveTextContent("5,000");
+    expect(screen.getAllByText("Rental")[1]?.parentElement).toHaveTextContent("1,234");
+    expect(screen.getAllByText("Deposit")[1]?.parentElement).toHaveTextContent("234");
+  });
 
-    const detailsGrid = screen.getAllByText("Variant")[0]?.parentElement?.parentElement;
-    expect(detailsGrid).toHaveClass("grid", "grid-cols-2");
+  it("opens payment by default and supports keyboard navigation between detail tabs", () => {
+    renderSheet(detailWith({}));
+    const payment = screen.getByRole("tab", { name: "Price and payment" });
+    const lifecycle = screen.getByRole("tab", { name: "Reservation lifecycle" });
+    const custody = screen.getByRole("tab", { name: "Custody history" });
+
+    expect(payment).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByText("Rental total")).toBeInTheDocument();
+    expect(screen.queryByText("Hold acquired")).toBeNull();
+
+    payment.focus();
+    fireEvent.keyDown(payment, { key: "ArrowRight" });
+    expect(lifecycle).toHaveFocus();
+    expect(lifecycle).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByText("Hold acquired")).toBeInTheDocument();
+    expect(screen.queryByText("Rental total")).toBeNull();
+
+    fireEvent.click(custody);
+    expect(
+      screen.getByText("No pickup or return events have been recorded yet.")
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Hold acquired")).toBeNull();
+    fireEvent.keyDown(custody, { key: "ArrowLeft" });
+    expect(lifecycle).toHaveFocus();
+    fireEvent.click(payment);
+    fireEvent.click(custody);
+    expect(custody).toHaveAttribute("aria-selected", "true");
+    expect(
+      screen.getByText("No pickup or return events have been recorded yet.")
+    ).toBeInTheDocument();
+  });
+
+  it("returns to payment when a different reservation opens", () => {
+    const first = detailWith({});
+    const props = {
+      detail: first,
+      error: null,
+      isLoading: false,
+      onOpenChange: vi.fn(),
+      onMutationSuccess: vi.fn(),
+      onRefreshRequired: vi.fn(),
+      onRetry: vi.fn(),
+      permissionCodes: MANAGE,
+      reservationId: first.id,
+      timeZone: "Asia/Manila",
+    };
+    const { rerender } = render(<ReservationDetailsSheet {...props} />);
+    fireEvent.click(screen.getByRole("tab", { name: "Custody history" }));
+    expect(screen.getByRole("tab", { name: "Custody history" })).toHaveAttribute(
+      "aria-selected",
+      "true"
+    );
+
+    const next = detailWith({ id: "00000000-0000-4000-8000-000000000111" });
+    rerender(<ReservationDetailsSheet {...props} detail={next} reservationId={next.id} />);
+    expect(screen.getByRole("tab", { name: "Price and payment" })).toHaveAttribute(
+      "aria-selected",
+      "true"
+    );
+    expect(screen.getByText("Rental total")).toBeInTheDocument();
   });
 
   it("starts a replacement reservation with every original line and the same available details", () => {
@@ -219,7 +308,9 @@ describe("ReservationDetailsSheet", () => {
 
     renderSheet(reservation, [...MANAGE, "payments.manage", "evidence.verify"]);
 
-    expect(await screen.findByRole("button", { name: "View proof of payment 1 full size" })).toBeTruthy();
+    expect(
+      await screen.findByRole("button", { name: "View proof of payment 1 full size" })
+    ).toBeTruthy();
     const receiptHeading = screen.getByText("Payment receipt");
     const paymentMethodHeading = screen.getByText("Payment method");
     const paymentStatusHeading = screen.getByText("Payment status");
@@ -229,13 +320,13 @@ describe("ReservationDetailsSheet", () => {
     expect(
       Boolean(
         receiptHeading.compareDocumentPosition(paymentMethodHeading) &
-          Node.DOCUMENT_POSITION_FOLLOWING
+        Node.DOCUMENT_POSITION_FOLLOWING
       )
     ).toBe(true);
     expect(
       Boolean(
         paymentMethodHeading.compareDocumentPosition(paymentStatusHeading) &
-          Node.DOCUMENT_POSITION_FOLLOWING
+        Node.DOCUMENT_POSITION_FOLLOWING
       )
     ).toBe(true);
     const paymentGrid = receiptHeading.closest("div.grid");
@@ -247,7 +338,7 @@ describe("ReservationDetailsSheet", () => {
     expect(
       Boolean(
         paymentStatusHeading.compareDocumentPosition(evidenceHeading) &
-          Node.DOCUMENT_POSITION_FOLLOWING
+        Node.DOCUMENT_POSITION_FOLLOWING
       )
     ).toBe(true);
     expect(
@@ -258,7 +349,7 @@ describe("ReservationDetailsSheet", () => {
     expect(
       Boolean(
         verifiedHeading.compareDocumentPosition(recordedAmountHeading) &
-          Node.DOCUMENT_POSITION_FOLLOWING
+        Node.DOCUMENT_POSITION_FOLLOWING
       )
     ).toBe(true);
     expect(api.getReservationPaymentReceipts).toHaveBeenCalledWith(reservation.id);
@@ -297,7 +388,9 @@ describe("ReservationDetailsSheet", () => {
       [...MANAGE, "payments.manage", "evidence.verify"]
     );
 
-    fireEvent.click(await screen.findByRole("button", { name: "View proof of payment 1 full size" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "View proof of payment 1 full size" })
+    );
 
     expect(await screen.findByRole("dialog", { name: "Image preview" })).toBeTruthy();
     expect(screen.getByRole("img", { name: "Proof of payment 1" })).toBeTruthy();

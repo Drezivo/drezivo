@@ -1,7 +1,7 @@
 'use client';
 
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { useEffect, useState, useTransition } from 'react';
+import { useEffect, useRef, useState, useTransition } from 'react';
 
 import type { PublicCategory } from '@drezivo/contracts';
 
@@ -19,18 +19,58 @@ export function CatalogControls({ categories, sizes, subcategories }: { categori
   const params = useSearchParams();
   const [pending, startTransition] = useTransition();
   const [search, setSearch] = useState(params.get('search') ?? '');
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const latestParams = useRef(params.toString());
+  const pendingUrls = useRef(new Set<string>());
   const hasSubcategories = subcategories.length > 0;
+  const queryString = params.toString();
 
-  useEffect(() => setSearch(params.get('search') ?? ''), [params]);
+  useEffect(() => {
+    if (pendingUrls.current.delete(queryString)) return;
+    latestParams.current = queryString;
+    if (timer.current !== null) clearTimeout(timer.current);
+    setSearch(new URLSearchParams(queryString).get('search') ?? '');
+  }, [queryString]);
 
-  function apply(changes: Record<string, string | null>) {
-    const next = new URLSearchParams(params.toString());
+  useEffect(() => {
+    const onPopState = () => {
+      if (timer.current !== null) clearTimeout(timer.current);
+      pendingUrls.current.clear();
+      latestParams.current = window.location.search.slice(1);
+      setSearch(new URLSearchParams(window.location.search).get('search') ?? '');
+    };
+    window.addEventListener('popstate', onPopState);
+    return () => {
+      window.removeEventListener('popstate', onPopState);
+      if (timer.current !== null) clearTimeout(timer.current);
+    };
+  }, []);
+
+  function apply(changes: Record<string, string | null>, replace = false) {
+    const next = new URLSearchParams(latestParams.current);
     for (const [key, value] of Object.entries(changes)) {
       if (value) next.set(key, value);
       else next.delete(key);
     }
     next.delete('page');
-    startTransition(() => router.push(`${pathname}${next.toString() ? `?${next.toString()}` : ''}`, { scroll: false }));
+    const query = next.toString();
+    if (query === latestParams.current) return;
+    latestParams.current = query;
+    pendingUrls.current.add(query);
+    const href = `${pathname}${query ? `?${query}` : ''}`;
+    startTransition(() => {
+      if (replace) router.replace(href, { scroll: false });
+      else router.push(href, { scroll: false });
+    });
+  }
+
+  function updateSearch(value: string) {
+    setSearch(value);
+    if (timer.current !== null) clearTimeout(timer.current);
+    timer.current = setTimeout(() => {
+      timer.current = null;
+      apply({ search: value.trim() || null }, true);
+    }, 400);
   }
 
   const activeCategory = params.get('category');
@@ -69,7 +109,9 @@ export function CatalogControls({ categories, sizes, subcategories }: { categori
           className="min-w-0 sm:col-span-2 lg:col-span-1"
           onSubmit={(event) => {
             event.preventDefault();
-            apply({ search: search.trim() || null });
+            if (timer.current !== null) clearTimeout(timer.current);
+            timer.current = null;
+            apply({ search: search.trim() || null }, true);
           }}
         >
           <label htmlFor="catalog-search" className="sr-only">
@@ -82,7 +124,7 @@ export function CatalogControls({ categories, sizes, subcategories }: { categori
             placeholder="Search by name or style"
             maxLength={80}
             value={search}
-            onChange={(event) => setSearch(event.target.value)}
+            onChange={(event) => updateSearch(event.target.value)}
           />
         </form>
         <label className="flex min-w-0 flex-col gap-1 text-sm lg:flex-row lg:items-center lg:gap-2">

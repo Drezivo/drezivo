@@ -4,6 +4,7 @@ import { Jost, Playfair_Display } from "next/font/google";
 
 import { THEME_BOOT_SCRIPT } from "@/lib/theme-boot";
 import { clerkFrontendApiOrigin } from "@/lib/clerk-origin";
+import { resolveStaffSiteOrigin } from "@/lib/staff-site-origin";
 
 import "./globals.css";
 
@@ -26,11 +27,19 @@ const body = Jost({
 const CLERK_ORIGIN = clerkFrontendApiOrigin(process.env["NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY"]);
 
 export const metadata: Metadata = {
+  metadataBase: new URL(resolveStaffSiteOrigin(process.env)),
   title: {
     default: "Drezivo",
     template: "%s · Drezivo",
   },
   description: "Drezivo staff authentication.",
+  openGraph: {
+    type: "website",
+    siteName: "Drezivo",
+    url: "/",
+    images: [{ url: "/marketing/drezivo_logo.png", width: 1254, height: 1254, type: "image/png", alt: "Drezivo logo" }],
+  },
+  twitter: { card: "summary_large_image", images: ["/marketing/drezivo_logo.png"] },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

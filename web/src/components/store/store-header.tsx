@@ -43,7 +43,7 @@ export function StoreHeader({ store }: { store: PublicStorefront }) {
         <p className="bg-sf-accent px-4 py-2 text-center text-xs tracking-wide text-sf-accent-ink">{store.content.announcement}</p>
       ) : null}
       <header data-store-header className="sticky top-0 z-30 border-b border-sf-line bg-sf-bg/95 backdrop-blur supports-[backdrop-filter]:bg-sf-bg/85">
-        <div className="mx-auto flex h-[var(--storefront-header-height)] max-w-7xl items-center justify-between gap-6 px-5 sm:px-8">
+        <div className="mx-auto flex h-[var(--storefront-header-height)] max-w-[71.25rem] items-center justify-between gap-6 px-5 sm:px-8">
           <Link href={home} className="flex min-w-0 items-center gap-3" aria-label={`${store.name} home`}>
             {store.logo_url ? (
               <StorefrontMediaImage src={store.logo_url} srcSet={mediaImageSrcSet(store.logo_url)} sizes="36px" alt="" className="h-9 w-9 shrink-0 rounded-full object-cover" />
@@ -51,13 +51,13 @@ export function StoreHeader({ store }: { store: PublicStorefront }) {
             <span className="truncate font-sf-display text-xl font-normal tracking-tight sm:text-2xl">{store.name}</span>
           </Link>
 
-          <nav aria-label="Main" className="hidden items-center gap-8 lg:flex">
+          <nav aria-label="Main" className="hidden items-center gap-6 xl:flex">
             {nav.map((item) => (
               <Link
                 key={item.href}
                 href={item.href}
                 aria-current={pathname === item.href ? 'page' : undefined}
-                className="text-sm text-sf-muted transition-colors hover:text-sf-ink aria-[current=page]:text-sf-ink"
+                className="text-base uppercase tracking-[0.15em] text-sf-muted transition-colors hover:text-sf-ink aria-[current=page]:text-sf-ink"
               >
                 {item.label}
               </Link>
@@ -76,7 +76,7 @@ export function StoreHeader({ store }: { store: PublicStorefront }) {
             <button
               ref={menuButton}
               type="button"
-              className="-mr-2 flex h-11 w-11 items-center justify-center lg:hidden"
+              className="-mr-2 flex h-11 w-11 items-center justify-center xl:hidden"
               aria-expanded={open}
               aria-controls="store-menu"
               aria-label={open ? 'Close menu' : 'Open menu'}
@@ -92,7 +92,7 @@ export function StoreHeader({ store }: { store: PublicStorefront }) {
       </header>
 
       {open ? (
-        <div id="store-menu" className="fixed inset-x-0 bottom-0 top-[var(--storefront-header-height)] z-20 bg-sf-bg px-5 pb-10 pt-6 lg:hidden" role="dialog" aria-modal="true" aria-label="Menu">
+        <div id="store-menu" className="fixed inset-x-0 bottom-0 top-[var(--storefront-header-height)] z-20 bg-sf-bg px-5 pb-10 pt-6 xl:hidden" role="dialog" aria-modal="true" aria-label="Menu">
           <nav aria-label="Mobile" className="flex flex-col">
             {nav.map((item) => (
               <Link key={item.href} href={item.href} onClick={() => setOpen(false)} className="border-b border-sf-line py-4 font-sf-display text-3xl font-light">

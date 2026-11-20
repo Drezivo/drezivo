@@ -39,7 +39,7 @@ export default async function ItemPage({ params }: Props) {
   };
 
   return (
-    <div className="mx-auto max-w-7xl px-5 pb-8 pt-8 sm:px-8 sm:pt-12">
+    <div className="mx-auto max-w-[71.25rem] px-5 pb-8 pt-8 sm:px-8 sm:pt-12">
       <nav aria-label="Breadcrumb" className="mb-8 text-sm text-sf-muted">
         <Link href={`/s/${slug}/catalog`} className="hover:text-sf-ink">
           Collection

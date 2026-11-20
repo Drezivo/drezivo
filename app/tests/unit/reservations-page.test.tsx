@@ -493,7 +493,7 @@ describe("ReservationsPage", () => {
     await screen.findByRole("button", { name: realReservationRowName });
 
     expect(screen.getByRole("button", { name: "Previous reservations page" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Next reservations page" })).toHaveClass("text-dashboard-navy");
+    expect(screen.getByRole("button", { name: "Next reservations page" })).toBeEnabled();
     expect(screen.getByRole("button", { name: "Next reservations page" })).not.toHaveClass("bg-dashboard-active");
 
     fireEvent.click(screen.getByRole("button", { name: "Next reservations page" }));
@@ -505,8 +505,8 @@ describe("ReservationsPage", () => {
       })
     );
     expect(await screen.findByRole("button", { name: holdReservationRowName })).toBeVisible();
-    expect(screen.getByText("Page 2 · 1 reservation loaded")).toBeVisible();
-    expect(screen.getByRole("button", { name: "Previous reservations page" })).toHaveClass("text-dashboard-navy");
+    expect(screen.getByText("Showing 11–11 reservation")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Previous reservations page" })).toBeEnabled();
     expect(screen.getByRole("button", { name: "Next reservations page" })).toBeDisabled();
 
     fireEvent.click(screen.getByRole("button", { name: "Previous reservations page" }));
@@ -538,7 +538,7 @@ describe("ReservationsPage", () => {
     expect(garmentImage).toBeVisible();
     expect(garmentImage.parentElement).toHaveClass("h-20", "w-20");
     expect(screen.getByText("123 Test Street")).toBeVisible();
-    expect(screen.getByText("Medium · Emerald")).toBeVisible();
+    expect(screen.queryByText("Medium · Emerald")).not.toBeInTheDocument();
     expect(within(detailSheet).queryByText("SKU")).not.toBeInTheDocument();
     expect(screen.getByText("Bust Cm: 91")).toBeVisible();
     expect(screen.getByText("Waist Cm: 72")).toBeVisible();
@@ -580,6 +580,7 @@ describe("ReservationsPage", () => {
       key: "Enter",
     });
 
+    fireEvent.click(await screen.findByRole("tab", { name: "Custody history" }));
     expect(await screen.findByText("Clean at handover.")).toBeVisible();
     expect(screen.getByText("Returned with light dust on hem.")).toBeVisible();
     expect(screen.getByText("Inspect Return")).toBeVisible();

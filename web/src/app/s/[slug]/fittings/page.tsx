@@ -13,7 +13,7 @@ export default async function FittingsPage({ params }: { params: Promise<{ slug:
   const [catalogue, preview] = await Promise.all([readCatalogue(slug, { page_size: '48' }), previewToken()]);
 
   return (
-    <div className="mx-auto max-w-7xl px-5 pb-8 pt-12 sm:px-8 sm:pt-16">
+    <div className="mx-auto max-w-[71.25rem] px-5 pb-8 pt-12 sm:px-8 sm:pt-16">
       <header className="mb-12 max-w-2xl">
         <h1 className="font-sf-display text-5xl font-light sm:text-6xl">Request a fitting</h1>
         <p className="mt-4 text-sf-muted">Try pieces on at the shop before you rent. Choose a time and up to three pieces; {store.name} confirms every request by email.</p>
