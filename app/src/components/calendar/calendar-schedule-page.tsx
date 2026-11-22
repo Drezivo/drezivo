@@ -1465,7 +1465,7 @@ function MonthGrid({
               <div
                 key={dateKey}
                 className={cn(
-                  "min-h-14 border-b border-r border-dashboard-border p-0.5 sm:min-h-36 sm:p-2",
+                  "relative min-h-14 border-b border-r border-dashboard-border p-0.5 sm:min-h-36 sm:p-2",
                   !inMonth && "bg-dashboard-canvas/50",
                   dateKey === todayKey && "bg-dashboard-active/40",
                   closedReason && "bg-dashboard-canvas/75"
@@ -1474,12 +1474,16 @@ function MonthGrid({
                 <button
                   type="button"
                   onClick={() => onOpenDay(dateKey)}
+                  className="absolute inset-0 w-full rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-dashboard-accent"
+                  aria-label={`Open ${formatCalendarDate(dateKey, { month: "long", day: "numeric", year: "numeric" })} agenda`}
+                />
+                <div
+                  aria-hidden="true"
                   className={cn(
-                    "mx-auto flex h-11 w-full min-w-11 flex-col items-center justify-center gap-1 rounded-xl px-1 text-sm font-medium tabular-nums focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dashboard-accent sm:mx-0 sm:mb-1 sm:w-auto sm:flex-row sm:rounded-full sm:text-xs",
+                    "pointer-events-none mx-auto flex h-11 w-full min-w-11 flex-col items-center justify-center gap-1 rounded-xl px-1 text-sm font-medium tabular-nums sm:mx-0 sm:mb-1 sm:w-11 sm:flex-row sm:rounded-full sm:text-xs",
                     dateKey === todayKey ? "bg-dashboard-primary text-dashboard-primary-ink" : "text-dashboard-navy",
                     !inMonth && "text-dashboard-muted"
                   )}
-                  aria-label={`Open ${formatCalendarDate(dateKey, { month: "long", day: "numeric", year: "numeric" })} agenda`}
                 >
                   {formatCalendarDate(dateKey, { day: "numeric" })}
                   <span aria-hidden="true" className="flex h-1 items-center gap-0.5 sm:hidden">
@@ -1487,24 +1491,23 @@ function MonthGrid({
                       <span key={activity.id} className={cn("h-1 w-1 rounded-full", dateKey === todayKey ? "bg-current" : "bg-dashboard-accent")} />
                     ))}
                   </span>
-                </button>
+                </div>
                 {untimedCount > 0 ? (
                   <div
                     role="note"
                     aria-label={`${untimedCount} events with no specific time`}
                     title={`${untimedCount} events with no specific time`}
-                    className="mx-auto mb-1 w-fit rounded border border-dashboard-gold-text/30 bg-dashboard-gold-soft px-1 text-[9px] font-medium leading-4 text-dashboard-gold-text sm:mx-0 sm:text-[10px]"
+                    className="pointer-events-none mx-auto mb-1 w-fit rounded border border-dashboard-gold-text/50 bg-dashboard-gold-soft px-1 text-center text-xs font-semibold leading-tight text-dashboard-gold-text sm:mx-0"
                   >
-                    <span className="sm:hidden">{untimedCount}</span>
-                    <span className="hidden sm:inline">No time · {untimedCount}</span>
+                    No time · {untimedCount}
                   </div>
                 ) : null}
                 {closedReason ? (
-                  <div className="mb-1 hidden rounded border border-dashboard-border bg-dashboard-canvas px-1.5 py-1 sm:block text-[10px] font-semibold text-dashboard-muted">
+                  <div className="pointer-events-none mb-1 hidden rounded border border-dashboard-border bg-dashboard-canvas px-1.5 py-1 sm:block text-[10px] font-semibold text-dashboard-muted">
                     Closed{businessHours.specialClosedDates[dateKey] ? ` · ${businessHours.specialClosedDates[dateKey]}` : ""}
                   </div>
                 ) : null}
-                <div className="hidden space-y-1 sm:block">
+                <div className="pointer-events-none hidden space-y-1 sm:block">
                   {preview.map((activity) => (
                     <button
                       key={activity.id}
@@ -1512,7 +1515,7 @@ function MonthGrid({
                       onClick={() => onOpenActivity(activity)}
                       aria-label={`Open ${activity.source} details: ${activity.type}, ${(activity.customerName ?? activity.itemNames.join(", ")) || "Rental activity"}, ${formatCalendarTime(activity.startAt, timeZone)}`}
                       className={cn(
-                        "block min-h-11 w-full truncate rounded border px-1.5 py-2 text-left text-[10px] leading-tight focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dashboard-accent sm:text-xs",
+                        "pointer-events-auto relative block min-h-11 w-full truncate rounded border px-1.5 py-2 text-left text-[10px] leading-tight focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dashboard-accent sm:text-xs",
                         activityTone[activity.type]
                       )}
                       title={`${activity.type}: ${activity.itemNames.join(", ")}`}
@@ -1531,7 +1534,7 @@ function MonthGrid({
                     <button
                       type="button"
                       onClick={() => onOpenDay(dateKey)}
-                      className="min-h-11 rounded px-2 text-left text-[10px] font-medium text-dashboard-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dashboard-accent"
+                      className="pointer-events-auto relative min-h-11 rounded px-2 text-left text-[10px] font-medium text-dashboard-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dashboard-accent"
                     >
                       +{moreCount} more
                     </button>
