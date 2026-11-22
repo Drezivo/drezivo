@@ -408,6 +408,7 @@ describe("CalendarSchedulePage production details and states", () => {
       name: "4 events with no specific time",
     });
     expect(untimedCount).toBeVisible();
+    expect(untimedCount).toHaveTextContent("No time · 4");
     expect(within(monthGrid).queryByRole("button", { name: /reservation details: Pickup/ })).not.toBeInTheDocument();
 
     const dateKey = calendarDateKeyAt(new Date(pickupAt), timeZone);
@@ -1167,6 +1168,38 @@ describe("CalendarSchedulePage production details and states", () => {
     expect(await screen.findByRole("region", { name: /Monthly schedule grid/ })).toBeVisible();
     expect(screen.getAllByRole("button", { name: /Open .* agenda/ }).length).toBeGreaterThan(1);
     expect(screen.getByRole("button", { name: /Open reservation details: Pickup/ })).toBeVisible();
+  });
+
+  it.each([0, 1])("opens the month agenda for a populated or empty day (%s)", async (offset) => {
+    render(<CalendarSchedulePage />);
+    await screen.findByRole("region", { name: /Weekly schedule grid/ });
+    fireEvent.click(screen.getByRole("button", { name: "Month view" }));
+    const grid = await screen.findByRole("region", { name: "Monthly schedule grid" });
+    const dateKey = addCalendarDays(calendarDateKeyAt(new Date(pickupAt), timeZone), offset);
+    const dateLabel = formatCalendarDate(dateKey, { month: "long", day: "numeric", year: "numeric" });
+    const dayButton = within(grid).getByRole("button", { name: `Open ${dateLabel} agenda` });
+    expect(dayButton).toHaveClass("absolute", "inset-0");
+    dayButton.focus();
+    expect(dayButton).toHaveFocus();
+    fireEvent.click(dayButton);
+    const agenda = await screen.findByRole("dialog");
+    if (offset === 0) {
+      expect(within(agenda).getAllByText("Emerald Gown").length).toBeGreaterThan(0);
+    } else {
+      expect(within(agenda).getByText("No activity on this day.")).toBeVisible();
+    }
+  });
+
+  it("opens a month activity without opening its day agenda", async () => {
+    render(<CalendarSchedulePage />);
+    await screen.findByRole("region", { name: /Weekly schedule grid/ });
+    fireEvent.click(screen.getByRole("button", { name: "Month view" }));
+    const grid = await screen.findByRole("region", { name: "Monthly schedule grid" });
+    fireEvent.click(within(grid).getByRole("button", { name: /Open reservation details: Pickup/ }));
+    const detail = await screen.findByRole("dialog");
+    expect(await within(detail).findByRole("heading", { name: /RSV-REAL-101/ })).toBeVisible();
+    expect(api.getReservationDetail).toHaveBeenCalledWith(reservationId);
+    expect(within(detail).queryByRole("group", { name: "Filter day agenda activity" })).not.toBeInTheDocument();
   });
 
   it("reloads Calendar and fitting details after an existing fitting command succeeds", async () => {
