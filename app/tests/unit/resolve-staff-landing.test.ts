@@ -44,6 +44,17 @@ describe("resolveStaffLanding", () => {
     setActive.mockResolvedValue(undefined);
   });
 
+  it.each([{ workspaces: [] }, { workspaces: [workspaceB] }, { workspaces: [workspaceA, workspaceB] }])(
+    "offers the selector to an eligible account without an owned workspace",
+    async ({ workspaces }) => {
+      api.getWorkspaces.mockResolvedValue({ data: { items: workspaces, page_meta: { next_cursor: null, has_more: false } } });
+      api.getCurrentOnboarding.mockResolvedValue({ data: { has_current_owned_tenant: false } });
+      await expect(resolveStaffLanding({ activeOrganizationId: null, getToken, setActive, offerWorkspaceCreation: true }))
+        .resolves.toEqual({ kind: "workspaces", workspaces });
+      expect(setActive).not.toHaveBeenCalled();
+    }
+  );
+
   it("routes an account with no workspaces back to onboarding and clears a stale Clerk organization", async () => {
     api.getWorkspaces.mockResolvedValue({
       data: { items: [], page_meta: { next_cursor: null, has_more: false } },

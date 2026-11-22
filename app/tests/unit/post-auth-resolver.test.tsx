@@ -31,7 +31,7 @@ describe("PostAuthResolver", () => {
       isSignedIn: true,
       orgId: null,
     });
-    clerk.useClerk.mockReturnValue({ setActive: clerk.setActive });
+    clerk.useClerk.mockReturnValue({ setActive: clerk.setActive, user: {} });
     Object.defineProperty(window, "location", {
       configurable: true,
       value: { ...originalLocation, replace: locationReplace },
@@ -73,6 +73,16 @@ describe("PostAuthResolver", () => {
     resolver.resolveStaffLanding.mockResolvedValue({ kind: "workspaces", workspaces: [{}, {}] });
     render(<PostAuthResolver />);
     await waitFor(() => expect(locationReplace).toHaveBeenCalledWith("/workspaces/select"));
+  });
+
+  it("requests the creation shortcut only for the verified primary account", async () => {
+    clerk.useClerk.mockReturnValue({ setActive: clerk.setActive, user: {
+      primaryEmailAddress: { emailAddress: "drezivoshop@gmail.com", verification: { status: "verified" } },
+    } });
+    resolver.resolveStaffLanding.mockResolvedValue({ kind: "workspaces", workspaces: [] });
+    render(<PostAuthResolver />);
+    await waitFor(() => expect(locationReplace).toHaveBeenCalledWith("/workspaces/select"));
+    expect(resolver.resolveStaffLanding).toHaveBeenCalledWith(expect.objectContaining({ offerWorkspaceCreation: true }));
   });
 
   it("does not send an invited account to owner onboarding", async () => {

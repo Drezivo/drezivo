@@ -11,22 +11,25 @@ import { Button } from "@/components/ui/button";
 import { createDrezivoApiClient, DrezivoApiError } from "@/lib/drezivo-api";
 import { activateAccessibleWorkspace, listAllAccessibleWorkspaces } from "@/lib/workspace-access";
 import { WORKSPACE_HOME } from "@/lib/workspace-routes";
+import { isWorkspaceCreationAccount } from "@/lib/workspace-creation-eligibility";
 
 type ChoiceState =
   | { kind: "loading" }
-  | { kind: "ready"; workspaces: WorkspaceSummary[] }
+  | { kind: "ready"; workspaces: WorkspaceSummary[]; canCreate: boolean }
   | { kind: "switching"; workspaces: WorkspaceSummary[]; selectedId: string }
   | { kind: "error"; error: DrezivoApiError };
 
 export function WorkspaceChooser() {
   const { getToken, isLoaded, isSignedIn } = useAuth();
-  const { setActive } = useClerk();
+  const { setActive, user } = useClerk();
   const router = useRouter();
   const [state, setState] = useState<ChoiceState>({ kind: "loading" });
   const started = useRef(false);
+  const currentUser = useRef(user);
+  currentUser.current = user;
 
   useEffect(() => {
-    if (!isLoaded) return;
+    if (!isLoaded || (isSignedIn && !currentUser.current)) return;
     if (!isSignedIn) {
       router.replace("/sign-in");
       return;
@@ -35,14 +38,18 @@ export function WorkspaceChooser() {
     started.current = true;
 
     let active = true;
-    void listAllAccessibleWorkspaces(createDrezivoApiClient(getToken))
+    const api = createDrezivoApiClient(getToken);
+    void listAllAccessibleWorkspaces(api)
       .then(async (workspaces) => {
+        const canCreate = isWorkspaceCreationAccount(currentUser.current)
+          ? !(await api.getCurrentOnboarding()).data.has_current_owned_tenant
+          : false;
         if (!active) return;
-        if (workspaces.length === 0) {
+        if (workspaces.length === 0 && !canCreate) {
           router.replace("/auth/resolve");
           return;
         }
-        if (workspaces.length === 1) {
+        if (workspaces.length === 1 && !canCreate) {
           await activateAccessibleWorkspace({
             organizationId: workspaces[0]!.clerk_org_id,
             getToken,
@@ -51,7 +58,7 @@ export function WorkspaceChooser() {
           window.location.replace(WORKSPACE_HOME);
           return;
         }
-        setState({ kind: "ready", workspaces });
+        setState({ kind: "ready", workspaces, canCreate });
       })
       .catch((error: unknown) => {
         if (active) setState({ kind: "error", error: toApiError(error) });
@@ -60,7 +67,7 @@ export function WorkspaceChooser() {
     return () => {
       active = false;
     };
-  }, [getToken, isLoaded, isSignedIn, router, setActive]);
+  }, [getToken, isLoaded, isSignedIn, router, setActive, user?.id]);
 
   async function chooseWorkspace(workspace: WorkspaceSummary) {
     if (state.kind !== "ready") return;
@@ -111,6 +118,9 @@ export function WorkspaceChooser() {
               workspace.
             </p>
             <div className="mt-7 space-y-3">
+              {state.workspaces.length === 0 ? (
+                <p className="text-sm text-auth-dark-muted">You have no workspaces yet.</p>
+              ) : null}
               {state.workspaces.map((workspace) => (
                 <button
                   key={workspace.clerk_org_id}
@@ -133,6 +143,11 @@ export function WorkspaceChooser() {
                 </button>
               ))}
             </div>
+            {state.canCreate ? (
+              <Button className="mt-6 w-full" onClick={() => router.push("/onboarding")}>
+                Create Workspace
+              </Button>
+            ) : null}
           </div>
         ) : null}
 

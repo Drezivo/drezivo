@@ -10,6 +10,7 @@ import { DrezivoApiError } from "@/lib/drezivo-api";
 import { invitationStateOf, resolveStaffLanding } from "@/lib/resolve-staff-landing";
 import { rememberResolvedWorkspace } from "@/lib/workspace-handoff";
 import { WORKSPACE_HOME } from "@/lib/workspace-routes";
+import { isWorkspaceCreationAccount } from "@/lib/workspace-creation-eligibility";
 
 type ResolveState = { kind: "resolving" } | { kind: "error"; error: DrezivoApiError };
 
@@ -32,6 +33,7 @@ export function PostAuthResolver() {
       router.replace("/sign-in");
       return;
     }
+    if (!user) return;
     if (started.current) return;
     started.current = true;
 
@@ -61,6 +63,7 @@ export function PostAuthResolver() {
         setActive: (params) => activate({ ...params, navigate: async () => undefined }),
         invitations: invitationStateOf(signedInUser),
         requireWorkspaceChoice: true,
+        offerWorkspaceCreation: isWorkspaceCreationAccount(signedInUser),
       }),
       timeout,
     ])
@@ -90,7 +93,7 @@ export function PostAuthResolver() {
       })
       .catch((error: unknown) => setState({ kind: "error", error: toDrezivoApiError(error) }))
       .finally(() => clearTimeout(timer));
-  }, [isLoaded, isSignedIn, router]);
+  }, [isLoaded, isSignedIn, router, user]);
 
   if (state.kind === "resolving") return <WorkspaceOpening />;
 

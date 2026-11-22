@@ -76,6 +76,7 @@ export async function resolveStaffLanding({
   setActive,
   invitations,
   requireWorkspaceChoice = false,
+  offerWorkspaceCreation = false,
 }: {
   activeOrganizationId: string | null | undefined;
   getToken: () => Promise<string | null>;
@@ -83,9 +84,15 @@ export async function resolveStaffLanding({
   invitations?: StaffInvitationState | undefined;
   /** Post-auth navigation requires an explicit choice whenever more than one workspace exists. */
   requireWorkspaceChoice?: boolean;
+  offerWorkspaceCreation?: boolean;
 }): Promise<StaffLandingResolution> {
   const api = createDrezivoApiClient(getToken);
   const workspaces = await listAllAccessibleWorkspaces(api);
+
+  if (offerWorkspaceCreation) {
+    const onboarding = await api.getCurrentOnboarding();
+    if (!onboarding.data.has_current_owned_tenant) return { kind: "workspaces", workspaces };
+  }
 
   if (workspaces.length === 0) {
     const pending = invitations ? await invitations.loadPending() : [];
